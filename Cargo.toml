@@ -1,0 +1,79 @@
+[package]
+name = "anti_entropator"
+version = "0.1.0"
+edition = "2021"
+description = "A local data lakehouse for file organization - transform chaos into queryable order"
+authors = ["Martin Kaergell"]
+license = "MIT"
+repository = "https://github.com/martinkaergell/anti_entropator"
+keywords = ["file-organization", "lakehouse", "iceberg", "datafusion", "cli"]
+categories = ["command-line-utilities", "filesystem"]
+
+[dependencies]
+# Core async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Error handling
+anyhow = "1.0"
+thiserror = "1.0"
+
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+rustyline = "14"
+
+# Storage (S3 client for RustFS)
+aws-sdk-s3 = "1"
+aws-config = "1"
+object_store = { version = "0.11", features = ["aws"] }
+
+# Lakehouse
+iceberg = "0.4"
+datafusion = "44"
+arrow = { version = "54", features = ["prettyprint"] }
+parquet = { version = "54", features = ["zstd"] }
+
+# File Processing
+sha2 = "0.10"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+infer = "0.16"
+walkdir = "2"
+
+# HTTP client (for doctor checks)
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
+
+# Utilities
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+indicatif = "0.17"
+console = "0.15"
+comfy-table = "7"
+humansize = "2"
+regex = "1"
+once_cell = "1"
+directories = "5"
+
+# Platform-specific (macOS xattrs)
+[target.'cfg(target_os = "macos")'.dependencies]
+xattr = "1"
+
+[dev-dependencies]
+tempfile = "3"
+assert_cmd = "2"
+predicates = "3"
+test-case = "3"
+tokio-test = "0.4"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+
+[[bin]]
+name = "anti_entropator"
+path = "src/main.rs"
+

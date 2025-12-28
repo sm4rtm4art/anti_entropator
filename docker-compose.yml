@@ -1,0 +1,82 @@
+# Anti-Entropator Local Lakehouse Stack
+#
+# Services:
+#   - RustFS: S3-compatible object storage (MinIO replacement)
+#   - Nessie: Git-like catalog for Iceberg tables
+#   - Postgres: Backend for Nessie catalog
+#
+# Usage:
+#   docker compose up -d
+#   docker compose logs -f
+#   docker compose down
+#
+# Note: RustFS runs as non-root user (UID 10001).
+# Volume directories must have correct permissions:
+#   mkdir -p data/rustfs logs/rustfs
+#   chown -R 10001:10001 data logs
+
+services:
+  # S3-compatible object storage
+  rustfs:
+    image: rustfs/rustfs:latest
+    container_name: anti_entropator_rustfs
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web Console
+    volumes:
+      - ./data/rustfs:/data
+      - ./logs/rustfs:/logs
+    environment:
+      RUSTFS_ROOT_USER: ${RUSTFS_ROOT_USER:-antiuser}
+      RUSTFS_ROOT_PASSWORD: ${RUSTFS_ROOT_PASSWORD:-antipassword}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+  # Postgres backend for Nessie
+  postgres:
+    image: postgres:16-alpine
+    container_name: anti_entropator_postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nessie}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nessie}
+      POSTGRES_DB: ${POSTGRES_DB:-nessie}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nessie"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Nessie catalog (Git-like versioning for Iceberg)
+  nessie:
+    image: ghcr.io/projectnessie/nessie:0.99.0
+    container_name: anti_entropator_nessie
+    ports:
+      - "19120:19120" # REST API
+    environment:
+      NESSIE_VERSION_STORE_TYPE: JDBC
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/nessie
+      QUARKUS_DATASOURCE_USERNAME: ${POSTGRES_USER:-nessie}
+      QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-nessie}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:19120/api/v2/config"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+
+# Named volumes for data persistence
+volumes:
+  rustfs_data:
+  postgres_data:
