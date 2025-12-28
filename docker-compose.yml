@@ -38,7 +38,7 @@ services:
 
   # Postgres backend for Nessie
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16.11-alpine3.23
     container_name: anti_entropator_postgres
     ports:
       - "5432:5432"
@@ -57,7 +57,7 @@ services:
 
   # Nessie catalog (Git-like versioning for Iceberg)
   nessie:
-    image: ghcr.io/projectnessie/nessie:0.99.0
+    image: ghcr.io/projectnessie/nessie:0.106.0-java
     container_name: anti_entropator_nessie
     ports:
       - "19120:19120" # REST API
