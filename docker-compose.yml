@@ -2,18 +2,21 @@
 #
 # Services:
 #   - RustFS: S3-compatible object storage (MinIO replacement)
-#   - Nessie: Git-like catalog for Iceberg tables
-#   - Postgres: Backend for Nessie catalog
+#   - Lakekeeper: Apache Iceberg REST Catalog (Rust, no JVM)
+#   - Postgres: Backend for Lakekeeper catalog state
 #
 # Usage:
 #   docker compose up -d
 #   docker compose logs -f
 #   docker compose down
 #
+# Security note:
+#   - Ports are bound to 127.0.0.1 by default (local-only).
+#
 # Note: RustFS runs as non-root user (UID 10001).
 # Volume directories must have correct permissions:
-#   mkdir -p data/rustfs logs/rustfs
-#   chown -R 10001:10001 data logs
+#   mkdir -p data/rustfs logs/rustfs data/postgres
+#   chown -R 10001:10001 data/rustfs logs/rustfs
 
 services:
   # S3-compatible object storage
@@ -21,8 +24,8 @@ services:
     image: rustfs/rustfs:latest
     container_name: anti_entropator_rustfs
     ports:
-      - "9000:9000" # S3 API
-      - "9001:9001" # Web Console
+      - "127.0.0.1:9000:9000" # S3 API (local-only)
+      - "127.0.0.1:9001:9001" # Web Console (local-only)
     volumes:
       - ./data/rustfs:/data
       - ./logs/rustfs:/logs
@@ -36,12 +39,10 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # Postgres backend for Nessie
+  # Postgres backend for Lakekeeper
   postgres:
     image: postgres:16.11-alpine3.23
     container_name: anti_entropator_postgres
-    ports:
-      - "5432:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     environment:
@@ -49,34 +50,53 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-nessie}
       POSTGRES_DB: ${POSTGRES_DB:-nessie}
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nessie"]
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-nessie} -d ${POSTGRES_DB:-nessie}",
+        ]
       interval: 10s
       timeout: 5s
       retries: 5
     restart: unless-stopped
 
-  # Nessie catalog (Git-like versioning for Iceberg)
-  nessie:
-    image: ghcr.io/projectnessie/nessie:0.106.0-java
-    container_name: anti_entropator_nessie
-    ports:
-      - "19120:19120" # REST API
+  # Lakekeeper catalog (Apache Iceberg REST Catalog)
+  lakekeeper-migrate:
+    image: quay.io/lakekeeper/catalog:v0.10.4
+    container_name: anti_entropator_lakekeeper_migrate
     environment:
-      NESSIE_VERSION_STORE_TYPE: JDBC
-      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/nessie
-      QUARKUS_DATASOURCE_USERNAME: ${POSTGRES_USER:-nessie}
-      QUARKUS_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-nessie}
+      LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:-This-is-NOT-Secure!}
+      LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-nessie}:${POSTGRES_PASSWORD:-nessie}@postgres:5432/${POSTGRES_DB:-nessie}
+      LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${POSTGRES_USER:-nessie}:${POSTGRES_PASSWORD:-nessie}@postgres:5432/${POSTGRES_DB:-nessie}
+      RUST_LOG: info
+    command: ["migrate"]
+    restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
+
+  lakekeeper:
+    image: quay.io/lakekeeper/catalog:v0.10.4
+    container_name: anti_entropator_lakekeeper
+    ports:
+      - "127.0.0.1:8181:8181" # REST API + UI (local-only)
+    environment:
+      LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:-This-is-NOT-Secure!}
+      LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-nessie}:${POSTGRES_PASSWORD:-nessie}@postgres:5432/${POSTGRES_DB:-nessie}
+      LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${POSTGRES_USER:-nessie}:${POSTGRES_PASSWORD:-nessie}@postgres:5432/${POSTGRES_DB:-nessie}
+      RUST_LOG: info,lakekeeper=info,sqlx=warn
+    command: ["serve"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rustfs:
+        condition: service_healthy
+      lakekeeper-migrate:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:19120/api/v2/config"]
-      interval: 30s
+      test: ["CMD", "/home/nonroot/lakekeeper", "healthcheck"]
+      interval: 5s
       timeout: 10s
       retries: 3
+      start_period: 5s
     restart: unless-stopped
-
-# Named volumes for data persistence
-volumes:
-  rustfs_data:
-  postgres_data:

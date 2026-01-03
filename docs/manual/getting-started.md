@@ -65,7 +65,9 @@ anti_entropator init
 This creates:
 
 - The `anti-entropator` bucket in RustFS
-- The `file_catalog` Iceberg table in Nessie
+- Verifies the Iceberg REST catalog (Lakekeeper) is reachable
+
+> **Note:** Iceberg warehouse/table registration is planned, but not fully implemented yet.
 
 ### 4. Ingest Files
 
@@ -73,11 +75,13 @@ This creates:
 # Preview what would be ingested
 anti_entropator ingest ~/Downloads --dry-run
 
-# Actually ingest (creates a branch for review)
+# Actually ingest (uploads to object storage)
 anti_entropator ingest ~/Downloads
 ```
 
 ### 5. Query Your Catalog
+
+> **Note:** `sql` and `query` are planned but not fully implemented yet.
 
 ```bash
 # Interactive SQL REPL
@@ -100,22 +104,22 @@ anti_entropator duplicates
 | `profile <path>` | Analyze directory (read-only, no Docker) |
 | `doctor`         | Check stack health and external tools    |
 | `up`             | Verify lakehouse services are running    |
-| `init`           | Initialize bucket and Iceberg table      |
+| `init`           | Initialize bucket and verify catalog     |
 | `scan <path>`    | Enrich metadata without uploading        |
-| `ingest <path>`  | Upload files and commit to catalog       |
+| `ingest <path>`  | Upload files to object storage           |
 | `sql`            | Interactive SQL REPL                     |
 | `query <sql>`    | Execute one-shot SQL                     |
 | `duplicates`     | Find and report duplicate files          |
-| `merge <branch>` | Merge ingest branch to main              |
+| `merge <branch>` | Merge ingest branch (planned)            |
 
 ## Environment Variables
 
-| Variable                          | Default                          | Description       |
-| --------------------------------- | -------------------------------- | ----------------- |
-| `ANTI_ENTROPATOR_S3_ENDPOINT`     | `http://localhost:9000`          | RustFS endpoint   |
-| `ANTI_ENTROPATOR_NESSIE_ENDPOINT` | `http://localhost:19120/api/v1`  | Nessie API        |
-| `ANTI_ENTROPATOR_BUCKET`          | `anti-entropator`                | S3 bucket name    |
-| `ANTI_ENTROPATOR_WAREHOUSE`       | `s3://anti-entropator/warehouse` | Iceberg warehouse |
+| Variable                           | Default                          | Description       |
+| ---------------------------------- | -------------------------------- | ----------------- |
+| `ANTI_ENTROPATOR_S3_ENDPOINT`      | `http://localhost:9000`          | RustFS endpoint   |
+| `ANTI_ENTROPATOR_CATALOG_ENDPOINT` | `http://localhost:8181`          | Lakekeeper API    |
+| `ANTI_ENTROPATOR_BUCKET`           | `anti-entropator`                | S3 bucket name    |
+| `ANTI_ENTROPATOR_WAREHOUSE`        | `s3://anti-entropator/warehouse` | Iceberg warehouse |
 
 ## Troubleshooting
 

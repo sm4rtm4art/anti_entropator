@@ -35,13 +35,13 @@ pub enum Commands {
     /// Check if the lakehouse stack is running and reachable
     Up,
 
-    /// Initialize the warehouse and create the Iceberg file_catalog table in Nessie
+    /// Initialize the warehouse and register an Iceberg warehouse in the catalog (Lakekeeper)
     Init,
 
     /// Scan a directory and enrich file metadata (no uploads)
     Scan(ScanArgs),
 
-    /// Ingest files into the lakehouse (upload to RustFS + commit to Iceberg/Nessie)
+    /// Ingest files into the lakehouse (upload to RustFS + commit to Iceberg via Lakekeeper)
     Ingest(IngestArgs),
 
     /// Open an interactive SQL REPL (DataFusion)

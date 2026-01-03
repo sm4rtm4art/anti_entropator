@@ -1,6 +1,6 @@
 //! Lakehouse module - Stack operations (up, init)
 //!
-//! Handles connectivity to RustFS and Nessie, and initializes the Iceberg table.
+//! Handles connectivity to RustFS and Lakekeeper, and initializes the warehouse.
 
 use anyhow::{bail, Context, Result};
 use console::{style, Emoji};
@@ -16,7 +16,7 @@ pub struct LakehouseConfig {
     pub s3_access_key: String,
     pub s3_secret_key: String,
     pub bucket: String,
-    pub nessie_endpoint: String,
+    pub catalog_endpoint: String,
     pub warehouse: String,
 }
 
@@ -33,8 +33,9 @@ impl Default for LakehouseConfig {
                 .unwrap_or_else(|_| "antipassword".to_string()),
             bucket: std::env::var("ANTI_ENTROPATOR_BUCKET")
                 .unwrap_or_else(|_| "anti-entropator".to_string()),
-            nessie_endpoint: std::env::var("ANTI_ENTROPATOR_NESSIE_ENDPOINT")
-                .unwrap_or_else(|_| "http://localhost:19120/api/v1".to_string()),
+            catalog_endpoint: std::env::var("ANTI_ENTROPATOR_CATALOG_ENDPOINT")
+                .or_else(|_| std::env::var("ANTI_ENTROPATOR_LAKEKEEPER_ENDPOINT"))
+                .unwrap_or_else(|_| "http://localhost:8181".to_string()),
             warehouse: std::env::var("ANTI_ENTROPATOR_WAREHOUSE")
                 .unwrap_or_else(|_| "s3://anti-entropator/warehouse".to_string()),
         }
@@ -60,9 +61,9 @@ pub async fn check_up() -> Result<()> {
         }
     }
 
-    // Check Nessie
-    print!("  Nessie ({})... ", config.nessie_endpoint);
-    match check_nessie(&config).await {
+    // Check Lakekeeper
+    print!("  Lakekeeper ({})... ", config.catalog_endpoint);
+    match check_catalog(&config).await {
         Ok(_) => println!("{}", style("OK").green()),
         Err(e) => {
             println!("{} {}", CROSS, style(e.to_string()).red());
@@ -97,9 +98,9 @@ pub async fn init() -> Result<()> {
     check_rustfs(&config)
         .await
         .context("RustFS not available. Run `docker compose up -d`")?;
-    check_nessie(&config)
+    check_catalog(&config)
         .await
-        .context("Nessie not available. Run `docker compose up -d`")?;
+        .context("Lakekeeper not available. Run `docker compose up -d`")?;
 
     // Create bucket if it doesn't exist
     print!("  Creating bucket '{}'... ", config.bucket);
@@ -117,11 +118,11 @@ pub async fn init() -> Result<()> {
         }
     }
 
-    // Note: Full Iceberg table creation requires more complex Nessie/Iceberg integration
-    // For now we just verify connectivity and bucket creation
+    // Note: Warehouse registration & Iceberg table creation will be added in a future version.
+    // For now we just verify connectivity and bucket creation.
     println!(
-        "  Creating Iceberg table 'file_catalog'... {}",
-        style("skipped (requires Iceberg client)").dim()
+        "  Registering Iceberg warehouse in Lakekeeper... {}",
+        style("skipped (not implemented yet)").dim()
     );
 
     println!();
@@ -131,11 +132,11 @@ pub async fn init() -> Result<()> {
     );
     println!();
     println!("  Warehouse: {}", config.warehouse);
-    println!("  Nessie:    {}", config.nessie_endpoint);
+    println!("  Catalog:   {}", config.catalog_endpoint);
     println!();
     println!(
         "{}",
-        style("Note: Full Iceberg table creation will be available in a future version.").dim()
+        style("Note: Iceberg warehouse registration will be available in a future version.").dim()
     );
 
     Ok(())
@@ -160,28 +161,24 @@ async fn check_rustfs(config: &LakehouseConfig) -> Result<()> {
     }
 }
 
-async fn check_nessie(config: &LakehouseConfig) -> Result<()> {
+async fn check_catalog(config: &LakehouseConfig) -> Result<()> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
 
-    // Try v2 config endpoint
-    let base = config
-        .nessie_endpoint
-        .trim_end_matches("/api/v1")
-        .trim_end_matches('/');
-    let config_url = format!("{}/api/v2/config", base);
+    let base = config.catalog_endpoint.trim_end_matches('/');
+    let swagger_url = format!("{}/swagger-ui/", base);
 
     let resp = client
-        .get(&config_url)
+        .get(&swagger_url)
         .send()
         .await
-        .context("Cannot connect to Nessie")?;
+        .context("Cannot connect to Lakekeeper")?;
 
     if resp.status().is_success() {
         Ok(())
     } else {
-        bail!("Nessie returned unexpected status: {}", resp.status())
+        bail!("Lakekeeper returned unexpected status: {}", resp.status())
     }
 }
 

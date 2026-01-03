@@ -23,7 +23,7 @@ We will use **Rust** as the implementation language.
 
 - **Steeper learning curve**: More complex than Python/Go for quick prototyping
 - **Longer compile times**: Initial builds take several minutes
-- **Ecosystem maturity**: Some lakehouse components (Iceberg, Nessie clients) are less mature than Java equivalents
+- **Ecosystem maturity**: Some lakehouse components (Iceberg + REST catalog tooling) are less mature than Java equivalents
 - **Async complexity**: Tokio runtime adds mental overhead
 
 ## Alternatives Considered

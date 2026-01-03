@@ -23,8 +23,8 @@ flowchart TD
     end
 
     subgraph stack [Docker Compose Stack]
-        subgraph catalog [Metadata Layer]
-            Nessie[Nessie Catalog]
+        subgraph catalog [Catalog Layer]
+            Lakekeeper[Lakekeeper Catalog]
             Iceberg[Apache Iceberg]
         end
 
@@ -36,8 +36,8 @@ flowchart TD
     User((User)) --> CLI
     CLI --> DF
     DF <--> RustFS
-    DF <--> Nessie
-    Nessie -.-> Iceberg
+    DF <--> Lakekeeper
+    Lakekeeper -.-> Iceberg
     Iceberg -.-> RustFS
 ```
 
@@ -85,34 +85,29 @@ cargo run -- doctor
 ### 3. Query your catalog
 
 ```bash
-# Interactive SQL
-cargo run -- sql
+# Scan & enrich metadata (read-only)
+cargo run -- scan ~/Downloads --dry-run
 
-# Find duplicates
-cargo run -- query "
-  SELECT sha256, COUNT(*) as copies
-  FROM file_catalog
-  GROUP BY sha256
-  HAVING COUNT(*) > 1
-"
+# Upload to object storage (catalog commit is planned)
+cargo run -- ingest ~/Downloads --dry-run
 ```
 
 ## Features
 
-| Feature      | Status | Description                  |
-| ------------ | ------ | ---------------------------- |
-| `profile`    | ✅     | Read-only directory analysis |
-| `doctor`     | ✅     | Stack health checks          |
-| `scan`       | 🔄     | Metadata enrichment          |
-| `ingest`     | 🔄     | Upload to object storage     |
-| `query`      | 🔄     | SQL via DataFusion           |
-| `duplicates` | 🔄     | Find duplicate files         |
+| Feature      | Status | Description                    |
+| ------------ | ------ | ------------------------------ |
+| `profile`    | ✅     | Read-only directory analysis   |
+| `doctor`     | ✅     | Stack health checks            |
+| `scan`       | ✅     | Metadata enrichment (local)    |
+| `ingest`     | 🔄     | Upload to object storage       |
+| `query`      | 🔄     | SQL via DataFusion (planned)   |
+| `duplicates` | 🔄     | Find duplicate files (planned) |
 
 ## Stack Components
 
 - **[RustFS](https://github.com/rustfs/rustfs)**: S3-compatible object storage (Apache 2.0)
+- **[Lakekeeper](https://github.com/lakekeeper/lakekeeper)**: Apache Iceberg REST Catalog (Rust)
 - **[Apache Iceberg](https://iceberg.apache.org/)**: Table format with time travel
-- **[Nessie](https://projectnessie.org/)**: Git-like catalog for data
 - **[DataFusion](https://datafusion.apache.org/)**: SQL query engine
 
 ## Documentation

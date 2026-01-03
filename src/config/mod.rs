@@ -51,9 +51,9 @@ pub struct LakehouseConfig {
     #[serde(default = "default_bucket")]
     pub bucket: String,
 
-    /// Nessie catalog endpoint
-    #[serde(default = "default_nessie_endpoint")]
-    pub nessie_endpoint: String,
+    /// Iceberg REST catalog endpoint (Lakekeeper)
+    #[serde(default = "default_catalog_endpoint", alias = "nessie_endpoint")]
+    pub catalog_endpoint: String,
 
     /// Warehouse path prefix
     #[serde(default = "default_warehouse")]
@@ -68,8 +68,8 @@ fn default_bucket() -> String {
     "anti-entropator".to_string()
 }
 
-fn default_nessie_endpoint() -> String {
-    "http://localhost:19120/api/v1".to_string()
+fn default_catalog_endpoint() -> String {
+    "http://localhost:8181".to_string()
 }
 
 fn default_warehouse() -> String {
@@ -83,7 +83,7 @@ impl Default for LakehouseConfig {
             s3_access_key: String::new(),
             s3_secret_key: String::new(),
             bucket: default_bucket(),
-            nessie_endpoint: default_nessie_endpoint(),
+            catalog_endpoint: default_catalog_endpoint(),
             warehouse: default_warehouse(),
         }
     }

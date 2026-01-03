@@ -23,7 +23,7 @@ flowchart TB
 
     subgraph stack [Local Lakehouse Stack]
         RustFS[RustFS - S3 API]
-        Nessie[Nessie Catalog]
+        Lakekeeper[Lakekeeper Catalog]
         Postgres[(Postgres)]
         Parquet[Parquet Files]
         IcebergMeta[Iceberg Metadata]
@@ -43,11 +43,11 @@ flowchart TB
     Profile --> Downloads
     Scanner --> Downloads
     Ingest --> RustFS
-    Ingest --> Nessie
-    Query --> Nessie
+    Ingest --> Lakekeeper
+    Query --> Lakekeeper
     Query --> RustFS
 
-    Nessie --> Postgres
+    Lakekeeper --> Postgres
     RustFS --> Parquet
     RustFS --> IcebergMeta
 ```
@@ -64,7 +64,7 @@ flowchart TB
 - **profile**: Read-only directory analysis (no Docker needed)
 - **doctor**: Verify stack health and external tools
 - **scan**: Enrich file metadata without uploading
-- **ingest**: Upload to RustFS + commit to Iceberg via Nessie
+- **ingest**: Upload to RustFS + commit to Iceberg via Lakekeeper
 - **query**: Execute SQL via DataFusion
 
 ### Storage Layer
@@ -75,8 +75,8 @@ flowchart TB
 
 ### Catalog Layer
 
-- **Nessie**: Git-like versioning for data (branches, commits, tags)
-- **Postgres**: Backend storage for Nessie catalog state
+- **Lakekeeper**: Apache Iceberg REST Catalog (no JVM)
+- **Postgres**: Backend storage for Lakekeeper catalog state
 
 ## Data Flow
 
@@ -89,18 +89,15 @@ sequenceDiagram
     participant Scanner
     participant Hasher
     participant RustFS
-    participant Nessie
+    participant Lakekeeper
 
     User->>CLI: ingest ~/Downloads
-    CLI->>Nessie: create branch ingest/timestamp
     CLI->>Scanner: traverse directory
     Scanner->>Hasher: compute SHA-256
     Hasher->>RustFS: upload to sha256/ab/cd/hash
     RustFS-->>CLI: object URI
-    CLI->>Nessie: append row to file_catalog
-    CLI->>Nessie: commit to ingest branch
-    User->>CLI: merge ingest/timestamp
-    CLI->>Nessie: merge to main
+    CLI->>Lakekeeper: append row to file_catalog (Iceberg snapshot commit)
+    User->>CLI: query (validate snapshot / time travel)
 ```
 
 ### Content-Addressed Storage
@@ -145,5 +142,5 @@ Following the project's Rust rules:
 
 1. **Local files never deleted by default**: Ingest only copies, doesn't move
 2. **Dry-run mandatory**: Every mutation has `--dry-run` / `--apply` flags
-3. **Branch workflow**: Ingests go to isolated branches before merge
+3. **Time travel workflow**: Every ingest produces an Iceberg snapshot that can be queried/rolled back
 4. **Atomic operations**: Iceberg commits are all-or-nothing

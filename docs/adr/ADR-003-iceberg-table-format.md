@@ -28,7 +28,7 @@ We will use **Apache Iceberg** as the table format for the file catalog.
 
 - **Complexity**: More complex than plain Parquet files
 - **Rust crate maturity**: `iceberg-rust` is still evolving (v0.4.0)
-- **Catalog requirement**: Needs a catalog (Nessie) to manage table metadata
+- **Catalog requirement**: Needs a catalog (Lakekeeper) to manage table metadata
 - **Learning curve**: Understanding snapshots, manifests, and metadata layers
 
 ## Alternatives Considered

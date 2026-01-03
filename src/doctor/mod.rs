@@ -89,9 +89,9 @@ pub async fn run() -> Result<()> {
     println!("{} Checking RustFS (S3)...", INFO);
     results.push(check_rustfs().await);
 
-    // Check Nessie
-    println!("{} Checking Nessie catalog...", INFO);
-    results.push(check_nessie().await);
+    // Check Catalog (Lakekeeper)
+    println!("{} Checking Lakekeeper catalog...", INFO);
+    results.push(check_catalog().await);
 
     // Check external tools
     println!("{} Checking external tools...", INFO);
@@ -226,17 +226,15 @@ async fn check_rustfs() -> CheckResult {
     }
 }
 
-/// Check if Nessie is reachable
-async fn check_nessie() -> CheckResult {
-    let endpoint = std::env::var("ANTI_ENTROPATOR_NESSIE_ENDPOINT")
-        .unwrap_or_else(|_| "http://localhost:19120".to_string());
+/// Check if the Iceberg REST catalog (Lakekeeper) is reachable
+async fn check_catalog() -> CheckResult {
+    let endpoint = std::env::var("ANTI_ENTROPATOR_CATALOG_ENDPOINT")
+        .or_else(|_| std::env::var("ANTI_ENTROPATOR_LAKEKEEPER_ENDPOINT"))
+        .unwrap_or_else(|_| "http://localhost:8181".to_string());
 
-    // Nessie v2 API config endpoint
-    let base = endpoint
-        .trim_end_matches("/api/v1")
-        .trim_end_matches("/api/v2")
-        .trim_end_matches('/');
-    let config_url = format!("{}/api/v2/config", base);
+    // Lakekeeper exposes a Swagger UI (useful stable HTTP surface for reachability checks).
+    let base = endpoint.trim_end_matches('/');
+    let swagger_url = format!("{}/swagger-ui/", base);
 
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -245,37 +243,40 @@ async fn check_nessie() -> CheckResult {
         Ok(c) => c,
         Err(e) => {
             return CheckResult::error(
-                "Nessie",
+                "Lakekeeper",
                 format!("Failed to create HTTP client: {}", e),
                 "Check your network configuration",
             )
         }
     };
 
-    match client.get(&config_url).send().await {
+    match client.get(&swagger_url).send().await {
         Ok(resp) => {
             if resp.status().is_success() {
-                CheckResult::ok("Nessie", "Nessie catalog is reachable".to_string())
+                CheckResult::ok(
+                    "Lakekeeper",
+                    format!("Lakekeeper catalog is reachable at {}", endpoint),
+                )
             } else {
                 CheckResult::warn(
-                    "Nessie",
-                    format!("Nessie responded with status {}", resp.status()),
-                    "Check Nessie configuration",
+                    "Lakekeeper",
+                    format!("Lakekeeper responded with status {}", resp.status()),
+                    "Check Lakekeeper configuration",
                 )
             }
         }
         Err(e) => {
             if e.is_connect() {
                 CheckResult::error(
-                    "Nessie",
-                    "Cannot connect to Nessie catalog",
-                    "Run: docker compose up -d nessie",
+                    "Lakekeeper",
+                    "Cannot connect to Lakekeeper catalog",
+                    "Run: docker compose up -d lakekeeper",
                 )
             } else {
                 CheckResult::error(
-                    "Nessie",
-                    format!("Nessie check failed: {}", e),
-                    "Check if Nessie is running and accessible",
+                    "Lakekeeper",
+                    format!("Lakekeeper check failed: {}", e),
+                    "Check if Lakekeeper is running and accessible",
                 )
             }
         }
