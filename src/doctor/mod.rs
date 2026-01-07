@@ -179,7 +179,7 @@ async fn check_docker() -> CheckResult {
 /// Check if RustFS is reachable
 async fn check_rustfs() -> CheckResult {
     let endpoint = std::env::var("ANTI_ENTROPATOR_S3_ENDPOINT")
-        .unwrap_or_else(|_| "http://localhost:9000".to_string());
+        .unwrap_or_else(|_| "http://localhost:19000".to_string());
 
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(5))

@@ -24,7 +24,7 @@ impl Default for LakehouseConfig {
     fn default() -> Self {
         Self {
             s3_endpoint: std::env::var("ANTI_ENTROPATOR_S3_ENDPOINT")
-                .unwrap_or_else(|_| "http://localhost:9000".to_string()),
+                .unwrap_or_else(|_| "http://localhost:19000".to_string()),
             s3_access_key: std::env::var("RUSTFS_ROOT_USER")
                 .or_else(|_| std::env::var("AWS_ACCESS_KEY_ID"))
                 .unwrap_or_else(|_| "antiuser".to_string()),

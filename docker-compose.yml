@@ -24,16 +24,22 @@ services:
     image: rustfs/rustfs:latest
     container_name: anti_entropator_rustfs
     ports:
-      - "127.0.0.1:9000:9000" # S3 API (local-only)
-      - "127.0.0.1:9001:9001" # Web Console (local-only)
+      - "127.0.0.1:19000:9000" # S3 API (local-only, remapped to avoid conflicts)
+      - "127.0.0.1:19001:9001" # Web Console (local-only)
     volumes:
       - ./data/rustfs:/data
       - ./logs/rustfs:/logs
     environment:
-      RUSTFS_ROOT_USER: ${RUSTFS_ROOT_USER:-antiuser}
-      RUSTFS_ROOT_PASSWORD: ${RUSTFS_ROOT_PASSWORD:-antipassword}
+      # RustFS uses ACCESS_KEY/SECRET_KEY (not MinIO's MINIO_ROOT_*).
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-antiuser}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-antipassword}
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      # RustFS returns 403 for this endpoint without auth; treat 200/403 as healthy.
+      test:
+        [
+          "CMD-SHELL",
+          'CODE=$$(curl -s -o /dev/null -w ''%{http_code}'' http://localhost:9000/minio/health/live); [ "$$CODE" = "200" ] || [ "$$CODE" = "403" ]',
+        ]
       interval: 30s
       timeout: 10s
       retries: 3

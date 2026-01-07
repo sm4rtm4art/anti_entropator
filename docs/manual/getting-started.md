@@ -121,6 +121,11 @@ anti_entropator duplicates
 | `ANTI_ENTROPATOR_BUCKET`           | `anti-entropator`                | S3 bucket name    |
 | `ANTI_ENTROPATOR_WAREHOUSE`        | `s3://anti-entropator/warehouse` | Iceberg warehouse |
 
+RustFS credentials are read from (first match wins):
+
+- `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`
+- `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+
 ## Troubleshooting
 
 ### "Docker daemon is not running"
