@@ -45,18 +45,29 @@ pub async fn run(args: ScanArgs) -> Result<()> {
     );
     println!();
     println!("  Path: {}", path.display());
+    if let Some(limit) = args.limit {
+        println!("  Limit: {} files", limit);
+    }
     println!("  Dry run: {}", if args.dry_run { "yes" } else { "no" });
     println!();
 
     // Count files first
-    let file_count: usize = WalkDir::new(&path)
+    let total_files: usize = WalkDir::new(&path)
         .follow_links(false)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
         .count();
 
-    println!("  Found {} files to scan", file_count);
+    let file_count = args
+        .limit
+        .map(|l| l.min(total_files))
+        .unwrap_or(total_files);
+
+    println!(
+        "  Found {} files total, scanning {}",
+        total_files, file_count
+    );
     println!();
 
     // Create progress bar
@@ -74,6 +85,13 @@ pub async fn run(args: ScanArgs) -> Result<()> {
     let mut errors = Vec::new();
 
     for entry in WalkDir::new(&path).follow_links(false) {
+        // Check limit
+        if let Some(limit) = args.limit {
+            if scanned.len() >= limit {
+                break;
+            }
+        }
+
         let entry = match entry {
             Ok(e) => e,
             Err(e) => {

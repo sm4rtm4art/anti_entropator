@@ -99,6 +99,14 @@ pub struct ScanArgs {
     /// Path to the directory to scan
     pub path: PathBuf,
 
+    /// Limit the number of files to scan
+    #[arg(long)]
+    pub limit: Option<usize>,
+
+    /// Output format
+    #[arg(long, value_enum, default_value = "table")]
+    pub format: OutputFormat,
+
     /// Dry run - show what would be done without making changes
     #[arg(long)]
     pub dry_run: bool,
