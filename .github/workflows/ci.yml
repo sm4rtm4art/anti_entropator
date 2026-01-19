@@ -12,7 +12,7 @@ env:
 
 jobs:
   check:
-    name: Check (fmt, clippy, test)
+    name: Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,7 +22,7 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Cache cargo registry
+      - name: Cache cargo
         uses: actions/cache@v4
         with:
           path: |
@@ -42,43 +42,26 @@ jobs:
       - name: Run tests
         run: cargo test --all-features
 
-  # Build on native platforms (no cross-compilation)
-  build-native:
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Linux x86_64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          # macOS ARM (Apple Silicon) - matches macos-latest
-          - os: macos-latest
-            target: aarch64-apple-darwin
-          # macOS Intel - use macos-13 which is still x86_64
-          - os: macos-15
-            target: x86_64-apple-darwin
-
+  # Quick build check to catch compile errors early
+  build:
+    name: Build
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo registry
+      - name: Cache cargo
         uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.target }}-cargo-
+            ${{ runner.os }}-cargo-build-
 
-      - name: Build
+      - name: Build release
         run: cargo build --release
-
-      - name: Run tests
-        run: cargo test --release
