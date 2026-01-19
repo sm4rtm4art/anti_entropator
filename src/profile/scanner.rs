@@ -3,7 +3,7 @@
 use crate::domain::stats::{DuplicateEstimate, DuplicateGroup, ProfileError, ProfileResult};
 use crate::domain::FileCategory;
 use crate::profile::ScanOptions;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use indicatif::ProgressBar;
 use regex::Regex;
@@ -28,21 +28,26 @@ struct NamePatterns {
 }
 
 impl NamePatterns {
-    fn new() -> Self {
-        Self {
-            screenshot: Regex::new(r"(?i)^screenshot\b").unwrap(),
-            download: Regex::new(r"(?i)^download(\s*\(\d+\))?(\b|\.)").unwrap(),
-            untitled: Regex::new(r"(?i)^untitled(\b|\.)").unwrap(),
-            image_generic: Regex::new(r"(?i)^(img|image|photo)[-_ ]?\d+").unwrap(),
-            video_generic: Regex::new(r"(?i)^(vid|video)[-_ ]?\d+").unwrap(),
+    fn new() -> Result<Self> {
+        Ok(Self {
+            screenshot: Regex::new(r"(?i)^screenshot\b").context("Invalid regex: screenshot")?,
+            download: Regex::new(r"(?i)^download(\s*\(\d+\))?(\b|\.)")
+                .context("Invalid regex: download")?,
+            untitled: Regex::new(r"(?i)^untitled(\b|\.)").context("Invalid regex: untitled")?,
+            image_generic: Regex::new(r"(?i)^(img|image|photo)[-_ ]?\d+")
+                .context("Invalid regex: image_generic")?,
+            video_generic: Regex::new(r"(?i)^(vid|video)[-_ ]?\d+")
+                .context("Invalid regex: video_generic")?,
             uuid_like: Regex::new(
                 r"(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
             )
-            .unwrap(),
-            long_hex: Regex::new(r"(?i)^[0-9a-f]{20,}").unwrap(),
-            querystring_like: Regex::new(r".*[?&]=.+").unwrap(),
-            numbered_suffix: Regex::new(r"[-_ ]\(\d+\)\.[^.]+$").unwrap(),
-        }
+            .context("Invalid regex: uuid_like")?,
+            long_hex: Regex::new(r"(?i)^[0-9a-f]{20,}").context("Invalid regex: long_hex")?,
+            querystring_like: Regex::new(r".*[?&]=.+")
+                .context("Invalid regex: querystring_like")?,
+            numbered_suffix: Regex::new(r"[-_ ]\(\d+\)\.[^.]+$")
+                .context("Invalid regex: numbered_suffix")?,
+        })
     }
 
     fn check(&self, filename: &str) -> Vec<&'static str> {
@@ -135,7 +140,7 @@ pub async fn scan(
     progress: Option<&ProgressBar>,
 ) -> Result<ProfileResult> {
     let mut result = ProfileResult::new(root.display().to_string());
-    let patterns = NamePatterns::new();
+    let patterns = NamePatterns::new()?;
 
     // For duplicate detection: group by size
     let mut by_size: HashMap<u64, Vec<String>> = HashMap::new();

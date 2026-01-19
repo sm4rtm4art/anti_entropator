@@ -72,14 +72,11 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     // Create progress bar
     let pb = ProgressBar::new(files.len() as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-            )
-            .unwrap()
-            .progress_chars("#>-"),
-    );
+    let pb_style = ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+        .context("Invalid ingest progress bar template")?
+        .progress_chars("#>-");
+    pb.set_style(pb_style);
 
     let mut uploaded = 0u64;
     let mut skipped = 0u64;

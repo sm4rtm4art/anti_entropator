@@ -8,7 +8,7 @@ mod scanner;
 
 use crate::cli::{OutputFormat, ProfileArgs};
 use crate::domain::stats::ProfileResult;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use std::path::Path;
 
@@ -31,11 +31,10 @@ pub async fn run(args: ProfileArgs) -> Result<()> {
 
     // Create progress bar
     let pb = ProgressBar::new_spinner();
-    pb.set_style(
-        ProgressStyle::default_spinner()
-            .template("{spinner:.green} {msg}")
-            .unwrap(),
-    );
+    let pb_style = ProgressStyle::default_spinner()
+        .template("{spinner:.green} {msg}")
+        .context("Invalid profile spinner template")?;
+    pb.set_style(pb_style);
     pb.set_message("Scanning directory...");
 
     // Run the scan

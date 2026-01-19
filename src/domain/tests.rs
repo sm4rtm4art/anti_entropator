@@ -3,6 +3,7 @@
 //! Tests for FileCategory, ContentHash, PartialHash, RawPath, and DomainError.
 
 use super::*;
+use anyhow::Result;
 use std::collections::HashSet;
 use tempfile::tempdir;
 
@@ -397,22 +398,22 @@ fn partial_hash_hashable() {
 // ==================== RawPath tests ====================
 
 #[test]
-fn raw_path_valid_directory() {
-    let temp = tempdir().unwrap();
-    let path = RawPath::new(temp.path().to_path_buf());
-    assert!(path.is_ok());
-    assert_eq!(path.unwrap().as_path(), temp.path());
+fn raw_path_valid_directory() -> Result<()> {
+    let temp = tempdir()?;
+    let path = RawPath::new(temp.path().to_path_buf())?;
+    assert_eq!(path.as_path(), temp.path());
+    Ok(())
 }
 
 #[test]
-fn raw_path_valid_file() {
-    let temp = tempdir().unwrap();
+fn raw_path_valid_file() -> Result<()> {
+    let temp = tempdir()?;
     let file_path = temp.path().join("test.txt");
-    std::fs::write(&file_path, "test content").unwrap();
+    std::fs::write(&file_path, "test content")?;
 
-    let path = RawPath::new(file_path.clone());
-    assert!(path.is_ok());
-    assert_eq!(path.unwrap().as_path(), file_path);
+    let path = RawPath::new(file_path.clone())?;
+    assert_eq!(path.as_path(), file_path);
+    Ok(())
 }
 
 #[test]
@@ -423,19 +424,21 @@ fn raw_path_nonexistent() {
 }
 
 #[test]
-fn raw_path_into_inner() {
-    let temp = tempdir().unwrap();
+fn raw_path_into_inner() -> Result<()> {
+    let temp = tempdir()?;
     let original = temp.path().to_path_buf();
-    let raw_path = RawPath::new(original.clone()).unwrap();
+    let raw_path = RawPath::new(original.clone())?;
     assert_eq!(raw_path.into_inner(), original);
+    Ok(())
 }
 
 #[test]
-fn raw_path_as_ref() {
-    let temp = tempdir().unwrap();
-    let raw_path = RawPath::new(temp.path().to_path_buf()).unwrap();
+fn raw_path_as_ref() -> Result<()> {
+    let temp = tempdir()?;
+    let raw_path = RawPath::new(temp.path().to_path_buf())?;
     let path_ref: &std::path::Path = raw_path.as_ref();
     assert_eq!(path_ref, temp.path());
+    Ok(())
 }
 
 // ==================== FileCategory Display tests ====================

@@ -72,14 +72,11 @@ pub async fn run(args: ScanArgs) -> Result<()> {
 
     // Create progress bar
     let pb = ProgressBar::new(file_count as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template(
-                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
-            )
-            .unwrap()
-            .progress_chars("#>-"),
-    );
+    let pb_style = ProgressStyle::default_bar()
+        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
+        .context("Invalid scan progress bar template")?
+        .progress_chars("#>-");
+    pb.set_style(pb_style);
 
     let mut scanned = Vec::new();
     let mut errors = Vec::new();
@@ -169,13 +166,15 @@ pub async fn run(args: ScanArgs) -> Result<()> {
             with_suggestions.len()
         );
         for info in with_suggestions.iter().take(10) {
-            println!(
-                "    {} → {}",
-                style(&info.filename).dim(),
-                style(info.suggested_name.as_ref().unwrap()).green()
-            );
-            if let Some(ref reason) = info.name_reason {
-                println!("      ({})", style(reason).dim());
+            if let Some(suggested_name) = info.suggested_name.as_ref() {
+                println!(
+                    "    {} → {}",
+                    style(&info.filename).dim(),
+                    style(suggested_name).green()
+                );
+                if let Some(ref reason) = info.name_reason {
+                    println!("      ({})", style(reason).dim());
+                }
             }
         }
         if with_suggestions.len() > 10 {
