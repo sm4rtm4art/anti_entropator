@@ -2,9 +2,9 @@
 
 ## Prerequisites
 
-- **Rust 1.88+**: Install via [rustup](https://rustup.rs/)
+- **Rust 1.85+**: Install via [rustup](https://rustup.rs/)
 - **Docker**: For running the lakehouse stack
-- **Optional tools**: `ffprobe`, `exiftool`, `pdfinfo` for richer metadata
+- **Optional tools**: `ffprobe`, `exiftool`, `pdfinfo` for richer metadata extraction
 
 ## Installation
 
@@ -56,7 +56,7 @@ docker compose up -d
 anti_entropator doctor
 ```
 
-### 3. Initialize the Catalog
+### 3. Initialize the Lakehouse
 
 ```bash
 anti_entropator init
@@ -64,10 +64,12 @@ anti_entropator init
 
 This creates:
 
-- The `anti-entropator` bucket in RustFS
-- Verifies the Iceberg REST catalog (Lakekeeper) is reachable
+- The `anti-entropator` bucket in RustFS (S3-compatible storage)
+- The `anti-entropator` warehouse in Lakekeeper
+- The `anti_entropator` Iceberg namespace
+- The `file_catalog` Iceberg table (with schema for file metadata)
 
-> **Note:** Iceberg warehouse/table registration is planned, but not fully implemented yet.
+The command is idempotent - run it multiple times safely.
 
 ### 4. Ingest Files
 
@@ -79,19 +81,21 @@ anti_entropator ingest ~/Downloads --dry-run
 anti_entropator ingest ~/Downloads
 ```
 
-### 5. Query Your Catalog
+### 5. Query Your Catalog (In Development)
 
-> **Note:** `sql` and `query` are planned but not fully implemented yet.
+> **Note:** The `sql` and `query` commands are in development. They will enable SQL queries via DataFusion once Iceberg catalog integration is complete.
 
 ```bash
-# Interactive SQL REPL
+# Interactive SQL REPL (coming soon)
 anti_entropator sql
 
-# One-shot queries
+# One-shot queries (coming soon)
 anti_entropator query "SELECT category, COUNT(*) FROM file_catalog GROUP BY category"
 ```
 
-### 6. Find Duplicates
+### 6. Find Duplicates (In Development)
+
+> **Note:** The `duplicates` command is in development.
 
 ```bash
 anti_entropator duplicates
@@ -99,27 +103,29 @@ anti_entropator duplicates
 
 ## Command Reference
 
-| Command          | Description                              |
-| ---------------- | ---------------------------------------- |
-| `profile <path>` | Analyze directory (read-only, no Docker) |
-| `doctor`         | Check stack health and external tools    |
-| `up`             | Verify lakehouse services are running    |
-| `init`           | Initialize bucket and verify catalog     |
-| `scan <path>`    | Enrich metadata without uploading        |
-| `ingest <path>`  | Upload files to object storage           |
-| `sql`            | Interactive SQL REPL                     |
-| `query <sql>`    | Execute one-shot SQL                     |
-| `duplicates`     | Find and report duplicate files          |
-| `merge <branch>` | Merge ingest branch (planned)            |
+| Command          | Status | Description                              |
+| ---------------- | ------ | ---------------------------------------- |
+| `profile <path>` | ✅      | Analyze directory (read-only, no Docker) |
+| `doctor`         | ✅      | Check stack health and external tools    |
+| `up`             | ✅      | Verify lakehouse services are running    |
+| `init`           | ✅      | Initialize lakehouse (bucket, warehouse, table) |
+| `scan <path>`    | ✅      | Enrich metadata without uploading        |
+| `ingest <path>`  | ✅      | Upload files to object storage           |
+| `sql`            | 🚧      | Interactive SQL REPL (in development)    |
+| `query <sql>`    | 🚧      | Execute one-shot SQL (in development)    |
+| `duplicates`     | 🚧      | Find duplicate files (in development)    |
+| `merge <branch>` | 🚧      | Merge ingest branch (in development)     |
+
+**Legend:** ✅ Implemented | 🚧 In Development
 
 ## Environment Variables
 
-| Variable                           | Default                          | Description       |
-| ---------------------------------- | -------------------------------- | ----------------- |
-| `ANTI_ENTROPATOR_S3_ENDPOINT`      | `http://localhost:9000`          | RustFS endpoint   |
-| `ANTI_ENTROPATOR_CATALOG_ENDPOINT` | `http://localhost:8181`          | Lakekeeper API    |
-| `ANTI_ENTROPATOR_BUCKET`           | `anti-entropator`                | S3 bucket name    |
-| `ANTI_ENTROPATOR_WAREHOUSE`        | `s3://anti-entropator/warehouse` | Iceberg warehouse |
+| Variable                           | Default                  | Description              |
+| ---------------------------------- | ------------------------ | ------------------------ |
+| `ANTI_ENTROPATOR_S3_ENDPOINT`      | `http://localhost:19000` | RustFS endpoint          |
+| `ANTI_ENTROPATOR_CATALOG_ENDPOINT` | `http://localhost:8181`  | Lakekeeper API           |
+| `ANTI_ENTROPATOR_BUCKET`           | `anti-entropator`        | S3 bucket name           |
+| `ANTI_ENTROPATOR_WAREHOUSE`        | `anti-entropator`        | Lakekeeper warehouse name|
 
 RustFS credentials are read from (first match wins):
 

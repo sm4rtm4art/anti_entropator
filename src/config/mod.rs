@@ -52,7 +52,7 @@ pub struct LakehouseConfig {
     pub bucket: String,
 
     /// Iceberg REST catalog endpoint (Lakekeeper)
-    #[serde(default = "default_catalog_endpoint", alias = "nessie_endpoint")]
+    #[serde(default = "default_catalog_endpoint")]
     pub catalog_endpoint: String,
 
     /// Warehouse path prefix
@@ -61,7 +61,7 @@ pub struct LakehouseConfig {
 }
 
 fn default_s3_endpoint() -> String {
-    "http://localhost:9000".to_string()
+    "http://localhost:19000".to_string()
 }
 
 fn default_bucket() -> String {

@@ -27,10 +27,11 @@ aws-config = "1"
 object_store = { version = "0.11", features = ["aws"] }
 
 # Lakehouse
-iceberg = "0.4"
-datafusion = "44"
-arrow = { version = "54", features = ["prettyprint"] }
-parquet = { version = "54", features = ["zstd"] }
+iceberg = "0.8"
+iceberg-catalog-rest = "0.8"
+datafusion = "52"
+arrow = { version = "57", features = ["prettyprint"] }
+parquet = { version = "57", features = ["zstd"] }
 
 # File Processing
 sha2 = "0.10"

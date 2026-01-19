@@ -1,5 +1,9 @@
 # Anti-Entropator
 
+[![CI](https://github.com/sm4rtm4rt/anti_entropator/actions/workflows/ci.yml/badge.svg)](https://github.com/martinkaergell/anti_entropator/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org)
+
 > _Fighting entropy, one file at a time_
 
 A **local data lakehouse** for file organization, built in Rust. Transform your chaotic downloads folder into a queryable, organized data store using modern data engineering patterns.
@@ -11,7 +15,7 @@ Your downloads folder is a data swamp. This project turns it into a lakehouse by
 - **Cataloging** every file with rich metadata (type, size, hash, MIME)
 - **Detecting duplicates** via content hashing
 - **Organizing** files by category with safe, reversible operations
-- **Querying** your catalog with SQL
+- **Querying** your catalog with SQL (planned)
 
 ## Architecture
 
@@ -82,26 +86,34 @@ docker compose up -d
 cargo run -- doctor
 ```
 
-### 3. Query your catalog
+### 3. Scan and ingest files
 
 ```bash
 # Scan & enrich metadata (read-only)
 cargo run -- scan ~/Downloads --dry-run
 
-# Upload to object storage (catalog commit is planned)
+# Upload to object storage
 cargo run -- ingest ~/Downloads --dry-run
+
+# Remove --dry-run to actually upload
+cargo run -- ingest ~/Downloads
 ```
 
 ## Features
 
-| Feature      | Status | Description                    |
-| ------------ | ------ | ------------------------------ |
-| `profile`    | ✅     | Read-only directory analysis   |
-| `doctor`     | ✅     | Stack health checks            |
-| `scan`       | ✅     | Metadata enrichment (local)    |
-| `ingest`     | 🔄     | Upload to object storage       |
-| `query`      | 🔄     | SQL via DataFusion (planned)   |
-| `duplicates` | 🔄     | Find duplicate files (planned) |
+| Feature      | Status | Description                                  |
+| ------------ | ------ | -------------------------------------------- |
+| `profile`    | ✅      | Read-only directory analysis                 |
+| `doctor`     | ✅      | Stack health checks                          |
+| `scan`       | ✅      | Metadata enrichment with external tools      |
+| `ingest`     | ✅      | Upload to S3-compatible object storage       |
+| `init`       | ✅      | Initialize lakehouse (bucket, warehouse, table) |
+| `up`         | ✅      | Verify lakehouse services are running        |
+| `query`      | 🚧      | SQL via DataFusion (in development)          |
+| `sql`        | 🚧      | Interactive SQL REPL (in development)        |
+| `duplicates` | 🚧      | Find duplicate files (in development)        |
+
+**Legend:** ✅ Implemented | 🚧 In Development
 
 ## Stack Components
 

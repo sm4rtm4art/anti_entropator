@@ -10,6 +10,9 @@ use thiserror::Error;
 pub mod file_info;
 pub mod stats;
 
+#[cfg(test)]
+mod tests;
+
 pub use file_info::FileInfo;
 
 /// Errors that can occur in domain operations
@@ -132,7 +135,9 @@ impl FileCategory {
             || mime_lower.contains("document")
             || mime_lower.contains("msword")
             || mime_lower.contains("spreadsheet")
+            || mime_lower.contains("excel")
             || mime_lower.contains("presentation")
+            || mime_lower.contains("powerpoint")
             || mime_lower.contains("epub")
         {
             FileCategory::Document
