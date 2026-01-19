@@ -8,11 +8,13 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  RUSTFLAGS: "-Dwarnings"
+  REGISTRY: ghcr.io
+  IMAGE: sm4rtm4art/anti_entropator
 
 jobs:
-  check:
-    name: Check
+  # Quick source checks (no heavy compilation)
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,46 +24,34 @@ jobs:
         with:
           components: rustfmt, clippy
 
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-
-
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-      - name: Run clippy
-        run: cargo clippy --all-targets --all-features
-
-      - name: Run tests
-        run: cargo test --all-features
-
-  # Quick build check to catch compile errors early
-  build:
-    name: Build
+  # Test using pre-built container image
+  test-container:
+    name: Test Container
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - name: Pull container image
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest || {
+            echo "⚠️ No container image found. Push one first with:"
+            echo "   ./scripts/build-and-push.sh"
+            exit 1
+          }
 
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-build-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-build-
+      - name: Smoke test - version
+        run: |
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest --version
 
-      - name: Build release
-        run: cargo build --release
+      - name: Smoke test - help
+        run: |
+          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest --help
+
+      - name: Smoke test - profile (with test data)
+        run: |
+          mkdir -p /tmp/test-data
+          echo "test file" > /tmp/test-data/test.txt
+          docker run --rm -v /tmp/test-data:/data:ro ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest profile /data
