@@ -9,7 +9,8 @@ on:
 env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # GHCR requires lowercase image names
+  IMAGE_NAME: sm4rtm4art/anti_entropator
 
 jobs:
   # Quick lint checks (no heavy compilation)
@@ -94,3 +95,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Disable attestation to avoid GHCR 403 errors
+          provenance: false
+          sbom: false
