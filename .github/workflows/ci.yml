@@ -9,10 +9,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
-  IMAGE: sm4rtm4art/anti_entropator
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  # Quick source checks (no heavy compilation)
+  # Quick lint checks (no heavy compilation)
   lint:
     name: Lint
     runs-on: ubuntu-latest
@@ -27,31 +27,70 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all -- --check
 
-  # Test using pre-built container image
-  test-container:
-    name: Test Container
+  # Build and test
+  build:
+    name: Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Pull container image
-        run: |
-          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest || {
-            echo "⚠️ No container image found. Push one first with:"
-            echo "   ./scripts/build-and-push.sh"
-            exit 1
-          }
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Smoke test - version
-        run: |
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest --version
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
 
-      - name: Smoke test - help
-        run: |
-          docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest --help
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features
 
-      - name: Smoke test - profile (with test data)
-        run: |
-          mkdir -p /tmp/test-data
-          echo "test file" > /tmp/test-data/test.txt
-          docker run --rm -v /tmp/test-data:/data:ro ${{ env.REGISTRY }}/${{ env.IMAGE }}:latest profile /data
+      - name: Run tests
+        run: cargo test --all-features
+
+  # Build and push container on main branch
+  container:
+    name: Build Container
+    runs-on: ubuntu-latest
+    needs: [lint, build]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

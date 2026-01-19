@@ -1,8 +1,8 @@
 # Anti-Entropator Container Image
-# Multi-stage build for minimal image size
+# Multi-arch build - detects host architecture
 
 # Build stage
-FROM rust:1.92 AS builder
+FROM rust:latest AS builder
 
 WORKDIR /app
 
@@ -19,20 +19,18 @@ RUN mkdir src && \
 COPY src ./src
 RUN touch src/main.rs && cargo build --release
 
-# Runtime stage
+# Runtime stage - minimal Debian
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
-    libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/anti_entropator /usr/local/bin/
 
-# Create non-root user
+# Non-root user
 RUN useradd -m -u 1000 anti
 USER anti
 
 ENTRYPOINT ["anti_entropator"]
 CMD ["--help"]
-
