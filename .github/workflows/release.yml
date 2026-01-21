@@ -37,6 +37,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup swap (for memory-intensive cross-compilation)
+        if: matrix.cross
+        run: |
+          sudo swapoff -a
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:

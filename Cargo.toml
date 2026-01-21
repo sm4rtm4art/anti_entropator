@@ -1,11 +1,11 @@
 [package]
 name = "anti_entropator"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "A local data lakehouse for file organization - transform chaos into queryable order"
-authors = ["Martin Kaergell"]
+authors = ["Martin"]
 license = "MIT"
-repository = "https://github.com/martinkaergell/anti_entropator"
+repository = "https://github.com/sm4rtm4art/anti_entropator"
 keywords = ["file-organization", "lakehouse", "iceberg", "datafusion", "cli"]
 categories = ["command-line-utilities", "filesystem"]
 
