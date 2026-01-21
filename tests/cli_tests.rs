@@ -299,22 +299,22 @@ fn ingest_dry_run_does_not_upload() -> Result<()> {
 // ==================== Unimplemented Commands Tests ====================
 
 #[test]
-fn sql_command_shows_not_implemented() -> Result<()> {
+fn sql_help_shows_options() -> Result<()> {
     cmd()?
-        .arg("sql")
+        .args(["sql", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("not yet implemented"));
+        .stdout(predicate::str::contains("Open an interactive SQL REPL"));
     Ok(())
 }
 
 #[test]
-fn query_command_shows_not_implemented() -> Result<()> {
+fn query_help_shows_options() -> Result<()> {
     cmd()?
-        .args(["query", "SELECT * FROM files"])
+        .args(["query", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("not yet implemented"));
+        .stdout(predicate::str::contains("Execute a one-shot SQL query"));
     Ok(())
 }
 
@@ -325,6 +325,32 @@ fn duplicates_command_shows_not_implemented() -> Result<()> {
         .assert()
         .success()
         .stdout(predicate::str::contains("not yet implemented"));
+    Ok(())
+}
+
+// ==================== Full Flow Tests ====================
+
+#[test]
+#[ignore] // Requires full Docker stack running
+fn ingest_then_query_flow() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("test.txt"), "hello world")?;
+
+    // 1. Ingest
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("successfully"));
+
+    // 2. Query
+    cmd()?
+        .args(["query", "SELECT count(*) FROM files"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("count"));
+
     Ok(())
 }
 

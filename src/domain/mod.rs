@@ -61,7 +61,7 @@ impl AsRef<std::path::Path> for RawPath {
 
 /// A content hash (SHA-256)
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct ContentHash(String);
+pub struct ContentHash(pub String);
 
 impl ContentHash {
     pub fn new(hash: String) -> Self {
@@ -92,7 +92,7 @@ impl std::fmt::Display for ContentHash {
 
 /// A partial hash (first N bytes) for quick duplicate candidate detection
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-pub struct PartialHash(String);
+pub struct PartialHash(pub String);
 
 impl PartialHash {
     pub fn new(hash: String) -> Self {

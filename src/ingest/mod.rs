@@ -3,16 +3,15 @@
 //! Implements content-addressed storage with Iceberg catalog integration.
 
 use crate::cli::IngestArgs;
-use crate::domain::{ContentHash, FileCategory};
-use crate::lakehouse::LakehouseConfig;
+use crate::domain::{ContentHash, FileCategory, FileInfo};
+use crate::lakehouse::{writer, LakehouseConfig};
+use crate::scan::scan_file;
 use anyhow::{Context, Result};
 use aws_sdk_s3::primitives::ByteStream;
+use chrono::Utc;
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
-use sha2::{Digest, Sha256};
 use std::collections::HashSet;
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -78,11 +77,11 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         .progress_chars("#>-");
     pb.set_style(pb_style);
 
-    let mut uploaded = 0u64;
-    let mut skipped = 0u64;
+    let mut uploaded_files = Vec::new();
+    let mut uploaded_count = 0u64;
+    let mut skipped_count = 0u64;
     let mut errors = Vec::new();
     let mut total_bytes = 0u64;
-    let mut file_details: Vec<(String, u64, String)> = Vec::new(); // (name, size, hash)
 
     // Create S3 client (only if not dry-run)
     let s3_client = if !args.dry_run {
@@ -100,16 +99,14 @@ pub async fn run(args: IngestArgs) -> Result<()> {
             .to_string();
         pb.set_message(file_name.clone());
 
-        match process_file(file_path, &config, s3_client.as_ref(), args.dry_run).await {
-            Ok(Some((bytes, hash))) => {
-                uploaded += 1;
-                total_bytes += bytes;
-                if args.verbose {
-                    file_details.push((file_name, bytes, hash));
-                }
+        match process_file(file_path, &path, &config, s3_client.as_ref(), args.dry_run).await {
+            Ok(Some(info)) => {
+                uploaded_count += 1;
+                total_bytes += info.size_bytes;
+                uploaded_files.push(info);
             }
             Ok(None) => {
-                skipped += 1;
+                skipped_count += 1;
             }
             Err(e) => {
                 errors.push(format!("{}: {}", file_path.display(), e));
@@ -119,35 +116,30 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     pb.finish_and_clear();
 
+    // Commit to Iceberg if not dry-run
+    if !args.dry_run && !uploaded_files.is_empty() {
+        print!("  Committing metadata to Iceberg catalog... ");
+        match writer::commit_files(uploaded_files, &config).await {
+            Ok(_) => println!("{}", style("OK").green()),
+            Err(e) => {
+                println!("{}", style("FAILED").red());
+                println!("  Warning: Metadata commit failed: {}", e);
+            }
+        }
+    }
+
     // Print summary
     println!();
     println!("─── Ingest Results ─────────────────────────────────────────────");
     println!();
     println!(
         "  Uploaded: {} files ({})",
-        uploaded,
+        uploaded_count,
         humansize::format_size(total_bytes, humansize::BINARY)
     );
-    println!("  Skipped:  {} files (already exist)", skipped);
+    println!("  Skipped:  {} files (already exist)", skipped_count);
     println!("  Errors:   {} files", errors.len());
     println!();
-
-    // Show file details if verbose
-    if args.verbose && !file_details.is_empty() {
-        println!("  Files processed:");
-        for (name, size, hash) in file_details.iter().take(50) {
-            println!(
-                "    {} ({}) → {}",
-                name,
-                humansize::format_size(*size, humansize::BINARY),
-                &hash[..12] // Show first 12 chars of hash
-            );
-        }
-        if file_details.len() > 50 {
-            println!("    ... and {} more", file_details.len() - 50);
-        }
-        println!();
-    }
 
     if !errors.is_empty() {
         println!("  Errors:");
@@ -300,29 +292,46 @@ fn collect_files(path: &Path, args: &IngestArgs) -> Result<Vec<std::path::PathBu
     Ok(files)
 }
 
-/// Process a single file: hash, upload, return (bytes uploaded, hash)
+/// Process a single file: scan, hash, upload, return enriched FileInfo
 async fn process_file(
     path: &Path,
+    root_path: &Path,
     config: &LakehouseConfig,
     client: Option<&aws_sdk_s3::Client>,
     dry_run: bool,
-) -> Result<Option<(u64, String)>> {
-    let metadata = std::fs::metadata(path)?;
-    let size = metadata.len();
+) -> Result<Option<FileInfo>> {
+    // 1. Scan file for initial metadata
+    let mut info = scan_file(path).await?;
 
-    // Compute content hash
-    let hash = compute_hash(path)?;
-    let content_hash = ContentHash::new(hash.clone());
+    // 2. Set parent directory (relative to root)
+    if let Ok(relative) = path.strip_prefix(root_path) {
+        if let Some(parent) = relative.parent() {
+            info = info.with_parent_dir(parent.to_string_lossy().to_string());
+        }
+    }
+
+    // 3. Compute object key based on content hash
+    // If scan_file didn't compute content hash (e.g. file too large), compute it now
+    let hash = if let Some(ref h) = info.content_hash {
+        h.0.clone()
+    } else {
+        let h = compute_hash(path)?;
+        info.content_hash = Some(ContentHash::new(h.clone()));
+        h
+    };
+
+    let content_hash = ContentHash::new(hash);
     let object_key = content_hash.to_object_key();
+    let object_uri = format!("s3://{}/{}", config.bucket, object_key);
+    info.object_uri = Some(object_uri);
 
     if dry_run {
-        // In dry-run, just return the size and hash as if uploaded
-        return Ok(Some((size, hash)));
+        return Ok(Some(info));
     }
 
     let client = client.ok_or_else(|| anyhow::anyhow!("S3 client not available"))?;
 
-    // Check if object already exists
+    // 3. Check if object already exists
     let exists = client
         .head_object()
         .bucket(&config.bucket)
@@ -332,10 +341,12 @@ async fn process_file(
         .is_ok();
 
     if exists {
-        return Ok(None); // Already uploaded
+        // Even if it exists, we return the info so it gets cataloged in Iceberg
+        // This is crucial for the "logical duplication" feature
+        return Ok(Some(info));
     }
 
-    // Read file and upload
+    // 4. Upload file
     let body = ByteStream::from_path(path).await?;
 
     client
@@ -347,17 +358,20 @@ async fn process_file(
         .await
         .context("Failed to upload to S3")?;
 
-    Ok(Some((size, hash)))
+    info.ingested_at = Some(Utc::now());
+
+    Ok(Some(info))
 }
 
-/// Compute SHA-256 hash of a file
+/// Compute SHA-256 hash of a file (fallback if scan didn't do it)
 fn compute_hash(path: &Path) -> Result<String> {
-    let mut file = File::open(path)?;
-    let mut hasher = Sha256::new();
+    use sha2::Digest;
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = sha2::Sha256::new();
     let mut buffer = [0u8; 8192];
 
     loop {
-        let bytes_read = file.read(&mut buffer)?;
+        let bytes_read = std::io::Read::read(&mut file, &mut buffer)?;
         if bytes_read == 0 {
             break;
         }

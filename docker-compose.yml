@@ -24,8 +24,8 @@ services:
     image: rustfs/rustfs:latest
     container_name: anti_entropator_rustfs
     ports:
-      - "127.0.0.1:19000:9000" # S3 API (local-only, remapped to avoid conflicts)
-      - "127.0.0.1:19001:9001" # Web Console (local-only)
+      - "127.0.0.1:8200:9000" # S3 API (Organized port)
+      - "127.0.0.1:8210:9001" # Web Console (Organized port)
     volumes:
       - ./data/rustfs:/data
       - ./logs/rustfs:/logs
@@ -49,6 +49,8 @@ services:
   postgres:
     image: postgres:16.11-alpine3.23
     container_name: anti_entropator_postgres
+    ports:
+      - "127.0.0.1:8300:5432" # Postgres (Organized port)
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     environment:
@@ -85,11 +87,13 @@ services:
     image: quay.io/lakekeeper/catalog:v0.10.4
     container_name: anti_entropator_lakekeeper
     ports:
-      - "127.0.0.1:8181:8181" # REST API + UI (local-only)
+      - "127.0.0.1:8100:8181" # REST API + UI (Organized port)
     environment:
       LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:-This-is-NOT-Secure!}
       LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:-lakekeeper}@postgres:5432/${POSTGRES_DB:-lakekeeper}
       LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:-lakekeeper}@postgres:5432/${POSTGRES_DB:-lakekeeper}
+      # Allow anonymous access for development (disable authorization)
+      LAKEKEEPER__AUTHZ_BACKEND: allowall
       RUST_LOG: info,lakekeeper=info,sqlx=warn
     command: ["serve"]
     depends_on:

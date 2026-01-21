@@ -93,6 +93,10 @@ pub async fn run() -> Result<()> {
     println!("{} Checking Lakekeeper catalog...", INFO);
     results.push(check_catalog().await);
 
+    // Check Port Availability
+    println!("{} Checking port availability...", INFO);
+    results.extend(check_ports().await);
+
     // Check external tools
     println!("{} Checking external tools...", INFO);
     results.extend(check_external_tools().await);
@@ -179,7 +183,7 @@ async fn check_docker() -> CheckResult {
 /// Check if RustFS is reachable
 async fn check_rustfs() -> CheckResult {
     let endpoint = std::env::var("ANTI_ENTROPATOR_S3_ENDPOINT")
-        .unwrap_or_else(|_| "http://localhost:19000".to_string());
+        .unwrap_or_else(|_| "http://localhost:8200".to_string());
 
     let client = match reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
@@ -230,7 +234,7 @@ async fn check_rustfs() -> CheckResult {
 async fn check_catalog() -> CheckResult {
     let endpoint = std::env::var("ANTI_ENTROPATOR_CATALOG_ENDPOINT")
         .or_else(|_| std::env::var("ANTI_ENTROPATOR_LAKEKEEPER_ENDPOINT"))
-        .unwrap_or_else(|_| "http://localhost:8181".to_string());
+        .unwrap_or_else(|_| "http://localhost:8100".to_string());
 
     // Lakekeeper exposes a Swagger UI (useful stable HTTP surface for reachability checks).
     let base = endpoint.trim_end_matches('/');
@@ -352,6 +356,44 @@ async fn check_external_tools() -> Vec<CheckResult> {
         };
 
         results.push(result);
+    }
+
+    results
+}
+
+/// Check if required ports are available
+async fn check_ports() -> Vec<CheckResult> {
+    use std::net::TcpListener;
+
+    let ports = [
+        (8100, "Lakekeeper Catalog"),
+        (8200, "RustFS API"),
+        (8210, "RustFS Console"),
+        (8300, "Postgres Backend"),
+    ];
+
+    let mut results = Vec::new();
+
+    for (port, description) in ports {
+        match TcpListener::bind(format!("127.0.0.1:{}", port)) {
+            Ok(_) => {
+                // Port is free (or we were able to bind to it)
+                // However, if the docker container is already running, bind will fail.
+                // We want to detect if *other* processes are using it.
+                results.push(CheckResult::ok(
+                    format!("Port {}", port),
+                    format!("{} is available or in use by our stack", description),
+                ));
+            }
+            Err(_) => {
+                // Let's check if it's reachable via HTTP - if it is, maybe it's already our stack?
+                results.push(CheckResult::warn(
+                    format!("Port {}", port),
+                    format!("{} is busy", description),
+                    "This is OK if the stack is already running. If not, another process is using this port.",
+                ));
+            }
+        }
     }
 
     results

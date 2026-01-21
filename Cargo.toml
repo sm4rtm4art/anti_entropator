@@ -29,7 +29,8 @@ object_store = { version = "0.11", features = ["aws"] }
 # Lakehouse
 iceberg = "0.8"
 iceberg-catalog-rest = "0.8"
-datafusion = "52"
+datafusion = "51"
+iceberg-datafusion = "0.8"
 arrow = { version = "57", features = ["prettyprint"] }
 parquet = { version = "57", features = ["zstd"] }
 

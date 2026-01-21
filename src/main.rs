@@ -13,6 +13,7 @@ mod domain;
 mod ingest;
 mod lakehouse;
 mod profile;
+mod query;
 mod scan;
 
 use cli::{Cli, Commands};
@@ -47,10 +48,10 @@ async fn main() -> Result<()> {
             ingest::run(args).await?;
         }
         Commands::Sql => {
-            println!("SQL REPL not yet implemented");
+            query::repl().await?;
         }
         Commands::Query { sql } => {
-            println!("Query command not yet implemented: {}", sql);
+            query::run(sql).await?;
         }
         Commands::Duplicates(args) => {
             println!(

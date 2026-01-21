@@ -62,6 +62,12 @@ pub struct FileInfo {
 
     /// Reference to the "original" file if this is a duplicate
     pub duplicate_of: Option<Uuid>,
+
+    /// Parent directory relative to ingest root
+    pub parent_dir: String,
+
+    /// Group ID for related files (fuzzy duplicates, different formats)
+    pub group_id: Option<Uuid>,
 }
 
 impl FileInfo {
@@ -95,6 +101,8 @@ impl FileInfo {
             name_reason: None,
             is_duplicate: false,
             duplicate_of: None,
+            parent_dir: String::new(),
+            group_id: None,
         }
     }
 
@@ -102,6 +110,18 @@ impl FileInfo {
     pub fn with_mime_type(mut self, mime: String) -> Self {
         self.category = FileCategory::from_mime(&mime);
         self.mime_type = Some(mime);
+        self
+    }
+
+    /// Set parent directory
+    pub fn with_parent_dir(mut self, dir: String) -> Self {
+        self.parent_dir = dir;
+        self
+    }
+
+    /// Set group id
+    pub fn with_group_id(mut self, id: Uuid) -> Self {
+        self.group_id = Some(id);
         self
     }
 

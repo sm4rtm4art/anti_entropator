@@ -4,21 +4,19 @@
 //!
 //! Uses Lakekeeper's DEFAULT PROJECT which doesn't require X-Project-Id headers.
 
+pub mod schema;
+pub mod writer;
+
 use anyhow::{bail, Context, Result};
 use console::{style, Emoji};
-use iceberg::spec::{NestedField, PrimitiveType, Schema, Type};
+use schema::{build_file_catalog_schema, FILE_CATALOG_TABLE, NAMESPACE};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 
 static CHECK: Emoji<'_, '_> = Emoji("✅ ", "[OK] ");
 static CROSS: Emoji<'_, '_> = Emoji("❌ ", "[FAIL] ");
 
-/// The namespace for anti-entropator tables
-const NAMESPACE: &str = "anti_entropator";
-/// The file catalog table name
-const FILE_CATALOG_TABLE: &str = "file_catalog";
 /// The warehouse name in Lakekeeper
 const WAREHOUSE_NAME: &str = "anti-entropator";
 
@@ -39,7 +37,7 @@ impl Default for LakehouseConfig {
     fn default() -> Self {
         Self {
             s3_endpoint: std::env::var("ANTI_ENTROPATOR_S3_ENDPOINT")
-                .unwrap_or_else(|_| "http://localhost:19000".to_string()),
+                .unwrap_or_else(|_| "http://localhost:8200".to_string()),
             s3_endpoint_internal: std::env::var("ANTI_ENTROPATOR_S3_ENDPOINT_INTERNAL")
                 .unwrap_or_else(|_| "http://rustfs:9000".to_string()),
             s3_access_key: std::env::var("RUSTFS_ACCESS_KEY")
@@ -51,7 +49,7 @@ impl Default for LakehouseConfig {
             bucket: std::env::var("ANTI_ENTROPATOR_BUCKET")
                 .unwrap_or_else(|_| "anti-entropator".to_string()),
             catalog_endpoint: std::env::var("ANTI_ENTROPATOR_CATALOG_ENDPOINT")
-                .unwrap_or_else(|_| "http://localhost:8181".to_string()),
+                .unwrap_or_else(|_| "http://localhost:8100".to_string()),
             warehouse: std::env::var("ANTI_ENTROPATOR_WAREHOUSE")
                 .unwrap_or_else(|_| WAREHOUSE_NAME.to_string()),
         }
@@ -187,7 +185,7 @@ pub async fn init() -> Result<()> {
         }
     }
 
-    // Create Lakekeeper warehouse in DEFAULT PROJECT (no header needed)
+    // Create Lakekeeper warehouse (uses built-in default project, no X-Project-Id needed)
     print!("  Creating Lakekeeper warehouse '{}'... ", WAREHOUSE_NAME);
     match ensure_warehouse(&config).await {
         Ok(created) => {
@@ -249,6 +247,8 @@ pub async fn init() -> Result<()> {
 }
 
 async fn check_rustfs(config: &LakehouseConfig) -> Result<()> {
+    tracing::debug!(endpoint = %config.s3_endpoint, "Checking RustFS connectivity");
+
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
@@ -261,13 +261,17 @@ async fn check_rustfs(config: &LakehouseConfig) -> Result<()> {
 
     // 403 is expected without auth but means server is up
     if resp.status().is_success() || resp.status().as_u16() == 403 {
+        tracing::debug!("RustFS is available");
         Ok(())
     } else {
+        tracing::error!(status = %resp.status(), "RustFS returned unexpected status");
         bail!("RustFS returned unexpected status: {}", resp.status())
     }
 }
 
 async fn check_catalog(config: &LakehouseConfig) -> Result<()> {
+    tracing::debug!(endpoint = %config.catalog_endpoint, "Checking Lakekeeper connectivity");
+
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()?;
@@ -282,8 +286,10 @@ async fn check_catalog(config: &LakehouseConfig) -> Result<()> {
         .context("Cannot connect to Lakekeeper")?;
 
     if resp.status().is_success() {
+        tracing::debug!("Lakekeeper is available");
         Ok(())
     } else {
+        tracing::error!(status = %resp.status(), "Lakekeeper returned unexpected status");
         bail!("Lakekeeper returned unexpected status: {}", resp.status())
     }
 }
@@ -291,6 +297,8 @@ async fn check_catalog(config: &LakehouseConfig) -> Result<()> {
 async fn create_bucket(config: &LakehouseConfig) -> Result<bool> {
     use aws_config::BehaviorVersion;
     use aws_sdk_s3::config::{Credentials, Region};
+
+    tracing::debug!(bucket = %config.bucket, endpoint = %config.s3_endpoint, "Creating S3 bucket");
 
     let creds = Credentials::new(
         &config.s3_access_key,
@@ -312,15 +320,20 @@ async fn create_bucket(config: &LakehouseConfig) -> Result<bool> {
 
     // Check if bucket exists
     match client.head_bucket().bucket(&config.bucket).send().await {
-        Ok(_) => return Ok(false), // Already exists
+        Ok(_) => {
+            tracing::debug!(bucket = %config.bucket, "Bucket already exists");
+            return Ok(false);
+        }
         Err(e) => {
             let is_not_found = e
                 .raw_response()
                 .map(|r| r.status().as_u16() == 404)
                 .unwrap_or(false);
 
-            if !is_not_found {
-                // Try to create anyway, might be permission issue on HEAD
+            if is_not_found {
+                tracing::debug!(bucket = %config.bucket, "Bucket does not exist, will create");
+            } else {
+                tracing::warn!(bucket = %config.bucket, error = %e, "HEAD bucket failed, will try to create anyway");
             }
         }
     }
@@ -332,6 +345,7 @@ async fn create_bucket(config: &LakehouseConfig) -> Result<bool> {
         .await
         .context("Failed to create bucket")?;
 
+    tracing::info!(bucket = %config.bucket, "Created S3 bucket");
     Ok(true)
 }
 
@@ -343,6 +357,8 @@ async fn ensure_warehouse(config: &LakehouseConfig) -> Result<bool> {
 
     let base = config.catalog_endpoint.trim_end_matches('/');
     let warehouses_url = format!("{}/management/v1/warehouse", base);
+
+    tracing::debug!(url = %warehouses_url, "Listing warehouses");
 
     // List existing warehouses (default project, no header needed)
     let resp = client
@@ -356,10 +372,17 @@ async fn ensure_warehouse(config: &LakehouseConfig) -> Result<bool> {
             .json()
             .await
             .context("Failed to parse warehouses list")?;
+
+        let warehouse_names: Vec<_> = list.warehouses.iter().map(|w| w.name.as_str()).collect();
+        tracing::debug!(warehouses = ?warehouse_names, "Found warehouses");
+
         if list.warehouses.iter().any(|w| w.name == WAREHOUSE_NAME) {
-            return Ok(false); // Already exists
+            tracing::debug!(warehouse = %WAREHOUSE_NAME, "Warehouse already exists");
+            return Ok(false);
         }
     }
+
+    tracing::debug!(warehouse = %WAREHOUSE_NAME, "Creating warehouse");
 
     // Create the warehouse
     let create_req = CreateWarehouseRequest {
@@ -389,24 +412,41 @@ async fn ensure_warehouse(config: &LakehouseConfig) -> Result<bool> {
         .context("Failed to create warehouse")?;
 
     match resp.status().as_u16() {
-        200 | 201 => Ok(true),
-        409 => Ok(false), // Already exists
+        200 | 201 => {
+            tracing::info!(warehouse = %WAREHOUSE_NAME, "Created warehouse");
+            Ok(true)
+        }
+        409 => {
+            tracing::debug!(warehouse = %WAREHOUSE_NAME, "Warehouse already exists (409)");
+            Ok(false)
+        }
         _ => {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+            tracing::error!(warehouse = %WAREHOUSE_NAME, status = %status, body = %body, "Failed to create warehouse");
             bail!("Failed to create warehouse: {} - {}", status, body);
         }
     }
 }
 
 /// Get the warehouse prefix from Lakekeeper (for building REST API paths)
-async fn get_warehouse_prefix(config: &LakehouseConfig) -> Result<String> {
+/// Result of fetching catalog configuration from Lakekeeper
+pub struct CatalogConfigResult {
+    /// The warehouse prefix (UUID) used in API paths
+    pub prefix: String,
+    /// The canonical URI for the catalog (e.g., http://localhost:8100/catalog)
+    pub uri: String,
+}
+
+pub async fn get_warehouse_prefix(config: &LakehouseConfig) -> Result<CatalogConfigResult> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()?;
 
     let base = config.catalog_endpoint.trim_end_matches('/');
     let config_url = format!("{}/catalog/v1/config?warehouse={}", base, config.warehouse);
+
+    tracing::debug!(url = %config_url, warehouse = %config.warehouse, "Getting catalog config");
 
     let resp = client
         .get(&config_url)
@@ -423,22 +463,35 @@ async fn get_warehouse_prefix(config: &LakehouseConfig) -> Result<String> {
     #[derive(Deserialize)]
     struct CatalogConfig {
         defaults: HashMap<String, String>,
+        overrides: HashMap<String, String>,
     }
 
     let config_resp: CatalogConfig = resp
         .json()
         .await
         .context("Failed to parse catalog config")?;
-    config_resp
+
+    tracing::debug!(defaults = ?config_resp.defaults, overrides = ?config_resp.overrides, "Received catalog config");
+
+    let prefix = config_resp
         .defaults
         .get("prefix")
         .cloned()
-        .context("No prefix in catalog config")
+        .context("No prefix in catalog config")?;
+
+    // Use the URI from overrides if available, otherwise fall back to our configured endpoint
+    let uri = config_resp
+        .overrides
+        .get("uri")
+        .cloned()
+        .unwrap_or_else(|| config.catalog_endpoint.clone());
+
+    Ok(CatalogConfigResult { prefix, uri })
 }
 
 /// Create the namespace using direct HTTP (Lakekeeper REST API)
 async fn create_namespace(config: &LakehouseConfig) -> Result<bool> {
-    let prefix = get_warehouse_prefix(config).await?;
+    let catalog_config = get_warehouse_prefix(config).await?;
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
@@ -447,15 +500,24 @@ async fn create_namespace(config: &LakehouseConfig) -> Result<bool> {
     let base = config.catalog_endpoint.trim_end_matches('/');
 
     // Check if namespace exists
-    let check_url = format!("{}/catalog/v1/{}/namespaces/{}", base, prefix, NAMESPACE);
+    let check_url = format!(
+        "{}/catalog/v1/{}/namespaces/{}",
+        base, catalog_config.prefix, NAMESPACE
+    );
+
+    tracing::debug!(url = %check_url, namespace = %NAMESPACE, "Checking namespace existence");
+
     if let Ok(resp) = client.head(&check_url).send().await {
         if resp.status().is_success() {
-            return Ok(false); // Already exists
+            tracing::debug!(namespace = %NAMESPACE, "Namespace already exists");
+            return Ok(false);
         }
     }
 
+    tracing::debug!(namespace = %NAMESPACE, "Creating namespace");
+
     // Create namespace
-    let create_url = format!("{}/catalog/v1/{}/namespaces", base, prefix);
+    let create_url = format!("{}/catalog/v1/{}/namespaces", base, catalog_config.prefix);
 
     #[derive(Serialize)]
     struct CreateNamespaceRequest {
@@ -474,121 +536,26 @@ async fn create_namespace(config: &LakehouseConfig) -> Result<bool> {
         .context("Failed to create namespace")?;
 
     match resp.status().as_u16() {
-        200 | 201 => Ok(true),
-        409 => Ok(false), // Already exists
+        200 | 201 => {
+            tracing::info!(namespace = %NAMESPACE, "Created namespace");
+            Ok(true)
+        }
+        409 => {
+            tracing::debug!(namespace = %NAMESPACE, "Namespace already exists (409)");
+            Ok(false)
+        }
         _ => {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+            tracing::error!(namespace = %NAMESPACE, status = %status, body = %body, "Failed to create namespace");
             bail!("Failed to create namespace: {} - {}", status, body);
         }
     }
 }
 
-/// Build the file_catalog schema matching FileInfo structure
-fn build_file_catalog_schema() -> Result<Schema> {
-    let fields = vec![
-        Arc::new(NestedField::required(
-            1,
-            "id",
-            Type::Primitive(PrimitiveType::Uuid),
-        )),
-        Arc::new(NestedField::required(
-            2,
-            "source_path",
-            Type::Primitive(PrimitiveType::String),
-        )),
-        Arc::new(NestedField::required(
-            3,
-            "filename",
-            Type::Primitive(PrimitiveType::String),
-        )),
-        Arc::new(NestedField::required(
-            4,
-            "extension",
-            Type::Primitive(PrimitiveType::String),
-        )),
-        Arc::new(NestedField::optional(
-            5,
-            "mime_type",
-            Type::Primitive(PrimitiveType::String),
-        )),
-        Arc::new(NestedField::required(
-            6,
-            "category",
-            Type::Primitive(PrimitiveType::String),
-        )),
-        Arc::new(NestedField::required(
-            7,
-            "size_bytes",
-            Type::Primitive(PrimitiveType::Long),
-        )),
-        Arc::new(NestedField::optional(
-            8,
-            "content_hash",
-            Type::Primitive(PrimitiveType::String),
-        )),
-        Arc::new(NestedField::optional(
-            9,
-            "partial_hash",
-            Type::Primitive(PrimitiveType::String),
-        )),
-        Arc::new(NestedField::optional(
-            10,
-            "created_at",
-            Type::Primitive(PrimitiveType::Timestamptz),
-        )),
-        Arc::new(NestedField::optional(
-            11,
-            "modified_at",
-            Type::Primitive(PrimitiveType::Timestamptz),
-        )),
-        Arc::new(NestedField::required(
-            12,
-            "scanned_at",
-            Type::Primitive(PrimitiveType::Timestamptz),
-        )),
-        Arc::new(NestedField::optional(
-            13,
-            "object_uri",
-            Type::Primitive(PrimitiveType::String),
-        )),
-        Arc::new(NestedField::optional(
-            14,
-            "ingested_at",
-            Type::Primitive(PrimitiveType::Timestamptz),
-        )),
-        Arc::new(NestedField::optional(
-            15,
-            "suggested_name",
-            Type::Primitive(PrimitiveType::String),
-        )),
-        Arc::new(NestedField::optional(
-            16,
-            "name_reason",
-            Type::Primitive(PrimitiveType::String),
-        )),
-        Arc::new(NestedField::required(
-            17,
-            "is_duplicate",
-            Type::Primitive(PrimitiveType::Boolean),
-        )),
-        Arc::new(NestedField::optional(
-            18,
-            "duplicate_of",
-            Type::Primitive(PrimitiveType::Uuid),
-        )),
-    ];
-
-    Schema::builder()
-        .with_fields(fields)
-        .with_identifier_field_ids([1])
-        .build()
-        .context("Failed to build file_catalog schema")
-}
-
 /// Create the file_catalog table using direct HTTP (Lakekeeper REST API)
 async fn create_file_catalog_table(config: &LakehouseConfig) -> Result<bool> {
-    let prefix = get_warehouse_prefix(config).await?;
+    let catalog_config = get_warehouse_prefix(config).await?;
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(30))
@@ -599,13 +566,19 @@ async fn create_file_catalog_table(config: &LakehouseConfig) -> Result<bool> {
     // Check if table exists
     let check_url = format!(
         "{}/catalog/v1/{}/namespaces/{}/tables/{}",
-        base, prefix, NAMESPACE, FILE_CATALOG_TABLE
+        base, catalog_config.prefix, NAMESPACE, FILE_CATALOG_TABLE
     );
+
+    tracing::debug!(url = %check_url, table = %FILE_CATALOG_TABLE, "Checking table existence");
+
     if let Ok(resp) = client.head(&check_url).send().await {
         if resp.status().is_success() {
-            return Ok(false); // Already exists
+            tracing::debug!(table = %FILE_CATALOG_TABLE, "Table already exists");
+            return Ok(false);
         }
     }
+
+    tracing::debug!(table = %FILE_CATALOG_TABLE, "Creating table");
 
     // Build schema
     let schema = build_file_catalog_schema()?;
@@ -613,7 +586,7 @@ async fn create_file_catalog_table(config: &LakehouseConfig) -> Result<bool> {
     // Create table
     let create_url = format!(
         "{}/catalog/v1/{}/namespaces/{}/tables",
-        base, prefix, NAMESPACE
+        base, catalog_config.prefix, NAMESPACE
     );
 
     #[derive(Serialize)]
@@ -637,11 +610,18 @@ async fn create_file_catalog_table(config: &LakehouseConfig) -> Result<bool> {
         .context("Failed to create table")?;
 
     match resp.status().as_u16() {
-        200 | 201 => Ok(true),
-        409 => Ok(false), // Already exists
+        200 | 201 => {
+            tracing::info!(table = %FILE_CATALOG_TABLE, "Created table");
+            Ok(true)
+        }
+        409 => {
+            tracing::debug!(table = %FILE_CATALOG_TABLE, "Table already exists (409)");
+            Ok(false)
+        }
         _ => {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
+            tracing::error!(table = %FILE_CATALOG_TABLE, status = %status, body = %body, "Failed to create table");
             bail!("Failed to create table: {} - {}", status, body);
         }
     }

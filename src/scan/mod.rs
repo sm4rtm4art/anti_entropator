@@ -212,7 +212,7 @@ pub async fn run(args: ScanArgs) -> Result<()> {
 }
 
 /// Scan a single file and return enriched FileInfo
-async fn scan_file(path: &Path) -> Result<FileInfo> {
+pub async fn scan_file(path: &Path) -> Result<FileInfo> {
     let metadata = std::fs::metadata(path).context("Failed to read file metadata")?;
 
     let filename = path
