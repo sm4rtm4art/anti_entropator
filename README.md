@@ -1,6 +1,6 @@
 # Anti-Entropator
 
-[![CI](https://github.com/sm4rtm4rt/anti_entropator/actions/workflows/ci.yml/badge.svg)](https://github.com/martinkaergell/anti_entropator/actions/workflows/ci.yml)
+[![CI](https://github.com/sm4rtm4art/anti_entropator/actions/workflows/ci.yml/badge.svg)](https://github.com/sm4rtm4art/anti_entropator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org)
 
@@ -15,34 +15,37 @@ Your downloads folder is a data swamp. This project turns it into a lakehouse by
 - **Cataloging** every file with rich metadata (type, size, hash, MIME)
 - **Detecting duplicates** via content hashing
 - **Organizing** files by category with safe, reversible operations
-- **Querying** your catalog with SQL (planned)
+- **Querying** your catalog with SQL
 
 ## Architecture
 
 ```mermaid
-flowchart TD
-    subgraph client [Local Host - Rust CLI]
-        CLI[Anti-Entropator CLI]
-        DF[Apache DataFusion]
+flowchart TB
+    subgraph local ["🖥️ Local Host"]
+        User((User))
+        CLI["Anti-Entropator CLI"]
+        ICE["iceberg-rust"]
+        DF["DataFusion"]
     end
 
-    subgraph stack [Docker Compose Stack]
-        subgraph catalog [Catalog Layer]
-            Lakekeeper[Lakekeeper Catalog]
-            Iceberg[Apache Iceberg]
-        end
-
-        subgraph storage [Storage Layer]
-            RustFS[(RustFS S3)]
+    subgraph docker ["🐳 Docker Stack"]
+        LK["Lakekeeper<br/><small>REST Catalog</small>"]
+        PG[("PostgreSQL<br/><small>catalog state</small>")]
+        
+        subgraph rustfs ["RustFS (S3)"]
+            META["📋 Iceberg metadata<br/><small>manifest.json</small>"]
+            DATA["📦 Parquet files<br/><small>data/*.parquet</small>"]
         end
     end
 
-    User((User)) --> CLI
+    User --> CLI
+    CLI --> ICE
     CLI --> DF
-    DF <--> RustFS
-    DF <--> Lakekeeper
-    Lakekeeper -.-> Iceberg
-    Iceberg -.-> RustFS
+    ICE <-->|"REST API"| LK
+    ICE <-->|"read/write"| META
+    DF <-->|"query"| DATA
+    LK --> PG
+    META -.->|"points to"| DATA
 ```
 
 ## Quick Start
@@ -92,10 +95,10 @@ cargo run -- doctor
 # Scan & enrich metadata (read-only)
 cargo run -- scan ~/Downloads --dry-run
 
-# Upload to object storage
+# Preview what will be ingested
 cargo run -- ingest ~/Downloads --dry-run
 
-# Remove --dry-run to actually upload
+# Ingest files: uploads to RustFS + commits metadata to Iceberg table
 cargo run -- ingest ~/Downloads
 ```
 
@@ -106,12 +109,12 @@ cargo run -- ingest ~/Downloads
 | `profile`    | ✅      | Read-only directory analysis                 |
 | `doctor`     | ✅      | Stack health checks                          |
 | `scan`       | ✅      | Metadata enrichment with external tools      |
-| `ingest`     | ✅      | Upload to S3-compatible object storage       |
+| `ingest`     | ✅      | Upload files & commit metadata to Iceberg    |
 | `init`       | ✅      | Initialize lakehouse (bucket, warehouse, table) |
 | `up`         | ✅      | Verify lakehouse services are running        |
-| `query`      | 🚧      | SQL via DataFusion (in development)          |
-| `sql`        | 🚧      | Interactive SQL REPL (in development)        |
-| `duplicates` | 🚧      | Find duplicate files (in development)        |
+| `query`      | 🚧      | SQL via DataFusion (basic implementation)    |
+| `sql`        | 🚧      | Interactive SQL REPL (planned)               |
+| `duplicates` | 🚧      | Find duplicate files (planned)               |
 
 **Legend:** ✅ Implemented | 🚧 In Development
 
@@ -127,6 +130,7 @@ cargo run -- ingest ~/Downloads
 - [Getting Started](docs/manual/getting-started.md)
 - [Architecture](docs/design/architecture.md)
 - [ADRs](docs/adr/) - Why we made these technology choices
+- [Roadmap v0.3.0](docs/ROADMAP-v0.3.0.md) - Upcoming features and milestones
 
 ## Project Goals
 
