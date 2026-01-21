@@ -21,46 +21,20 @@ jobs:
           # Linux x86_64 - native build
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            cross: false
-
-          # Linux ARM64 - use cross for reliable cross-compilation
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            cross: true
 
           # macOS ARM (Apple Silicon) - native on macos-latest
-          # Note: Intel macOS dropped as macos-13 runners are retired
           - target: aarch64-apple-darwin
             os: macos-latest
-            cross: false
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup swap (for memory-intensive cross-compilation)
-        if: matrix.cross
-        run: |
-          sudo swapoff -a
-          sudo fallocate -l 8G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross (Linux ARM)
-        if: matrix.cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      - name: Build with cross
-        if: matrix.cross
-        run: cross build --release --target ${{ matrix.target }}
-
-      - name: Build native
-        if: "!matrix.cross"
+      - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package binary (Unix)
