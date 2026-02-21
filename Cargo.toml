@@ -14,12 +14,12 @@ categories = ["command-line-utilities", "filesystem"]
 tokio = { version = "1", features = ["full"] }
 
 # Error handling
-anyhow = "1.0"
+anyhow = "^1.0.102"
 thiserror = "1.0"
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
-rustyline = "14"
+rustyline = "17"
 
 # Storage (S3 client for RustFS)
 aws-sdk-s3 = "1"
