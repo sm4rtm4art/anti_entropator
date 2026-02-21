@@ -19,7 +19,7 @@ thiserror = "1.0"
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
-rustyline = "14"
+rustyline = "17"
 
 # Storage (S3 client for RustFS)
 aws-sdk-s3 = "1"
