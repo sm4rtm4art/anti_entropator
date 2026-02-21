@@ -92,27 +92,9 @@ flowchart LR
 
 ## v0.3.0 Milestones
 
-### M1: Test Infrastructure (foundation)
+### M1: Unified Storage & Code Quality (The Foundation)
 
-**Goal:** Establish testing patterns and reach **≥ 45%** coverage early (so refactors stay safe).
-
-- Add integration test for full Ingest → Query flow using `testcontainers-rs`
-  - Postgres container for Lakekeeper backend
-  - **Prefer RustFS container** for S3 (if feasible)
-  - If RustFS container is not feasible yet: use MinIO as a **test-only compatibility harness**
-
-- Add unit tests for `writer.rs` functions (`files_to_batch`, `create_file_io`)
-- Add unit tests for `config/mod.rs` (pure parsing, easy win)
-- Add unit tests for `lakehouse/schema.rs` (schema building)
-- Set up `cargo-llvm-cov` in CI workflow
-- Add test fixtures (sample files for scan tests)
-- Add “golden” tests for schema/Arrow conversion (snapshot testing)
-
----
-
-### M2: Unified Storage & Code Quality (single I/O boundary)
-
-**Goal:** Make storage access consistent everywhere, reduce complexity, and harden error handling.
+**Goal:** Establish the single I/O boundary _first_ so integration tests aren't written against deprecated `aws-sdk-s3` paths.
 
 #### Decision: Single I/O Boundary = OpenDAL
 
@@ -121,13 +103,29 @@ flowchart LR
 
 #### Tasks
 
-- Remove `aws-sdk-s3` from core paths (uploads + reads) → route through OpenDAL operator
-- Integrate `object_store_opendal` so DataFusion uses the same OpenDAL operator
-- Ensure Iceberg-rs and Anti-Entropator share one storage config source (single “Operator factory”)
-- Refactor `files_to_batch` in `writer.rs` (90 lines → smaller helpers)
-- Define typed errors (`CatalogError`, `StorageError`, `ScanError`, `IngestError`)
-- Replace broad `bail!` patterns with typed errors where appropriate (keep `anyhow` at CLI boundary)
-- Add a storage contract test suite (list/head/get/put/delete semantics against local backend)
+- Remove `aws-sdk-s3` from core paths (uploads + reads) → route through OpenDAL operator.
+- Integrate `object_store_opendal` (Note: requires registering custom URL scheme in DataFusion's `RuntimeEnv`).
+- Ensure Iceberg-rs and Anti-Entropator share one storage config source (single “Operator factory”).
+- Refactor `files_to_batch` in `writer.rs` (90 lines → smaller helpers).
+- Define typed errors (`CatalogError`, `StorageError`, `ScanError`, `IngestError`).
+- Add a storage contract test suite (list/head/get/put/delete semantics against local backend).
+
+---
+
+### M2: Test Infrastructure (Verifying the Foundation)
+
+**Goal:** Establish testing patterns and reach **≥ 45%** coverage early (so refactors stay safe).
+
+- Add integration test for full Ingest → Query flow using `testcontainers-rs`.
+  - Postgres container for Lakekeeper backend.
+  - **Prefer RustFS container** for S3 (if feasible).
+  - If RustFS container is not feasible yet: use MinIO as a **test-only compatibility harness**.
+- Add unit tests for `writer.rs` functions (`files_to_batch`, `create_file_io`).
+- Add unit tests for `config/mod.rs` (pure parsing, easy win).
+- Add unit tests for `lakehouse/schema.rs` (schema building).
+- Set up `cargo-llvm-cov` in CI workflow.
+- Add test fixtures (sample files for scan tests).
+- Add “golden” tests for schema/Arrow conversion (snapshot testing).
 
 ---
 
@@ -137,31 +135,32 @@ flowchart LR
 
 #### Query UX
 
-- Add output format options (table, JSON, CSV)
-- Add basic filters (category, size range, date range)
-- Add `--limit` and `--offset` for pagination
+- Add output format options (table, JSON, CSV).
+- Add basic filters (category, size range, date range).
+- Add `--limit` and `--offset` for pagination.
 
 #### Maintenance Commands (with safety guarantees)
 
-- Add `maintenance expire`
-  - Expires old Iceberg snapshots / metadata to control catalog bloat
-  - Respects named references (e.g., branches/tags) if used
+- **Add `maintenance expire`**
+  - Expires old Iceberg snapshots / metadata to control catalog bloat.
+  - Respects named references (e.g., branches/tags) if used.
 
-- Add `maintenance vacuum` (mark-and-sweep)
-  - Finds orphan CAS blobs not referenced by any live snapshot
-  - **Safety requirements**
-    - `--dry-run` (default)
-    - `--apply` required for deletion
-    - `--older-than <duration>` required (e.g., `7d`) to avoid racing with in-flight commits
+- **Add `maintenance vacuum` (mark-and-sweep)**
+  - Finds orphan CAS blobs not referenced by any live snapshot.
+  - **Design Prerequisite:** Explicitly define "live reference" (e.g., _any_ snapshot within the retention window, not just the current `HEAD`).
+  - **Safety requirements:**
+    - `--dry-run` (default).
+    - `--apply` required for deletion.
+    - `--older-than <duration>` required (e.g., `7d`) to avoid racing with in-flight commits.
 
 #### Optimize (de-risked)
 
-- Add `optimize plan` (v0.3.0)
-  - Reports small-file groups + estimated rewrite savings
+- **Add `optimize plan` (v0.3.0)**
+  - Reports small-file groups + estimated rewrite savings.
 
 - Optional / gated:
-  - `optimize apply` behind `--experimental` (or feature flag)
-  - Must commit rewrites through Iceberg correctly (replace files, preserve partitions, handle conflicts)
+  - `optimize apply` behind `--experimental` (or feature flag).
+  - Must commit rewrites through Iceberg correctly (replace files, preserve partitions, handle conflicts).
 
 ---
 
@@ -171,19 +170,18 @@ flowchart LR
 
 #### Strategy: Dual Engine (safe rollout)
 
-- Keep procedural pipeline as default
+- Keep procedural pipeline as default.
 - Introduce dataflow-rs pipeline behind:
   - `--engine procedural|dataflow` OR
-  - feature flag `--features orchestration`
+  - feature flag `--features orchestration`.
 
 #### Tasks
 
 - Integrate `dataflow-rs` as an optional execution engine:
-  - Scan → Hash → Upload → Commit as a DAG
-
-- Add structured spans (`tracing`) per stage (supports flamegraphs)
-- Add `indicatif` progress bars (multi-thread friendly)
-- Add a single “pipeline event” schema (start/stop/error counters) for consistent logging/metrics
+  - Scan → Hash → Upload → Commit as a DAG.
+- Add structured spans (`tracing`) per stage (supports flamegraphs).
+- Add `indicatif` progress bars (multi-thread friendly).
+- Add a single “pipeline event” schema (start/stop/error counters) for consistent logging/metrics.
 
 ---
 
@@ -191,11 +189,11 @@ flowchart LR
 
 **Goal:** Prepare for release and improve contributor experience.
 
-- Update README with new architecture (procedural + dataflow engine, unified IO)
-- Document all CLI commands with examples
-- Add troubleshooting section (common errors)
-- Add “maintenance safety” docs (vacuum/expire semantics)
-- Clean up remaining TODOs and add a “Design Decisions” page
+- Update README with new architecture (procedural + dataflow engine, unified IO).
+- Document all CLI commands with examples.
+- Add troubleshooting section (common errors).
+- **Add “maintenance safety” docs:** Explicitly define the design semantics of `vacuum` (live references) and `expire`.
+- Clean up remaining TODOs and add a “Design Decisions” page.
 
 ---
 
@@ -203,45 +201,45 @@ flowchart LR
 
 ### Keep Rust-Focused
 
-- Avoid JVM dependencies (no Apache Tika)
-- External CLI tools allowed short-term; migrate to pure Rust extractors long-term
-- Single unified I/O boundary via OpenDAL; DataFusion via `object_store_opendal`
+- Avoid JVM dependencies (no Apache Tika).
+- External CLI tools allowed short-term; migrate to pure Rust extractors long-term.
+- Single unified I/O boundary via OpenDAL; DataFusion via `object_store_opendal`.
 
 ### Schema Evolution over Redesign
 
-- Iceberg supports adding columns without rewriting
-- Start lean, add columns as patterns emerge
-- Consider `metadata_json` column for overflow / extractor-specific data
+- Iceberg supports adding columns without rewriting.
+- Start lean, add columns as patterns emerge.
+- Consider `metadata_json` column for overflow / extractor-specific data.
 
 ### Test Strategy
 
-- Unit tests for pure functions (domain, schema, config)
-- Integration tests with containers for I/O and catalog interactions
-- Mock external tools (exiftool, ffprobe) for CI determinism
+- Unit tests for pure functions (domain, schema, config).
+- Integration tests with containers for I/O and catalog interactions.
+- Mock external tools (exiftool, ffprobe) for CI determinism.
 
 ---
 
 ## Success Criteria for v0.3.0
 
-1. **Test coverage ≥ 50%** (up from 37%)
-2. **Unified Storage:** Core I/O exclusively uses OpenDAL; DataFusion reads through `object_store_opendal`
-3. **Maintenance:** `maintenance expire` + `maintenance vacuum` exist with safety flags (`--dry-run`, `--apply`, `--older-than`)
-4. **Orchestration:** dataflow-rs engine available **without removing** procedural ingest
-5. **CI passes** with `cargo test`, `cargo clippy`, `cargo fmt --check`
+1. **Test coverage ≥ 50%** (up from 37%).
+2. **Unified Storage:** Core I/O exclusively uses OpenDAL; DataFusion reads through `object_store_opendal`.
+3. **Maintenance:** `maintenance expire` + `maintenance vacuum` exist with strict safety flags (`--dry-run`, `--apply`, `--older-than`).
+4. **Orchestration:** dataflow-rs engine available **without removing** procedural ingest.
+5. **CI passes** with `cargo test`, `cargo clippy`, `cargo fmt --check`.
 
 ---
 
 ## Sprint Backlog (Immediate)
 
-| Priority | Task                                             | Effort |
-| -------- | ------------------------------------------------ | ------ |
-| P0       | Replace `aws-sdk-s3` core paths with OpenDAL     | Medium |
-| P0       | Bridge DataFusion via `object_store_opendal`     | Small  |
-| P1       | Integration test: Ingest → Query (containers)    | Medium |
-| P1       | Add `maintenance expire` + `vacuum` (safe flags) | Medium |
-| P2       | Introduce dataflow-rs engine behind flag/switch  | Large  |
-| P2       | Add `optimize plan` (report-only)                | Small  |
-| P2       | Refactor `files_to_batch` into helpers           | Small  |
+| Priority | Task                                             | Effort | Notes                                                    |
+| -------- | ------------------------------------------------ | ------ | -------------------------------------------------------- |
+| P0       | Replace `aws-sdk-s3` core paths with OpenDAL     | Medium | Must happen before Integration Tests                     |
+| P0       | Bridge DataFusion via `object_store_opendal`     | Small  | _Spike needed:_ Register custom URL scheme in DataFusion |
+| P1       | Integration test: Ingest → Query (containers)    | Medium | Builds on stable OpenDAL boundary                        |
+| P1       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | Requires design note on "live references"                |
+| P2       | Introduce dataflow-rs engine behind flag/switch  | Large  | Run side-by-side with procedural                         |
+| P2       | Add `optimize plan` (report-only)                | Small  |                                                          |
+| P2       | Refactor `files_to_batch` into helpers           | Small  |                                                          |
 
 ---
 
@@ -265,21 +263,21 @@ Iceberg Tables:
 
 ### Data Exploration & Viewer
 
-- TUI Viewer (`explore`): interactive table viewer using `ratatui`
-- Web Gallery (`ui`): lightweight `axum` server to browse thumbnails and play media from RustFS
-- System Preview (`preview`): open a lakehouse file with the native OS viewer
+- TUI Viewer (`explore`): interactive table viewer using `ratatui`.
+- Web Gallery (`ui`): lightweight `axum` server to browse thumbnails and play media from RustFS.
+- System Preview (`preview`): open a lakehouse file with the native OS viewer.
 
 ### Multi-Cloud Storage (via OpenDAL)
 
-- Expand OpenDAL config to support GCS, Azure, and local filesystem natively
-- Enable multi-cloud beyond local S3/RustFS
+- Expand OpenDAL config to support GCS, Azure, and local filesystem natively.
+- Enable multi-cloud beyond local S3/RustFS.
 
 ### Pure Rust Extractors (Single Binary Goal)
 
-- Replace `exiftool` with `kamadak-exif`
-- Replace `pdfinfo` with `lopdf` or `pdf-extract`
-- Replace `ffprobe` with `symphonia` (audio/video parsing)
-- Benefit: remove system dependencies → true drop-in single binary
+- Replace `exiftool` with `kamadak-exif`.
+- Replace `pdfinfo` with `lopdf` or `pdf-extract`.
+- Replace `ffprobe` with `symphonia` (audio/video parsing). _Note: Symphonia is highly mature; this could be pulled forward if desired._
+- Benefit: remove system dependencies → true drop-in single binary.
 
 ---
 
