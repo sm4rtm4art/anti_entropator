@@ -42,10 +42,10 @@ impl Default for LakehouseConfig {
                 .unwrap_or_else(|_| "http://rustfs:9000".to_string()),
             s3_access_key: std::env::var("RUSTFS_ACCESS_KEY")
                 .or_else(|_| std::env::var("AWS_ACCESS_KEY_ID"))
-                .unwrap_or_else(|_| "antiuser".to_string()),
+                .unwrap_or_default(),
             s3_secret_key: std::env::var("RUSTFS_SECRET_KEY")
                 .or_else(|_| std::env::var("AWS_SECRET_ACCESS_KEY"))
-                .unwrap_or_else(|_| "antipassword".to_string()),
+                .unwrap_or_default(),
             bucket: std::env::var("ANTI_ENTROPATOR_BUCKET")
                 .unwrap_or_else(|_| "anti-entropator".to_string()),
             catalog_endpoint: std::env::var("ANTI_ENTROPATOR_CATALOG_ENDPOINT")
@@ -160,6 +160,7 @@ pub async fn init() -> Result<()> {
     println!();
 
     let config = LakehouseConfig::default();
+    validate_s3_credentials(&config)?;
 
     // First check connectivity
     check_rustfs(&config)
@@ -244,6 +245,14 @@ pub async fn init() -> Result<()> {
     println!("  Table:     {}.{}", NAMESPACE, FILE_CATALOG_TABLE);
 
     Ok(())
+}
+
+fn validate_s3_credentials(config: &LakehouseConfig) -> Result<()> {
+    if config.s3_access_key.trim().is_empty() || config.s3_secret_key.trim().is_empty() {
+        bail!("Missing S3 credentials. Set RUSTFS_ACCESS_KEY and RUSTFS_SECRET_KEY in .env")
+    } else {
+        Ok(())
+    }
 }
 
 async fn check_rustfs(config: &LakehouseConfig) -> Result<()> {

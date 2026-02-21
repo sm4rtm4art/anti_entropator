@@ -191,6 +191,12 @@ async fn create_s3_client(config: &LakehouseConfig) -> Result<aws_sdk_s3::Client
     use aws_config::BehaviorVersion;
     use aws_sdk_s3::config::{Credentials, Region};
 
+    if config.s3_access_key.trim().is_empty() || config.s3_secret_key.trim().is_empty() {
+        anyhow::bail!(
+            "Missing S3 credentials. Set RUSTFS_ACCESS_KEY and RUSTFS_SECRET_KEY in .env"
+        );
+    }
+
     let creds = Credentials::new(
         &config.s3_access_key,
         &config.s3_secret_key,

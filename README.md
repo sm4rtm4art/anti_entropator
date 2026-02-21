@@ -78,6 +78,11 @@ Output:
 ### 2. Start the lakehouse stack
 
 ```bash
+# Create local environment file from template
+cp env.example .env
+
+# Edit .env and replace all CHANGE_ME values first
+
 # Create directories with correct permissions
 mkdir -p data/rustfs logs/rustfs data/postgres
 chown -R 10001:10001 data/rustfs logs/rustfs
@@ -129,6 +134,9 @@ cargo run -- ingest ~/Downloads
 
 - [Getting Started](docs/manual/getting-started.md)
 - [Architecture](docs/design/architecture.md)
+- [Security Policy](SECURITY.md)
+- [Secrets and .env Handling](docs/security/secrets-management.md)
+- [Go-Public Security Checklist](docs/security/go-public-checklist.md)
 - [ADRs](docs/adr/) - Why we made these technology choices
 - [Roadmap v0.3.0](docs/ROADMAP-v0.3.0.md) - Upcoming features and milestones
 

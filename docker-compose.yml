@@ -31,8 +31,8 @@ services:
       - ./logs/rustfs:/logs
     environment:
       # RustFS uses ACCESS_KEY/SECRET_KEY (not MinIO's MINIO_ROOT_*).
-      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:-antiuser}
-      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:-antipassword}
+      RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?set_in_.env}
+      RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?set_in_.env}
     healthcheck:
       # RustFS returns 403 for this endpoint without auth; treat 200/403 as healthy.
       test:
@@ -55,7 +55,7 @@ services:
       - ./data/postgres:/var/lib/postgresql/data
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-lakekeeper}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-lakekeeper}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_.env}
       POSTGRES_DB: ${POSTGRES_DB:-lakekeeper}
     healthcheck:
       test:
@@ -73,9 +73,9 @@ services:
     image: quay.io/lakekeeper/catalog:v0.10.4
     container_name: anti_entropator_lakekeeper_migrate
     environment:
-      LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:-This-is-NOT-Secure!}
-      LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:-lakekeeper}@postgres:5432/${POSTGRES_DB:-lakekeeper}
-      LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:-lakekeeper}@postgres:5432/${POSTGRES_DB:-lakekeeper}
+      LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:?set_in_.env}
+      LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}
+      LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}
       RUST_LOG: info
     command: ["migrate"]
     restart: "no"
@@ -89,11 +89,11 @@ services:
     ports:
       - "127.0.0.1:8100:8181" # REST API + UI (Organized port)
     environment:
-      LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:-This-is-NOT-Secure!}
-      LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:-lakekeeper}@postgres:5432/${POSTGRES_DB:-lakekeeper}
-      LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:-lakekeeper}@postgres:5432/${POSTGRES_DB:-lakekeeper}
-      # Allow anonymous access for development (disable authorization)
-      LAKEKEEPER__AUTHZ_BACKEND: allowall
+      LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:?set_in_.env}
+      LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}
+      LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}
+      # "allowall" is for local development only. Override in shared/public environments.
+      LAKEKEEPER__AUTHZ_BACKEND: ${LAKEKEEPER_AUTHZ_BACKEND:-allowall}
       RUST_LOG: info,lakekeeper=info,sqlx=warn
     command: ["serve"]
     depends_on:

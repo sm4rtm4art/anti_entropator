@@ -45,6 +45,11 @@ This shows:
 ### 2. Start the Lakehouse Stack
 
 ```bash
+# Create local environment file from template
+cp env.example .env
+
+# Edit .env and replace all CHANGE_ME values first
+
 # Create data directories with correct permissions
 mkdir -p data/rustfs logs/rustfs data/postgres
 chown -R 10001:10001 data/rustfs logs/rustfs
@@ -122,8 +127,8 @@ anti_entropator duplicates
 
 | Variable                           | Default                  | Description              |
 | ---------------------------------- | ------------------------ | ------------------------ |
-| `ANTI_ENTROPATOR_S3_ENDPOINT`      | `http://localhost:19000` | RustFS endpoint          |
-| `ANTI_ENTROPATOR_CATALOG_ENDPOINT` | `http://localhost:8181`  | Lakekeeper API           |
+| `ANTI_ENTROPATOR_S3_ENDPOINT`      | `http://localhost:8200`  | RustFS endpoint          |
+| `ANTI_ENTROPATOR_CATALOG_ENDPOINT` | `http://localhost:8100`  | Lakekeeper API           |
 | `ANTI_ENTROPATOR_BUCKET`           | `anti-entropator`        | S3 bucket name           |
 | `ANTI_ENTROPATOR_WAREHOUSE`        | `anti-entropator`        | Lakekeeper warehouse name|
 
@@ -131,6 +136,10 @@ RustFS credentials are read from (first match wins):
 
 - `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY`
 - `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`
+
+For local development only:
+
+- `LAKEKEEPER_AUTHZ_BACKEND=allowall`
 
 ## Troubleshooting
 

@@ -2,7 +2,7 @@
 # Build and push container image to GitHub Container Registry
 #
 # Prerequisites:
-#   export GITHUB_TOKEN=ghp_xxx  (needs write:packages scope)
+#   export GITHUB_TOKEN=<github_token>  (needs write:packages scope)
 #
 # Usage:
 #   ./scripts/build-and-push.sh [tag]
@@ -28,7 +28,7 @@ echo ""
 echo "🔐 Logging into GitHub Container Registry..."
 if [ -z "$GITHUB_TOKEN" ]; then
     echo "❌ GITHUB_TOKEN not set. Please export it first:"
-    echo "   export GITHUB_TOKEN=ghp_your_token_here"
+    echo "   export GITHUB_TOKEN=<github_token>"
     echo ""
     echo "   Create a token at: https://github.com/settings/tokens"
     echo "   Required scope: write:packages"
