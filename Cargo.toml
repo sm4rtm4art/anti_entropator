@@ -32,7 +32,7 @@ iceberg-catalog-rest = "0.8"
 datafusion = "51"
 iceberg-datafusion = "0.8"
 arrow = { version = "57", features = ["prettyprint"] }
-parquet = { version = "57", features = ["zstd"] }
+parquet = { version = "58", features = ["zstd"] }
 
 # File Processing
 sha2 = "0.10"
