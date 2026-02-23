@@ -143,7 +143,7 @@ dependencies = [
  "iceberg-datafusion",
  "indicatif",
  "infer",
- "object_store 0.11.2",
+ "object_store",
  "once_cell",
  "parquet",
  "predicates",
@@ -1767,7 +1767,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "log",
- "object_store 0.12.5",
+ "object_store",
  "parking_lot",
  "parquet",
  "rand 0.9.2",
@@ -1802,7 +1802,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "log",
- "object_store 0.12.5",
+ "object_store",
  "parking_lot",
  "tokio",
 ]
@@ -1827,7 +1827,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "log",
- "object_store 0.12.5",
+ "object_store",
  "tokio",
 ]
 
@@ -1846,7 +1846,7 @@ dependencies = [
  "indexmap 2.13.0",
  "libc",
  "log",
- "object_store 0.12.5",
+ "object_store",
  "parquet",
  "paste",
  "recursive",
@@ -1892,7 +1892,7 @@ dependencies = [
  "glob",
  "itertools 0.14.0",
  "log",
- "object_store 0.12.5",
+ "object_store",
  "rand 0.9.2",
  "tokio",
  "tokio-util",
@@ -1921,7 +1921,7 @@ dependencies = [
  "datafusion-session",
  "futures",
  "itertools 0.14.0",
- "object_store 0.12.5",
+ "object_store",
  "tokio",
 ]
 
@@ -1943,7 +1943,7 @@ dependencies = [
  "datafusion-physical-plan",
  "datafusion-session",
  "futures",
- "object_store 0.12.5",
+ "object_store",
  "regex",
  "tokio",
 ]
@@ -1966,7 +1966,7 @@ dependencies = [
  "datafusion-physical-plan",
  "datafusion-session",
  "futures",
- "object_store 0.12.5",
+ "object_store",
  "tokio",
 ]
 
@@ -1994,7 +1994,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "log",
- "object_store 0.12.5",
+ "object_store",
  "parking_lot",
  "parquet",
  "tokio",
@@ -2019,7 +2019,7 @@ dependencies = [
  "datafusion-expr",
  "futures",
  "log",
- "object_store 0.12.5",
+ "object_store",
  "parking_lot",
  "rand 0.9.2",
  "tempfile",
@@ -2574,7 +2574,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3192,7 +3192,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.6.2",
+ "socket2 0.5.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -3538,7 +3538,7 @@ dependencies = [
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3857,7 +3857,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -3922,49 +3922,31 @@ dependencies = [
 
 [[package]]
 name = "object_store"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cfccb68961a56facde1163f9319e0d15743352344e7808a11795fb99698dcaf"
-dependencies = [
- "async-trait",
- "base64",
- "bytes",
- "chrono",
- "futures",
- "humantime",
- "hyper 1.8.1",
- "itertools 0.13.0",
- "md-5",
- "parking_lot",
- "percent-encoding",
- "quick-xml 0.37.5",
- "rand 0.8.5",
- "reqwest",
- "ring",
- "serde",
- "serde_json",
- "snafu",
- "tokio",
- "tracing",
- "url",
- "walkdir",
-]
-
-[[package]]
-name = "object_store"
 version = "0.12.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbfbfff40aeccab00ec8a910b57ca8ecf4319b335c542f2edcd19dd25a1e2a00"
 dependencies = [
  "async-trait",
+ "base64",
  "bytes",
  "chrono",
+ "form_urlencoded",
  "futures",
  "http 1.4.0",
+ "http-body-util",
  "humantime",
+ "hyper 1.8.1",
  "itertools 0.14.0",
+ "md-5",
  "parking_lot",
  "percent-encoding",
+ "quick-xml 0.38.4",
+ "rand 0.9.2",
+ "reqwest",
+ "ring",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -4127,7 +4109,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
- "object_store 0.12.5",
+ "object_store",
  "paste",
  "seq-macro",
  "simdutf8",
@@ -4374,7 +4356,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls 0.23.36",
- "socket2 0.6.2",
+ "socket2 0.5.10",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -4411,9 +4393,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.6.2",
+ "socket2 0.5.10",
  "tracing",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4832,7 +4814,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -5257,27 +5239,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
-name = "snafu"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e84b3f4eacbf3a1ce05eac6763b4d629d60cbc94d632e4092c54ade71f1e1a2"
-dependencies = [
- "snafu-derive",
-]
-
-[[package]]
-name = "snafu-derive"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1c97747dbf44bb1ca44a561ece23508e99cb592e862f22222dcf42f51d1e451"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "snap"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5457,7 +5418,7 @@ dependencies = [
  "getrandom 0.4.1",
  "once_cell",
  "rustix",
- "windows-sys 0.61.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -6234,7 +6195,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]
