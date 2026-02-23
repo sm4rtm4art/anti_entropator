@@ -31,7 +31,7 @@ iceberg = "0.8"
 iceberg-catalog-rest = "0.8"
 datafusion = "51"
 iceberg-datafusion = "0.8"
-arrow = { version = "57", features = ["prettyprint"] }
+arrow = { version = "58", features = ["prettyprint"] }
 parquet = { version = "57", features = ["zstd"] }
 
 # File Processing
