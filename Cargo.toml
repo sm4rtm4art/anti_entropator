@@ -37,7 +37,7 @@ parquet = { version = "57", features = ["zstd"] }
 # File Processing
 sha2 = "0.10"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
-infer = "0.16"
+infer = "0.19"
 walkdir = "2"
 
 # HTTP client (for doctor checks)
