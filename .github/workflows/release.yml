@@ -44,7 +44,7 @@ jobs:
           cd ../../..
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: anti_entropator-${{ matrix.target }}
           path: anti_entropator-${{ matrix.target }}.tar.gz
