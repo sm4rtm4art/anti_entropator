@@ -143,7 +143,7 @@ cargo run -- ingest ~/Downloads
 - **[Lakekeeper](https://github.com/lakekeeper/lakekeeper)**: Apache Iceberg REST Catalog (Rust)
 - **[Apache Iceberg](https://iceberg.apache.org/)**: Table format with time travel
 - **[DataFusion](https://datafusion.apache.org/)**: SQL query engine
-- **[OpenDAL](https://opendal.apache.org/)**: Unified storage I/O boundary (planned v0.3.0)
+- **[OpenDAL](https://opendal.apache.org/)**: Unified storage I/O boundary
 - **[dataflow-rs](https://github.com/dataflow-rs/dataflow-rs)**: Optional DAG-based orchestration engine (planned v0.3.0)
 
 ## Documentation

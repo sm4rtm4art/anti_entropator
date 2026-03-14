@@ -4,9 +4,9 @@
 
 ---
 
-## Current State (v0.2.x)
+## Current State
 
-### Completed
+### Completed (v0.2.x)
 
 - Lakehouse stack (RustFS + Lakekeeper + Iceberg)
 - File scanning with metadata extraction (exiftool, ffprobe, pdfinfo)
@@ -16,6 +16,19 @@
 - Basic `query` command with DataFusion
 - `doctor` command with port conflict detection
 - Proper tracing/logging throughout lakehouse module
+
+### Completed (M1 -- Unified Storage, 2026-03-14)
+
+- Replaced `aws-sdk-s3` + `aws-config` with OpenDAL for all S3 I/O
+- Added `src/storage/mod.rs` with `create_operator()` factory using `LakehouseConfig`
+- Bridged DataFusion to OpenDAL via `object_store_opendal` (registered under `s3://`)
+- Implemented AWS SigV4 signing for bucket creation via direct HTTP (`reqwest`)
+- Added Lakekeeper project bootstrapping (required since Lakekeeper >= 0.11)
+- Threaded `X-Project-Id` header through `RestCatalog` for writer and query paths
+- Added storage contract tests (write/read/exists/list/delete against memory backend)
+- Aligned `lakekeeper-migrate` image to `latest-main` to fix schema mismatch
+- Added [ADR-006](adr/ADR-006-opendal-unified-io.md) (OpenDAL) and [ADR-007](adr/ADR-007-dataflow-rs-orchestration.md) (dataflow-rs)
+- Full end-to-end verified: `init` -> `ingest` (with Iceberg commit) -> `query` (DataFusion reads Parquet from RustFS)
 
 ### Test Coverage (as of 2026-02-21)
 
@@ -92,9 +105,11 @@ flowchart LR
 
 ## v0.3.0 Milestones
 
-### M1: Unified Storage & Code Quality (The Foundation)
+### M1: Unified Storage & Code Quality (The Foundation) -- COMPLETE
 
 **Goal:** Establish the single I/O boundary _first_ so integration tests aren't written against deprecated `aws-sdk-s3` paths.
+
+**Status:** Core tasks complete (2026-03-14). Two low-priority items deferred to M2.
 
 #### Decision: Single I/O Boundary = OpenDAL
 
@@ -103,12 +118,12 @@ flowchart LR
 
 #### Tasks
 
-- Remove `aws-sdk-s3` from core paths (uploads + reads) → route through OpenDAL operator.
-- Integrate `object_store_opendal` (Note: requires registering custom URL scheme in DataFusion's `RuntimeEnv`).
-- Ensure Iceberg-rs and Anti-Entropator share one storage config source (single “Operator factory”).
-- Refactor `files_to_batch` in `writer.rs` (90 lines → smaller helpers).
-- Define typed errors (`CatalogError`, `StorageError`, `ScanError`, `IngestError`).
-- Add a storage contract test suite (list/head/get/put/delete semantics against local backend).
+- ~~Remove `aws-sdk-s3` from core paths (uploads + reads) -- route through OpenDAL operator.~~ **Done**
+- ~~Integrate `object_store_opendal` (register custom URL scheme in DataFusion's `RuntimeEnv`).~~ **Done**
+- ~~Ensure Iceberg-rs and Anti-Entropator share one storage config source (single "Operator factory").~~ **Done** (`src/storage/mod.rs`)
+- ~~Add a storage contract test suite (list/head/get/put/delete semantics against local backend).~~ **Done** (4 tests against OpenDAL memory backend)
+- Refactor `files_to_batch` in `writer.rs` -- _Deferred: already clean with `BatchColumnsBuilder` pattern._
+- Define typed errors (`CatalogError`, `StorageError`, `ScanError`, `IngestError`). _Deferred to M2._
 
 ---
 
@@ -229,17 +244,17 @@ flowchart LR
 
 ---
 
-## Sprint Backlog (Immediate)
+## Sprint Backlog (Next Up)
 
-| Priority | Task                                             | Effort | Notes                                                    |
-| -------- | ------------------------------------------------ | ------ | -------------------------------------------------------- |
-| P0       | Replace `aws-sdk-s3` core paths with OpenDAL     | Medium | Must happen before Integration Tests                     |
-| P0       | Bridge DataFusion via `object_store_opendal`     | Small  | _Spike needed:_ Register custom URL scheme in DataFusion |
-| P1       | Integration test: Ingest → Query (containers)    | Medium | Builds on stable OpenDAL boundary                        |
-| P1       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | Requires design note on "live references"                |
-| P2       | Introduce dataflow-rs engine behind flag/switch  | Large  | Run side-by-side with procedural                         |
-| P2       | Add `optimize plan` (report-only)                | Small  |                                                          |
-| P2       | Refactor `files_to_batch` into helpers           | Small  |                                                          |
+| Priority | Task                                             | Effort | Status      | Notes                                                    |
+| -------- | ------------------------------------------------ | ------ | ----------- | -------------------------------------------------------- |
+| ~~P0~~   | ~~Replace `aws-sdk-s3` core paths with OpenDAL~~ | ~~Medium~~ | **Done** | Completed 2026-03-14                                     |
+| ~~P0~~   | ~~Bridge DataFusion via `object_store_opendal`~~  | ~~Small~~  | **Done** | Registered under `s3://` URL scheme                      |
+| P1       | Integration test: Ingest -> Query (containers)   | Medium | **Next**    | Builds on stable OpenDAL boundary                        |
+| P1       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | Pending     | Requires design note on "live references"                |
+| P2       | Introduce dataflow-rs engine behind flag/switch  | Large  | Pending     | Run side-by-side with procedural                         |
+| P2       | Add `optimize plan` (report-only)                | Small  | Pending     |                                                          |
+| P2       | Refactor `files_to_batch` into helpers           | Small  | Deferred    | Already clean with `BatchColumnsBuilder`                 |
 
 ---
 
@@ -281,4 +296,4 @@ Iceberg Tables:
 
 ---
 
-_Last updated: 2026-02-21_
+_Last updated: 2026-03-14_

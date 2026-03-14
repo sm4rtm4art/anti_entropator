@@ -54,7 +54,7 @@ flowchart LR
     ICE -->|manifests| IO
 ```
 
-> **Note:** The dual-engine orchestration (procedural + dataflow-rs) and unified OpenDAL I/O boundary are planned for v0.3.0. The current implementation uses the procedural engine with `aws-sdk-s3` for storage. See [Roadmap v0.3.0](../ROADMAP-v0.3.0.md) for migration details.
+> **Note:** The dual-engine orchestration (procedural + dataflow-rs) is planned for v0.3.0 M4. The unified OpenDAL I/O boundary is implemented (M1 complete). See [Roadmap v0.3.0](../ROADMAP-v0.3.0.md) for details.
 
 ## Component Responsibilities
 
@@ -78,10 +78,10 @@ flowchart LR
 - **Procedural engine**: Current sequential pipeline (default)
 - **dataflow-rs engine**: Optional DAG-based orchestration behind `--engine dataflow`
 
-### I/O Layer (v0.3.0)
+### I/O Layer
 
 - **OpenDAL**: Unified storage abstraction for all reads/writes/list/head/delete
-- **object_store_opendal**: Adapter bridging DataFusion to OpenDAL
+- **object_store_opendal**: Adapter bridging DataFusion to OpenDAL (registered under `s3://`)
 
 ### Storage Layer
 
@@ -120,7 +120,7 @@ sequenceDiagram
     User->>CLI: query (validate snapshot / time travel)
 ```
 
-> **Current state:** The procedural engine calls `aws-sdk-s3` directly. v0.3.0 routes all I/O through OpenDAL.
+> **Current state:** The procedural engine routes all I/O through OpenDAL (`src/storage/mod.rs`). DataFusion reads via `object_store_opendal`.
 
 ### Content-Addressed Storage
 
