@@ -62,14 +62,15 @@ pub async fn commit_files(files: Vec<FileInfo>, config: &LakehouseConfig) -> Res
 /// Note: Lakekeeper stores internal Docker endpoints in table configs,
 /// so we must override S3 settings to use the host-accessible endpoint.
 async fn init_catalog(config: &LakehouseConfig) -> Result<RestCatalog> {
-    // Fetch the correct prefix and URI for this warehouse (Lakekeeper specific)
     let catalog_config = get_warehouse_prefix(config).await?;
 
     let mut props = HashMap::new();
-    // Use the URI from Lakekeeper's config response (includes /catalog path)
     props.insert("uri".to_string(), catalog_config.uri.clone());
     props.insert("prefix".to_string(), catalog_config.prefix.clone());
     props.insert("warehouse".to_string(), config.warehouse.clone());
+
+    // Lakekeeper >= 0.11 requires X-Project-Id on all catalog requests
+    props.insert("header.X-Project-Id".to_string(), catalog_config.project_id);
 
     // Override S3 configuration to use host-accessible endpoint
     // (Lakekeeper stores internal Docker endpoint which is unreachable from host)
@@ -82,7 +83,6 @@ async fn init_catalog(config: &LakehouseConfig) -> Result<RestCatalog> {
     props.insert("s3.region".to_string(), "us-east-1".to_string());
     props.insert("s3.path-style-access".to_string(), "true".to_string());
     props.insert("s3.allow-http".to_string(), "true".to_string());
-    // Disable remote signing - use direct S3 credentials instead of Lakekeeper signer
     props.insert("s3.remote-signing-enabled".to_string(), "false".to_string());
 
     println!(

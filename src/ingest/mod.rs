@@ -6,11 +6,12 @@ use crate::cli::IngestArgs;
 use crate::domain::{ContentHash, FileCategory, FileInfo};
 use crate::lakehouse::{writer, LakehouseConfig};
 use crate::scan::scan_file;
+use crate::storage;
 use anyhow::{Context, Result};
-use aws_sdk_s3::primitives::ByteStream;
 use chrono::Utc;
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
+use opendal::Operator;
 use std::collections::HashSet;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -83,9 +84,9 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     let mut errors = Vec::new();
     let mut total_bytes = 0u64;
 
-    // Create S3 client (only if not dry-run)
-    let s3_client = if !args.dry_run {
-        Some(create_s3_client(&config).await?)
+    // Create OpenDAL operator (only if not dry-run)
+    let operator = if !args.dry_run {
+        Some(storage::create_operator(&config)?)
     } else {
         None
     };
@@ -99,7 +100,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
             .to_string();
         pb.set_message(file_name.clone());
 
-        match process_file(file_path, &path, &config, s3_client.as_ref(), args.dry_run).await {
+        match process_file(file_path, &path, &config, operator.as_ref(), args.dry_run).await {
             Ok(Some(info)) => {
                 uploaded_count += 1;
                 total_bytes += info.size_bytes;
@@ -184,36 +185,6 @@ async fn check_connectivity(config: &LakehouseConfig) -> Result<()> {
         .context("Cannot connect to RustFS")?;
 
     Ok(())
-}
-
-/// Create S3 client for RustFS
-async fn create_s3_client(config: &LakehouseConfig) -> Result<aws_sdk_s3::Client> {
-    use aws_config::BehaviorVersion;
-    use aws_sdk_s3::config::{Credentials, Region};
-
-    if config.s3_access_key.trim().is_empty() || config.s3_secret_key.trim().is_empty() {
-        anyhow::bail!(
-            "Missing S3 credentials. Set RUSTFS_ACCESS_KEY and RUSTFS_SECRET_KEY in .env"
-        );
-    }
-
-    let creds = Credentials::new(
-        &config.s3_access_key,
-        &config.s3_secret_key,
-        None,
-        None,
-        "anti_entropator",
-    );
-
-    let s3_config = aws_sdk_s3::Config::builder()
-        .behavior_version(BehaviorVersion::latest())
-        .endpoint_url(&config.s3_endpoint)
-        .region(Region::new("us-east-1"))
-        .credentials_provider(creds)
-        .force_path_style(true)
-        .build();
-
-    Ok(aws_sdk_s3::Client::from_conf(s3_config))
 }
 
 /// Collect files to ingest based on filters
@@ -303,7 +274,7 @@ async fn process_file(
     path: &Path,
     root_path: &Path,
     config: &LakehouseConfig,
-    client: Option<&aws_sdk_s3::Client>,
+    operator: Option<&Operator>,
     dry_run: bool,
 ) -> Result<Option<FileInfo>> {
     // 1. Scan file for initial metadata
@@ -317,7 +288,6 @@ async fn process_file(
     }
 
     // 3. Compute object key based on content hash
-    // If scan_file didn't compute content hash (e.g. file too large), compute it now
     let hash = if let Some(ref h) = info.content_hash {
         h.0.clone()
     } else {
@@ -335,34 +305,26 @@ async fn process_file(
         return Ok(Some(info));
     }
 
-    let client = client.ok_or_else(|| anyhow::anyhow!("S3 client not available"))?;
+    let op = operator.ok_or_else(|| anyhow::anyhow!("Storage operator not available"))?;
 
-    // 3. Check if object already exists
-    let exists = client
-        .head_object()
-        .bucket(&config.bucket)
-        .key(&object_key)
-        .send()
+    // 4. Check if object already exists
+    let exists = op
+        .exists(&object_key)
         .await
-        .is_ok();
+        .context("Failed to check object existence")?;
 
     if exists {
-        // Even if it exists, we return the info so it gets cataloged in Iceberg
-        // This is crucial for the "logical duplication" feature
         return Ok(Some(info));
     }
 
-    // 4. Upload file
-    let body = ByteStream::from_path(path).await?;
-
-    client
-        .put_object()
-        .bucket(&config.bucket)
-        .key(&object_key)
-        .body(body)
-        .send()
+    // 5. Upload file
+    let bytes = tokio::fs::read(path)
         .await
-        .context("Failed to upload to S3")?;
+        .with_context(|| format!("Failed to read file: {}", path.display()))?;
+
+    op.write(&object_key, bytes)
+        .await
+        .context("Failed to upload to storage")?;
 
     info.ingested_at = Some(Utc::now());
 

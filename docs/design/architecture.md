@@ -7,50 +7,54 @@ Anti-Entropator is a **local data lakehouse** for file organization. It transfor
 ## Architecture Diagram
 
 ```mermaid
-flowchart TB
-    subgraph user [User Interface]
-        CLI[CLI - clap]
-        REPL[SQL REPL - DataFusion]
+flowchart LR
+    subgraph UL["🖥️  User Layer"]
+        direction TB
+        CLI["⌨️  CLI (clap)"]
+        REPL["💬  SQL REPL (rustyline)"]
     end
 
-    subgraph app [Anti-Entropator Core]
-        Profile[profile - Read-only scan]
-        Doctor[doctor - Preflight checks]
-        Scanner[scan - Enrichment pipeline]
-        Ingest[ingest - Upload + commit]
-        Query[query - SQL execution]
+    subgraph OR["🔀  Orchestration"]
+        direction TB
+        SWITCH{{"⚙️  --engine"}}
+        PROC["🔁  Procedural"]
+        DFRS["🌊  dataflow-rs"]
+        SWITCH --> PROC & DFRS
     end
 
-    subgraph stack [Local Lakehouse Stack]
-        RustFS[RustFS - S3 API]
-        Lakekeeper[Lakekeeper Catalog]
-        Postgres[(Postgres)]
-        Parquet[Parquet Files]
-        IcebergMeta[Iceberg Metadata]
+    subgraph CP["⚡  Compute"]
+        direction TB
+        DF["🔥  DataFusion"]
+        ICE["🧊  iceberg-rs"]
+        CAT["🗂️  Lakekeeper"]
+        PG[("🐘  Postgres")]
+        ICE <--> CAT <--> PG
     end
 
-    subgraph landing [Landing Zone]
-        Downloads[~/Downloads]
+    subgraph ST["🗄️  Object Storage"]
+        direction TB
+        IO["🔌  OpenDAL"]
+        RFS["🦀  RustFS<br/><small>Parquet · Iceberg · Blobs</small>"]
+        IO -->|S3 API| RFS
     end
 
-    CLI --> Profile
-    CLI --> Doctor
-    CLI --> Scanner
-    CLI --> Ingest
-    CLI --> Query
-    REPL --> Query
+    subgraph LZ["📂  Landing Zone"]
+        Downloads["~/Downloads"]
+    end
 
-    Profile --> Downloads
-    Scanner --> Downloads
-    Ingest --> RustFS
-    Ingest --> Lakekeeper
-    Query --> Lakekeeper
-    Query --> RustFS
+    CLI -->|"profile / scan"| Downloads
+    CLI -->|"ingest / scan"| SWITCH
+    CLI -->|query| DF
+    REPL --> DF
 
-    Lakekeeper --> Postgres
-    RustFS --> Parquet
-    RustFS --> IcebergMeta
+    PROC & DFRS -->|"raw bytes"| IO
+    PROC & DFRS -->|"commit snapshot"| ICE
+
+    DF -->|"read / write"| IO
+    ICE -->|manifests| IO
 ```
+
+> **Note:** The dual-engine orchestration (procedural + dataflow-rs) and unified OpenDAL I/O boundary are planned for v0.3.0. The current implementation uses the procedural engine with `aws-sdk-s3` for storage. See [Roadmap v0.3.0](../ROADMAP-v0.3.0.md) for migration details.
 
 ## Component Responsibilities
 
@@ -63,9 +67,21 @@ flowchart TB
 
 - **profile**: Read-only directory analysis (no Docker needed)
 - **doctor**: Verify stack health and external tools
+- **init**: Initialize lakehouse (bucket, warehouse, Iceberg table)
+- **up**: Verify lakehouse services are running
 - **scan**: Enrich file metadata without uploading
 - **ingest**: Upload to RustFS + commit to Iceberg via Lakekeeper
 - **query**: Execute SQL via DataFusion
+
+### Orchestration Layer (v0.3.0)
+
+- **Procedural engine**: Current sequential pipeline (default)
+- **dataflow-rs engine**: Optional DAG-based orchestration behind `--engine dataflow`
+
+### I/O Layer (v0.3.0)
+
+- **OpenDAL**: Unified storage abstraction for all reads/writes/list/head/delete
+- **object_store_opendal**: Adapter bridging DataFusion to OpenDAL
 
 ### Storage Layer
 
@@ -86,19 +102,25 @@ flowchart TB
 sequenceDiagram
     participant User
     participant CLI
+    participant Engine as Engine<br/>(procedural / dataflow-rs)
     participant Scanner
     participant Hasher
+    participant OpenDAL
     participant RustFS
     participant Lakekeeper
 
     User->>CLI: ingest ~/Downloads
-    CLI->>Scanner: traverse directory
+    CLI->>Engine: dispatch pipeline
+    Engine->>Scanner: traverse directory
     Scanner->>Hasher: compute SHA-256
-    Hasher->>RustFS: upload to sha256/ab/cd/hash
-    RustFS-->>CLI: object URI
-    CLI->>Lakekeeper: append row to file_catalog (Iceberg snapshot commit)
+    Hasher->>OpenDAL: put(sha256/ab/cd/hash)
+    OpenDAL->>RustFS: S3 PutObject
+    RustFS-->>Engine: object URI
+    Engine->>Lakekeeper: append row to file_catalog (Iceberg snapshot commit)
     User->>CLI: query (validate snapshot / time travel)
 ```
+
+> **Current state:** The procedural engine calls `aws-sdk-s3` directly. v0.3.0 routes all I/O through OpenDAL.
 
 ### Content-Addressed Storage
 

@@ -9,4 +9,6 @@ pub mod domain;
 pub mod ingest;
 pub mod lakehouse;
 pub mod profile;
+pub mod query;
 pub mod scan;
+pub mod storage;

@@ -11,7 +11,7 @@
 ### From Source
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/anti_entropator.git
+git clone https://github.com/sm4rtm4art/anti_entropator.git
 cd anti_entropator
 cargo build --release
 ```
@@ -86,16 +86,16 @@ anti_entropator ingest ~/Downloads --dry-run
 anti_entropator ingest ~/Downloads
 ```
 
-### 5. Query Your Catalog (In Development)
+### 5. Query Your Catalog
 
-> **Note:** The `sql` and `query` commands are in development. They will enable SQL queries via DataFusion once Iceberg catalog integration is complete.
+> **Note:** `query` has a basic implementation via DataFusion. The interactive `sql` REPL is still in development.
 
 ```bash
-# Interactive SQL REPL (coming soon)
-anti_entropator sql
-
-# One-shot queries (coming soon)
+# One-shot query (basic implementation)
 anti_entropator query "SELECT category, COUNT(*) FROM file_catalog GROUP BY category"
+
+# Interactive SQL REPL (in development)
+anti_entropator sql
 ```
 
 ### 6. Find Duplicates (In Development)
@@ -108,18 +108,17 @@ anti_entropator duplicates
 
 ## Command Reference
 
-| Command          | Status | Description                              |
-| ---------------- | ------ | ---------------------------------------- |
-| `profile <path>` | ✅      | Analyze directory (read-only, no Docker) |
-| `doctor`         | ✅      | Check stack health and external tools    |
-| `up`             | ✅      | Verify lakehouse services are running    |
+| Command          | Status | Description                                  |
+| ---------------- | ------ | -------------------------------------------- |
+| `profile <path>` | ✅      | Analyze directory (read-only, no Docker)     |
+| `doctor`         | ✅      | Check stack health and external tools        |
+| `up`             | ✅      | Verify lakehouse services are running        |
 | `init`           | ✅      | Initialize lakehouse (bucket, warehouse, table) |
-| `scan <path>`    | ✅      | Enrich metadata without uploading        |
-| `ingest <path>`  | ✅      | Upload files to object storage           |
-| `sql`            | 🚧      | Interactive SQL REPL (in development)    |
-| `query <sql>`    | 🚧      | Execute one-shot SQL (in development)    |
-| `duplicates`     | 🚧      | Find duplicate files (in development)    |
-| `merge <branch>` | 🚧      | Merge ingest branch (in development)     |
+| `scan <path>`    | ✅      | Enrich metadata without uploading            |
+| `ingest <path>`  | ✅      | Upload files & commit metadata to Iceberg    |
+| `query <sql>`    | 🚧      | SQL via DataFusion (basic implementation)    |
+| `sql`            | 🚧      | Interactive SQL REPL (in development)        |
+| `duplicates`     | 🚧      | Find duplicate files (in development)        |
 
 **Legend:** ✅ Implemented | 🚧 In Development
 

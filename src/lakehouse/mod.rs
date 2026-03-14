@@ -1,8 +1,6 @@
 //! Lakehouse module - Stack operations (up, init)
 //!
 //! Handles connectivity to RustFS and Lakekeeper, and initializes the warehouse.
-//!
-//! Uses Lakekeeper's DEFAULT PROJECT which doesn't require X-Project-Id headers.
 
 pub mod schema;
 pub mod writer;
@@ -20,6 +18,9 @@ static CROSS: Emoji<'_, '_> = Emoji("❌ ", "[FAIL] ");
 /// The warehouse name in Lakekeeper
 const WAREHOUSE_NAME: &str = "anti-entropator";
 
+/// The project name in Lakekeeper
+const PROJECT_NAME: &str = "anti-entropator";
+
 /// Configuration for lakehouse connections
 #[derive(Debug, Clone)]
 pub struct LakehouseConfig {
@@ -31,6 +32,8 @@ pub struct LakehouseConfig {
     pub bucket: String,
     pub catalog_endpoint: String,
     pub warehouse: String,
+    /// Lakekeeper project ID (resolved at runtime via `ensure_project`).
+    pub project_id: Option<String>,
 }
 
 impl Default for LakehouseConfig {
@@ -52,8 +55,44 @@ impl Default for LakehouseConfig {
                 .unwrap_or_else(|_| "http://localhost:8100".to_string()),
             warehouse: std::env::var("ANTI_ENTROPATOR_WAREHOUSE")
                 .unwrap_or_else(|_| WAREHOUSE_NAME.to_string()),
+            project_id: std::env::var("ANTI_ENTROPATOR_PROJECT_ID").ok(),
         }
     }
+}
+
+/// Resolve the project ID from (in order): config field, env var, state file.
+///
+/// Does NOT create a new project -- returns an error if none is found.
+/// Run `init` first to bootstrap the project.
+pub async fn resolve_project_id(config: &LakehouseConfig) -> Result<String> {
+    if let Some(ref id) = config.project_id {
+        return Ok(id.clone());
+    }
+    if let Some(id) = load_project_id_from_state() {
+        return Ok(id);
+    }
+    bail!(
+        "No Lakekeeper project ID found. Run `anti_entropator init` first, \
+         or set ANTI_ENTROPATOR_PROJECT_ID in your environment."
+    )
+}
+
+const STATE_FILE: &str = ".lakehouse_state.json";
+
+fn save_project_id_to_state(project_id: &str) -> Result<()> {
+    let state = serde_json::json!({ "project_id": project_id });
+    std::fs::write(STATE_FILE, serde_json::to_string_pretty(&state)?)
+        .context("Failed to write lakehouse state file")?;
+    tracing::debug!(path = %STATE_FILE, "Saved project ID to state file");
+    Ok(())
+}
+
+fn load_project_id_from_state() -> Option<String> {
+    let data = std::fs::read_to_string(STATE_FILE).ok()?;
+    let val: serde_json::Value = serde_json::from_str(&data).ok()?;
+    val.get("project_id")
+        .and_then(|v| v.as_str())
+        .map(String::from)
 }
 
 // ============================================================================
@@ -159,7 +198,7 @@ pub async fn init() -> Result<()> {
     );
     println!();
 
-    let config = LakehouseConfig::default();
+    let mut config = LakehouseConfig::default();
     validate_s3_credentials(&config)?;
 
     // First check connectivity
@@ -186,9 +225,49 @@ pub async fn init() -> Result<()> {
         }
     }
 
-    // Create Lakekeeper warehouse (uses built-in default project, no X-Project-Id needed)
+    // Ensure Lakekeeper project exists (required since Lakekeeper >= 0.11)
+    print!("  Creating Lakekeeper project '{}'... ", PROJECT_NAME);
+    let project_id = if let Some(id) = config
+        .project_id
+        .clone()
+        .or_else(load_project_id_from_state)
+    {
+        if verify_project_exists(&config, &id).await {
+            println!("{}", style("already exists").yellow());
+            id
+        } else {
+            tracing::debug!(stale_id = %id, "Stale project ID, creating new project");
+            match ensure_project(&config).await {
+                Ok((new_id, _)) => {
+                    println!("{}", style("created").green());
+                    new_id
+                }
+                Err(e) => {
+                    println!("{}", style(format!("error: {}", e)).red());
+                    return Err(e);
+                }
+            }
+        }
+    } else {
+        match ensure_project(&config).await {
+            Ok((id, _)) => {
+                println!("{}", style("created").green());
+                id
+            }
+            Err(e) => {
+                println!("{}", style(format!("error: {}", e)).red());
+                return Err(e);
+            }
+        }
+    };
+    config.project_id = Some(project_id.clone());
+    if let Err(e) = save_project_id_to_state(&project_id) {
+        tracing::warn!(error = %e, "Could not persist project ID to state file");
+    }
+
+    // Create Lakekeeper warehouse within the project
     print!("  Creating Lakekeeper warehouse '{}'... ", WAREHOUSE_NAME);
-    match ensure_warehouse(&config).await {
+    match ensure_warehouse(&config, &project_id).await {
         Ok(created) => {
             if created {
                 println!("{}", style("created").green());
@@ -255,6 +334,88 @@ fn validate_s3_credentials(config: &LakehouseConfig) -> Result<()> {
     }
 }
 
+/// Check whether a project ID is still valid in Lakekeeper.
+async fn verify_project_exists(config: &LakehouseConfig, project_id: &str) -> bool {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+    else {
+        return false;
+    };
+    let url = format!(
+        "{}/management/v1/project",
+        config.catalog_endpoint.trim_end_matches('/')
+    );
+    let resp = client
+        .get(&url)
+        .header("X-Project-Id", project_id)
+        .send()
+        .await;
+    matches!(resp, Ok(r) if r.status().is_success())
+}
+
+/// Ensure a Lakekeeper project exists, returning its UUID.
+///
+/// Lakekeeper >= 0.11 requires an explicit project before warehouses can be created.
+async fn ensure_project(config: &LakehouseConfig) -> Result<(String, bool)> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()?;
+
+    let base = config.catalog_endpoint.trim_end_matches('/');
+
+    // Try listing projects to find ours (Lakekeeper exposes GET /management/v1/project
+    // but only with X-Project-Id, so we try to create and handle conflict).
+    let create_url = format!("{}/management/v1/project", base);
+
+    #[derive(Serialize)]
+    struct CreateProjectRequest {
+        #[serde(rename = "project-name")]
+        project_name: String,
+    }
+
+    #[derive(Deserialize)]
+    struct ProjectResponse {
+        #[serde(rename = "project-id")]
+        project_id: String,
+    }
+
+    let resp = client
+        .post(&create_url)
+        .json(&CreateProjectRequest {
+            project_name: PROJECT_NAME.to_string(),
+        })
+        .send()
+        .await
+        .context("Failed to create project")?;
+
+    match resp.status().as_u16() {
+        200 | 201 => {
+            let pr: ProjectResponse = resp
+                .json()
+                .await
+                .context("Failed to parse project response")?;
+            tracing::info!(project = %PROJECT_NAME, id = %pr.project_id, "Created project");
+            Ok((pr.project_id, true))
+        }
+        409 => {
+            // Already exists -- retrieve it
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            if let Some(id) = body.get("project-id").and_then(|v| v.as_str()) {
+                tracing::debug!(project = %PROJECT_NAME, id = %id, "Project already exists");
+                return Ok((id.to_string(), false));
+            }
+            // If we can't extract the ID from the 409 body, list projects to find it
+            bail!("Project already exists but could not extract project-id from response: {body}");
+        }
+        _ => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            bail!("Failed to create project: {} - {}", status, body);
+        }
+    }
+}
+
 async fn check_rustfs(config: &LakehouseConfig) -> Result<()> {
     tracing::debug!(endpoint = %config.s3_endpoint, "Checking RustFS connectivity");
 
@@ -303,63 +464,164 @@ async fn check_catalog(config: &LakehouseConfig) -> Result<()> {
     }
 }
 
+/// Create an S3 bucket via direct HTTP with AWS SigV4 authentication.
+///
+/// Uses the S3 path-style API:
+///   - `HEAD /{bucket}` to check existence
+///   - `PUT /{bucket}` to create
 async fn create_bucket(config: &LakehouseConfig) -> Result<bool> {
-    use aws_config::BehaviorVersion;
-    use aws_sdk_s3::config::{Credentials, Region};
-
     tracing::debug!(bucket = %config.bucket, endpoint = %config.s3_endpoint, "Creating S3 bucket");
 
-    let creds = Credentials::new(
-        &config.s3_access_key,
-        &config.s3_secret_key,
-        None,
-        None,
-        "anti_entropator",
-    );
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()?;
 
-    let s3_config = aws_sdk_s3::Config::builder()
-        .behavior_version(BehaviorVersion::latest())
-        .endpoint_url(&config.s3_endpoint)
-        .region(Region::new("us-east-1"))
-        .credentials_provider(creds)
-        .force_path_style(true)
-        .build();
+    let base = config.s3_endpoint.trim_end_matches('/');
+    let bucket_url = format!("{}/{}", base, config.bucket);
+    let host = s3_host_from_endpoint(&config.s3_endpoint);
 
-    let client = aws_sdk_s3::Client::from_conf(s3_config);
+    // Check if bucket exists (HEAD /{bucket})
+    let resp = send_signed_s3(
+        &client,
+        "HEAD",
+        &bucket_url,
+        &host,
+        &format!("/{}", config.bucket),
+        config,
+    )
+    .await;
 
-    // Check if bucket exists
-    match client.head_bucket().bucket(&config.bucket).send().await {
-        Ok(_) => {
+    match resp {
+        Ok(r) if r.status().is_success() => {
             tracing::debug!(bucket = %config.bucket, "Bucket already exists");
             return Ok(false);
         }
+        Ok(r) if r.status().as_u16() == 404 => {
+            tracing::debug!(bucket = %config.bucket, "Bucket does not exist, will create");
+        }
+        Ok(r) => {
+            tracing::warn!(bucket = %config.bucket, status = %r.status(),
+                "HEAD bucket returned unexpected status, will try to create anyway");
+        }
         Err(e) => {
-            let is_not_found = e
-                .raw_response()
-                .map(|r| r.status().as_u16() == 404)
-                .unwrap_or(false);
-
-            if is_not_found {
-                tracing::debug!(bucket = %config.bucket, "Bucket does not exist, will create");
-            } else {
-                tracing::warn!(bucket = %config.bucket, error = %e, "HEAD bucket failed, will try to create anyway");
-            }
+            tracing::warn!(bucket = %config.bucket, error = %e,
+                "HEAD bucket failed, will try to create anyway");
         }
     }
 
-    client
-        .create_bucket()
-        .bucket(&config.bucket)
-        .send()
-        .await
-        .context("Failed to create bucket")?;
+    // Create bucket (PUT /{bucket})
+    let resp = send_signed_s3(
+        &client,
+        "PUT",
+        &bucket_url,
+        &host,
+        &format!("/{}", config.bucket),
+        config,
+    )
+    .await
+    .context("Failed to create bucket")?;
 
-    tracing::info!(bucket = %config.bucket, "Created S3 bucket");
-    Ok(true)
+    if resp.status().is_success() {
+        tracing::info!(bucket = %config.bucket, "Created S3 bucket");
+        Ok(true)
+    } else if resp.status().as_u16() == 409 {
+        tracing::debug!(bucket = %config.bucket, "Bucket already exists (409)");
+        Ok(false)
+    } else {
+        let status = resp.status();
+        let body = resp.text().await.unwrap_or_default();
+        bail!("Failed to create bucket: {} - {}", status, body)
+    }
 }
 
-/// Create warehouse in Lakekeeper's DEFAULT PROJECT (no X-Project-Id header needed)
-async fn ensure_warehouse(config: &LakehouseConfig) -> Result<bool> {
+// ============================================================================
+// Minimal AWS Signature V4 signing for S3 bucket operations
+// ============================================================================
+
+/// Send an S3 request signed with AWS Signature V4 (empty body).
+async fn send_signed_s3(
+    client: &reqwest::Client,
+    method: &str,
+    url: &str,
+    host: &str,
+    canonical_uri: &str,
+    config: &LakehouseConfig,
+) -> Result<reqwest::Response> {
+    use hmac::{Hmac, Mac};
+    use sha2::{Digest, Sha256};
+
+    let now = chrono::Utc::now();
+    let date_stamp = now.format("%Y%m%d").to_string();
+    let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
+    let region = "us-east-1";
+    let service = "s3";
+    let empty_hash = format!("{:x}", Sha256::digest(b""));
+
+    // Canonical request
+    let signed_headers = "host;x-amz-content-sha256;x-amz-date";
+    let canonical_request = format!(
+        "{method}\n{canonical_uri}\n\nhost:{host}\nx-amz-content-sha256:{empty_hash}\nx-amz-date:{amz_date}\n\n{signed_headers}\n{empty_hash}"
+    );
+
+    let credential_scope = format!("{date_stamp}/{region}/{service}/aws4_request");
+    let string_to_sign = format!(
+        "AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n{:x}",
+        Sha256::digest(canonical_request.as_bytes())
+    );
+
+    // Derive signing key
+    type HmacSha256 = Hmac<Sha256>;
+    let mut mac =
+        HmacSha256::new_from_slice(format!("AWS4{}", config.s3_secret_key).as_bytes()).unwrap();
+    mac.update(date_stamp.as_bytes());
+    let date_key = mac.finalize().into_bytes();
+
+    let mut mac = HmacSha256::new_from_slice(&date_key).unwrap();
+    mac.update(region.as_bytes());
+    let region_key = mac.finalize().into_bytes();
+
+    let mut mac = HmacSha256::new_from_slice(&region_key).unwrap();
+    mac.update(service.as_bytes());
+    let service_key = mac.finalize().into_bytes();
+
+    let mut mac = HmacSha256::new_from_slice(&service_key).unwrap();
+    mac.update(b"aws4_request");
+    let signing_key = mac.finalize().into_bytes();
+
+    let mut mac = HmacSha256::new_from_slice(&signing_key).unwrap();
+    mac.update(string_to_sign.as_bytes());
+    let signature = format!("{:x}", mac.finalize().into_bytes());
+
+    let authorization = format!(
+        "AWS4-HMAC-SHA256 Credential={}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}",
+        config.s3_access_key
+    );
+
+    let builder = match method {
+        "HEAD" => client.head(url),
+        "PUT" => client.put(url),
+        _ => client.get(url),
+    };
+
+    builder
+        .header("Host", host)
+        .header("x-amz-date", &amz_date)
+        .header("x-amz-content-sha256", &empty_hash)
+        .header("Authorization", &authorization)
+        .send()
+        .await
+        .map_err(Into::into)
+}
+
+fn s3_host_from_endpoint(endpoint: &str) -> String {
+    endpoint
+        .trim_start_matches("http://")
+        .trim_start_matches("https://")
+        .trim_end_matches('/')
+        .to_string()
+}
+
+async fn ensure_warehouse(config: &LakehouseConfig, project_id: &str) -> Result<bool> {
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()?;
@@ -367,11 +629,11 @@ async fn ensure_warehouse(config: &LakehouseConfig) -> Result<bool> {
     let base = config.catalog_endpoint.trim_end_matches('/');
     let warehouses_url = format!("{}/management/v1/warehouse", base);
 
-    tracing::debug!(url = %warehouses_url, "Listing warehouses");
+    tracing::debug!(url = %warehouses_url, project_id = %project_id, "Listing warehouses");
 
-    // List existing warehouses (default project, no header needed)
     let resp = client
         .get(&warehouses_url)
+        .header("X-Project-Id", project_id)
         .send()
         .await
         .context("Failed to list warehouses")?;
@@ -415,6 +677,7 @@ async fn ensure_warehouse(config: &LakehouseConfig) -> Result<bool> {
 
     let resp = client
         .post(&warehouses_url)
+        .header("X-Project-Id", project_id)
         .json(&create_req)
         .send()
         .await
@@ -438,16 +701,19 @@ async fn ensure_warehouse(config: &LakehouseConfig) -> Result<bool> {
     }
 }
 
-/// Get the warehouse prefix from Lakekeeper (for building REST API paths)
-/// Result of fetching catalog configuration from Lakekeeper
+/// Result of fetching catalog configuration from Lakekeeper.
 pub struct CatalogConfigResult {
     /// The warehouse prefix (UUID) used in API paths
     pub prefix: String,
     /// The canonical URI for the catalog (e.g., http://localhost:8100/catalog)
     pub uri: String,
+    /// The Lakekeeper project ID (required as `header.X-Project-Id` on REST catalog requests)
+    pub project_id: String,
 }
 
 pub async fn get_warehouse_prefix(config: &LakehouseConfig) -> Result<CatalogConfigResult> {
+    let project_id = resolve_project_id(config).await?;
+
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()?;
@@ -455,10 +721,11 @@ pub async fn get_warehouse_prefix(config: &LakehouseConfig) -> Result<CatalogCon
     let base = config.catalog_endpoint.trim_end_matches('/');
     let config_url = format!("{}/catalog/v1/config?warehouse={}", base, config.warehouse);
 
-    tracing::debug!(url = %config_url, warehouse = %config.warehouse, "Getting catalog config");
+    tracing::debug!(url = %config_url, warehouse = %config.warehouse, project_id = %project_id, "Getting catalog config");
 
     let resp = client
         .get(&config_url)
+        .header("X-Project-Id", &project_id)
         .send()
         .await
         .context("Failed to get catalog config")?;
@@ -495,7 +762,11 @@ pub async fn get_warehouse_prefix(config: &LakehouseConfig) -> Result<CatalogCon
         .cloned()
         .unwrap_or_else(|| config.catalog_endpoint.clone());
 
-    Ok(CatalogConfigResult { prefix, uri })
+    Ok(CatalogConfigResult {
+        prefix,
+        uri,
+        project_id,
+    })
 }
 
 /// Create the namespace using direct HTTP (Lakekeeper REST API)

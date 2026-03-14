@@ -19,6 +19,9 @@ logs/
 .env
 .env.*
 
+# Lakehouse runtime state (project ID, etc.)
+.lakehouse_state.json
+
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 

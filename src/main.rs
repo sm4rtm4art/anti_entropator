@@ -15,6 +15,7 @@ mod lakehouse;
 mod profile;
 mod query;
 mod scan;
+mod storage;
 
 use cli::{Cli, Commands};
 

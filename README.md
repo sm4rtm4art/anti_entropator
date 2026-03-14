@@ -20,32 +20,46 @@ Your downloads folder is a data swamp. This project turns it into a lakehouse by
 ## Architecture
 
 ```mermaid
-flowchart TB
-    subgraph local ["🖥️ Local Host"]
-        User((User))
-        CLI["Anti-Entropator CLI"]
-        ICE["iceberg-rust"]
-        DF["DataFusion"]
+flowchart LR
+    subgraph UL["🖥️  User Layer"]
+        direction TB
+        CLI["⌨️  CLI"]
+        REPL["💬  SQL REPL"]
     end
 
-    subgraph docker ["🐳 Docker Stack"]
-        LK["Lakekeeper<br/><small>REST Catalog</small>"]
-        PG[("PostgreSQL<br/><small>catalog state</small>")]
-        
-        subgraph rustfs ["RustFS (S3)"]
-            META["📋 Iceberg metadata<br/><small>manifest.json</small>"]
-            DATA["📦 Parquet files<br/><small>data/*.parquet</small>"]
-        end
+    subgraph OR["🔀  Orchestration"]
+        direction TB
+        SWITCH{{"⚙️  --engine"}}
+        PROC["🔁  Procedural"]
+        DFRS["🌊  dataflow-rs"]
+        SWITCH --> PROC & DFRS
     end
 
-    User --> CLI
-    CLI --> ICE
-    CLI --> DF
-    ICE <-->|"REST API"| LK
-    ICE <-->|"read/write"| META
-    DF <-->|"query"| DATA
-    LK --> PG
-    META -.->|"points to"| DATA
+    subgraph CP["⚡  Compute"]
+        direction TB
+        DF["🔥  DataFusion"]
+        ICE["🧊  iceberg-rs"]
+        CAT["🗂️  Lakekeeper"]
+        PG[("🐘  Postgres")]
+        ICE <--> CAT <--> PG
+    end
+
+    subgraph ST["🗄️  Object Storage"]
+        direction TB
+        IO["🔌  OpenDAL"]
+        RFS["🦀  RustFS<br/><small>Parquet · Iceberg · Blobs</small>"]
+        IO -->|S3 API| RFS
+    end
+
+    CLI -->|"ingest / scan"| SWITCH
+    CLI -->|query| DF
+    REPL --> DF
+
+    PROC & DFRS -->|"raw bytes"| IO
+    PROC & DFRS -->|"commit snapshot"| ICE
+
+    DF -->|"read / write"| IO
+    ICE -->|manifests| IO
 ```
 
 ## Quick Start
@@ -129,6 +143,8 @@ cargo run -- ingest ~/Downloads
 - **[Lakekeeper](https://github.com/lakekeeper/lakekeeper)**: Apache Iceberg REST Catalog (Rust)
 - **[Apache Iceberg](https://iceberg.apache.org/)**: Table format with time travel
 - **[DataFusion](https://datafusion.apache.org/)**: SQL query engine
+- **[OpenDAL](https://opendal.apache.org/)**: Unified storage I/O boundary (planned v0.3.0)
+- **[dataflow-rs](https://github.com/dataflow-rs/dataflow-rs)**: Optional DAG-based orchestration engine (planned v0.3.0)
 
 ## Documentation
 
