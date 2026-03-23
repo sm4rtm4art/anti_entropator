@@ -28,7 +28,7 @@ object_store = { version = "0.12", default-features = false }
 
 # Lakehouse
 iceberg = "0.8"
-iceberg-catalog-rest = "0.8"
+iceberg-catalog-rest = "0.9"
 datafusion = "51"
 iceberg-datafusion = "0.8"
 arrow = { version = "57", features = ["prettyprint"] }
