@@ -27,7 +27,7 @@ object_store_opendal = "0.55"
 object_store = { version = "0.12", default-features = false }
 
 # Lakehouse
-iceberg = "0.8"
+iceberg = "0.9"
 iceberg-catalog-rest = "0.8"
 datafusion = "51"
 iceberg-datafusion = "0.8"
