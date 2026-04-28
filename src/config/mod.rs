@@ -248,3 +248,242 @@ mod dirs {
             .map(|p| p.config_dir().to_path_buf())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    const FULL_TOML: &str = r#"
+[lakehouse]
+s3_endpoint = "http://minio:9000"
+s3_access_key = "testkey"
+s3_secret_key = "testsecret"
+bucket = "my-bucket"
+catalog_endpoint = "http://lakekeeper:8181"
+warehouse = "s3://my-bucket/wh"
+
+[profile]
+max_hash_files = 100
+hash_block_size = 4096
+max_no_extension_examples = 5
+max_largest_files = 3
+
+[ignore]
+patterns = ["*.tmp", "build"]
+hidden = false
+system = false
+
+[external_tools]
+enabled = false
+
+[categories]
+rs = "Code"
+toml = "Config"
+"#;
+
+    const PARTIAL_TOML: &str = r#"
+[lakehouse]
+s3_endpoint = "http://custom:9000"
+"#;
+
+    #[test]
+    fn default_config_has_expected_lakehouse_values() {
+        let cfg = Config::default();
+        assert_eq!(cfg.lakehouse.s3_endpoint, "http://localhost:19000");
+        assert_eq!(cfg.lakehouse.bucket, "anti-entropator");
+        assert_eq!(cfg.lakehouse.catalog_endpoint, "http://localhost:8181");
+        assert_eq!(cfg.lakehouse.warehouse, "s3://anti-entropator/warehouse");
+        assert!(cfg.lakehouse.s3_access_key.is_empty());
+        assert!(cfg.lakehouse.s3_secret_key.is_empty());
+    }
+
+    #[test]
+    fn default_config_has_expected_profile_values() {
+        let cfg = Config::default();
+        assert_eq!(cfg.profile.max_hash_files, 5000);
+        assert_eq!(cfg.profile.hash_block_size, 65536);
+        assert_eq!(cfg.profile.max_no_extension_examples, 20);
+        assert_eq!(cfg.profile.max_largest_files, 15);
+    }
+
+    #[test]
+    fn default_config_has_expected_ignore_values() {
+        let cfg = Config::default();
+        assert!(cfg.ignore.hidden);
+        assert!(cfg.ignore.system);
+        assert!(cfg.ignore.patterns.contains(&"node_modules".to_string()));
+        assert!(cfg.ignore.patterns.contains(&".git".to_string()));
+        assert!(cfg.ignore.patterns.contains(&"target".to_string()));
+        assert_eq!(cfg.ignore.patterns.len(), 6);
+    }
+
+    #[test]
+    fn default_config_has_expected_external_tools_values() {
+        let cfg = Config::default();
+        assert!(cfg.external_tools.enabled);
+        assert!(cfg.external_tools.ffprobe_path.is_none());
+        assert!(cfg.external_tools.exiftool_path.is_none());
+        assert!(cfg.external_tools.pdfinfo_path.is_none());
+    }
+
+    #[test]
+    fn default_config_categories_empty() {
+        let cfg = Config::default();
+        assert!(cfg.categories.is_empty());
+    }
+
+    #[test]
+    fn load_explicit_path_full_toml() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, FULL_TOML).unwrap();
+
+        let cfg = Config::load(Some(&path)).unwrap();
+
+        assert_eq!(cfg.lakehouse.s3_endpoint, "http://minio:9000");
+        assert_eq!(cfg.lakehouse.s3_access_key, "testkey");
+        assert_eq!(cfg.lakehouse.s3_secret_key, "testsecret");
+        assert_eq!(cfg.lakehouse.bucket, "my-bucket");
+        assert_eq!(cfg.lakehouse.catalog_endpoint, "http://lakekeeper:8181");
+        assert_eq!(cfg.lakehouse.warehouse, "s3://my-bucket/wh");
+
+        assert_eq!(cfg.profile.max_hash_files, 100);
+        assert_eq!(cfg.profile.hash_block_size, 4096);
+        assert_eq!(cfg.profile.max_no_extension_examples, 5);
+        assert_eq!(cfg.profile.max_largest_files, 3);
+
+        assert!(!cfg.ignore.hidden);
+        assert!(!cfg.ignore.system);
+        assert_eq!(cfg.ignore.patterns, vec!["*.tmp", "build"]);
+
+        assert!(!cfg.external_tools.enabled);
+
+        assert_eq!(cfg.categories.get("rs").unwrap(), "Code");
+        assert_eq!(cfg.categories.get("toml").unwrap(), "Config");
+    }
+
+    #[test]
+    fn load_explicit_path_partial_toml_fills_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, PARTIAL_TOML).unwrap();
+
+        let cfg = Config::load(Some(&path)).unwrap();
+
+        assert_eq!(cfg.lakehouse.s3_endpoint, "http://custom:9000");
+        // Rest should be defaults
+        assert_eq!(cfg.lakehouse.bucket, "anti-entropator");
+        assert_eq!(cfg.profile.max_hash_files, 5000);
+        assert!(cfg.ignore.hidden);
+        assert!(cfg.external_tools.enabled);
+    }
+
+    #[test]
+    fn load_nonexistent_explicit_path_falls_back_to_default() {
+        let path = PathBuf::from("/tmp/nonexistent_anti_entropator_test_config.toml");
+        let cfg = Config::load(Some(&path)).unwrap();
+        assert_eq!(cfg.lakehouse.s3_endpoint, "http://localhost:19000");
+    }
+
+    #[test]
+    fn load_none_with_no_files_returns_default() {
+        let cfg = Config::load(None).unwrap();
+        assert_eq!(cfg.lakehouse.s3_endpoint, "http://localhost:19000");
+        assert_eq!(cfg.profile.max_hash_files, 5000);
+    }
+
+    #[test]
+    fn load_malformed_toml_returns_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("bad.toml");
+        std::fs::write(&path, "this is not [valid toml {{{").unwrap();
+
+        let result = Config::load(Some(&path));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn load_empty_toml_uses_all_defaults() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.toml");
+        std::fs::write(&path, "").unwrap();
+
+        let cfg = Config::load(Some(&path)).unwrap();
+        assert_eq!(cfg.lakehouse.s3_endpoint, "http://localhost:19000");
+        assert_eq!(cfg.lakehouse.bucket, "anti-entropator");
+        assert_eq!(cfg.profile.max_hash_files, 5000);
+        assert!(cfg.ignore.hidden);
+    }
+
+    #[test]
+    fn config_serialization_roundtrip() {
+        let original = Config::default();
+        let toml_str = toml::to_string(&original).unwrap();
+        let deserialized: Config = toml::from_str(&toml_str).unwrap();
+
+        assert_eq!(
+            deserialized.lakehouse.s3_endpoint,
+            original.lakehouse.s3_endpoint
+        );
+        assert_eq!(deserialized.lakehouse.bucket, original.lakehouse.bucket);
+        assert_eq!(
+            deserialized.profile.max_hash_files,
+            original.profile.max_hash_files
+        );
+        assert_eq!(deserialized.ignore.patterns, original.ignore.patterns);
+        assert_eq!(
+            deserialized.external_tools.enabled,
+            original.external_tools.enabled
+        );
+    }
+
+    #[test]
+    fn lakehouse_config_default_matches_helper_fns() {
+        let cfg = LakehouseConfig::default();
+        assert_eq!(cfg.s3_endpoint, default_s3_endpoint());
+        assert_eq!(cfg.bucket, default_bucket());
+        assert_eq!(cfg.catalog_endpoint, default_catalog_endpoint());
+        assert_eq!(cfg.warehouse, default_warehouse());
+    }
+
+    #[test]
+    fn ignore_config_default_matches_helper_fns() {
+        let cfg = IgnoreConfig::default();
+        assert_eq!(cfg.patterns, default_ignore_patterns());
+        assert_eq!(cfg.hidden, default_true());
+        assert_eq!(cfg.system, default_true());
+    }
+
+    #[test]
+    fn profile_config_default_matches_helper_fns() {
+        let cfg = ProfileConfig::default();
+        assert_eq!(cfg.max_hash_files, default_max_hash_files());
+        assert_eq!(cfg.hash_block_size, default_hash_block_size());
+        assert_eq!(cfg.max_no_extension_examples, default_max_no_ext());
+        assert_eq!(cfg.max_largest_files, default_max_largest());
+    }
+
+    #[test]
+    fn config_dir_returns_some() {
+        // ProjectDirs should work on any desktop OS
+        let dir = dirs::config_dir();
+        assert!(dir.is_some());
+        let path = dir.unwrap();
+        assert!(path.to_string_lossy().contains("anti_entropator"));
+    }
+
+    #[test]
+    fn load_toml_with_unknown_keys_is_accepted() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("extra.toml");
+        let mut f = std::fs::File::create(&path).unwrap();
+        writeln!(f, "[lakehouse]").unwrap();
+        writeln!(f, "s3_endpoint = \"http://test:9000\"").unwrap();
+        writeln!(f, "unknown_future_field = \"ignored\"").unwrap();
+
+        // Serde default behavior: unknown fields are ignored
+        let cfg = Config::load(Some(&path)).unwrap();
+        assert_eq!(cfg.lakehouse.s3_endpoint, "http://test:9000");
+    }
+}
