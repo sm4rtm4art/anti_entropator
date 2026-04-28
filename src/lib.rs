@@ -12,3 +12,4 @@ pub mod profile;
 pub mod query;
 pub mod scan;
 pub mod storage;
+pub mod utils;

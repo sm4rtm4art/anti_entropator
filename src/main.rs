@@ -16,6 +16,7 @@ mod profile;
 mod query;
 mod scan;
 mod storage;
+mod utils;
 
 use cli::{Cli, Commands};
 

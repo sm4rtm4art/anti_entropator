@@ -3,6 +3,7 @@
 use crate::domain::stats::{DuplicateEstimate, DuplicateGroup, ProfileError, ProfileResult};
 use crate::domain::FileCategory;
 use crate::profile::ScanOptions;
+use crate::utils::to_lower_hex;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use indicatif::ProgressBar;
@@ -113,8 +114,7 @@ fn quick_hash(path: &Path, block_size: usize) -> Result<String> {
     let mut hasher = Sha256::new();
     hasher.update(&buffer);
     let result = hasher.finalize();
-
-    Ok(format!("{:x}", result))
+    Ok(to_lower_hex(result.as_ref()))
 }
 
 /// Detect MIME type from file content

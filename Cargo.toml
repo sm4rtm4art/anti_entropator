@@ -36,8 +36,8 @@ arrow = { version = "57", features = ["prettyprint"] }
 parquet = { version = "57", features = ["zstd"] }
 
 # File Processing & Crypto
-sha2 = "0.10"
-hmac = "0.12"
+sha2 = "0.11"
+hmac = "0.13"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 infer = "0.19"
 walkdir = "2"

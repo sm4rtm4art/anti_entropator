@@ -547,7 +547,7 @@ async fn send_signed_s3(
     canonical_uri: &str,
     config: &LakehouseConfig,
 ) -> Result<reqwest::Response> {
-    use hmac::{Hmac, Mac};
+    use hmac::{Hmac, KeyInit, Mac};
     use sha2::{Digest, Sha256};
 
     let now = chrono::Utc::now();
@@ -555,7 +555,7 @@ async fn send_signed_s3(
     let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
     let region = "us-east-1";
     let service = "s3";
-    let empty_hash = format!("{:x}", Sha256::digest(b""));
+    let empty_hash = crate::utils::to_lower_hex(&Sha256::digest(b""));
 
     // Canonical request
     let signed_headers = "host;x-amz-content-sha256;x-amz-date";
@@ -564,10 +564,9 @@ async fn send_signed_s3(
     );
 
     let credential_scope = format!("{date_stamp}/{region}/{service}/aws4_request");
-    let string_to_sign = format!(
-        "AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n{:x}",
-        Sha256::digest(canonical_request.as_bytes())
-    );
+    let canonical_request_hash = crate::utils::to_lower_hex(&Sha256::digest(canonical_request.as_bytes()));
+    let string_to_sign =
+        format!("AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n{canonical_request_hash}");
 
     // Derive signing key
     type HmacSha256 = Hmac<Sha256>;
@@ -590,7 +589,7 @@ async fn send_signed_s3(
 
     let mut mac = HmacSha256::new_from_slice(&signing_key).unwrap();
     mac.update(string_to_sign.as_bytes());
-    let signature = format!("{:x}", mac.finalize().into_bytes());
+    let signature = crate::utils::to_lower_hex(mac.finalize().into_bytes().as_slice());
 
     let authorization = format!(
         "AWS4-HMAC-SHA256 Credential={}/{credential_scope}, SignedHeaders={signed_headers}, Signature={signature}",

@@ -9,6 +9,7 @@ mod enrichers;
 
 use crate::cli::ScanArgs;
 use crate::domain::{ContentHash, FileCategory, FileInfo, PartialHash};
+use crate::utils::to_lower_hex;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use console::style;
@@ -279,8 +280,7 @@ fn compute_partial_hash(path: &Path, block_size: usize) -> Result<String> {
     let mut hasher = Sha256::new();
     hasher.update(&buffer);
     let result = hasher.finalize();
-
-    Ok(format!("{:x}", result))
+    Ok(to_lower_hex(result.as_ref()))
 }
 
 /// Compute full SHA-256 hash
@@ -298,7 +298,7 @@ fn compute_full_hash(path: &Path) -> Result<String> {
     }
 
     let result = hasher.finalize();
-    Ok(format!("{:x}", result))
+    Ok(to_lower_hex(result.as_ref()))
 }
 
 /// Get suggested name from external tools or metadata

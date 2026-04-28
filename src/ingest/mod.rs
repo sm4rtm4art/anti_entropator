@@ -15,6 +15,7 @@ use opendal::Operator;
 use std::collections::HashSet;
 use std::path::Path;
 use walkdir::WalkDir;
+use crate::utils::to_lower_hex;
 
 /// Run the ingest command
 pub async fn run(args: IngestArgs) -> Result<()> {
@@ -347,7 +348,7 @@ fn compute_hash(path: &Path) -> Result<String> {
     }
 
     let result = hasher.finalize();
-    Ok(format!("{:x}", result))
+    Ok(to_lower_hex(result.as_ref()))
 }
 
 /// Parse size string like "100MB", "1GB"
