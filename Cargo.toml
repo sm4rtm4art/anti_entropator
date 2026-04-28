@@ -2,6 +2,7 @@
 name = "anti_entropator"
 version = "0.2.0"
 edition = "2021"
+rust-version = "1.85"
 description = "A local data lakehouse for file organization - transform chaos into queryable order"
 authors = ["Martin"]
 license = "MIT"
