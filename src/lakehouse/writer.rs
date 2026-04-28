@@ -6,11 +6,11 @@ use crate::domain::FileInfo;
 use crate::lakehouse::schema::{build_file_catalog_schema, FILE_CATALOG_TABLE, NAMESPACE};
 use crate::lakehouse::{get_warehouse_prefix, LakehouseConfig};
 use anyhow::{Context, Result};
-use arrow::array::{
+use datafusion::arrow::array::{
     ArrayRef, BooleanArray, FixedSizeBinaryBuilder, Int64Array, StringArray,
     TimestampMicrosecondArray,
 };
-use arrow::record_batch::RecordBatch;
+use datafusion::arrow::record_batch::RecordBatch;
 use iceberg::io::{FileIO, FileIOBuilder};
 use iceberg::spec::{DataContentType, DataFile, Struct};
 use iceberg::table::Table;
@@ -22,7 +22,7 @@ use iceberg::writer::file_writer::{FileWriter, FileWriterBuilder, ParquetWriterB
 use iceberg::{Catalog, CatalogBuilder, TableIdent};
 use iceberg_catalog_rest::{RestCatalog, RestCatalogBuilder};
 use iceberg_storage_opendal::OpenDalStorageFactory;
-use parquet::file::properties::WriterProperties;
+use datafusion::parquet::file::properties::WriterProperties;
 use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
