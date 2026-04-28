@@ -19,7 +19,7 @@ thiserror = "2.0"
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
-rustyline = "17"
+rustyline = "18"
 
 # Storage (unified I/O via OpenDAL)
 opendal = { version = "0.55", features = ["services-s3"] }
