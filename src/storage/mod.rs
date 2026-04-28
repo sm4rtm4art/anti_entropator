@@ -94,4 +94,22 @@ mod tests {
         op.delete("to_delete.txt").await.expect("delete failed");
         assert!(!op.exists("to_delete.txt").await.unwrap());
     }
+
+    #[test]
+    fn create_operator_builds_without_panic() {
+        let config = LakehouseConfig::default();
+        let op = create_operator(&config);
+        assert!(op.is_ok());
+    }
+
+    #[test]
+    fn create_operator_with_custom_config() {
+        let config = LakehouseConfig {
+            s3_endpoint: "http://custom:9000".to_string(),
+            bucket: "test-bucket".to_string(),
+            ..LakehouseConfig::default()
+        };
+        let op = create_operator(&config);
+        assert!(op.is_ok());
+    }
 }
