@@ -19,7 +19,7 @@ thiserror = "2.0"
 
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
-rustyline = "17"
+rustyline = "18"
 
 # Storage (unified I/O via OpenDAL)
 opendal = { version = "0.55", features = ["services-s3"] }
@@ -27,10 +27,11 @@ object_store_opendal = "0.55"
 object_store = { version = "0.12", default-features = false }
 
 # Lakehouse
-iceberg = "0.8"
-iceberg-catalog-rest = "0.8"
-datafusion = "51"
-iceberg-datafusion = "0.8"
+iceberg = "0.9"
+iceberg-catalog-rest = "0.9"
+iceberg-storage-opendal = { version = "0.9", features = ["opendal-s3"] }
+datafusion = "52"
+iceberg-datafusion = "0.9"
 arrow = { version = "57", features = ["prettyprint"] }
 parquet = { version = "57", features = ["zstd"] }
 
@@ -52,7 +53,7 @@ serde_json = "1"
 toml = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-indicatif = "0.17"
+indicatif = "0.18"
 console = "0.16"
 comfy-table = "7"
 humansize = "2"

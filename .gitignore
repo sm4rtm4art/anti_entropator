@@ -11,7 +11,9 @@ data/
 logs/
 
 # IDE settings
-.cursor/
+.cursor/*
+!.cursor/rules/
+!.cursor/rules/*.mdc
 .idea/
 .vscode/
 
@@ -21,6 +23,9 @@ logs/
 
 # Lakehouse runtime state (project ID, etc.)
 .lakehouse_state.json
+
+# Private local planning notes
+.local/
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb

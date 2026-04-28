@@ -21,6 +21,7 @@ use iceberg::writer::file_writer::location_generator::{
 use iceberg::writer::file_writer::{FileWriter, FileWriterBuilder, ParquetWriterBuilder};
 use iceberg::{Catalog, CatalogBuilder, TableIdent};
 use iceberg_catalog_rest::{RestCatalog, RestCatalogBuilder};
+use iceberg_storage_opendal::OpenDalStorageFactory;
 use parquet::file::properties::WriterProperties;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -57,6 +58,13 @@ pub async fn commit_files(files: Vec<FileInfo>, config: &LakehouseConfig) -> Res
 
 // ==================== Helper Functions ====================
 
+fn s3_storage_factory() -> Arc<dyn iceberg::io::StorageFactory> {
+    Arc::new(OpenDalStorageFactory::S3 {
+        configured_scheme: "s3".to_string(),
+        customized_credential_load: None,
+    })
+}
+
 /// Initialize the RestCatalog with S3 credentials
 ///
 /// Note: Lakekeeper stores internal Docker endpoints in table configs,
@@ -91,6 +99,7 @@ async fn init_catalog(config: &LakehouseConfig) -> Result<RestCatalog> {
     );
 
     RestCatalogBuilder::default()
+        .with_storage_factory(s3_storage_factory())
         .load("anti_entropator", props)
         .await
         .context("Failed to build RestCatalog")
@@ -106,8 +115,8 @@ async fn load_table(catalog: &RestCatalog) -> Result<Table> {
 }
 
 /// Configure and create the FileIO for S3
-fn create_file_io(config: &LakehouseConfig) -> Result<FileIO> {
-    FileIOBuilder::new("s3")
+fn create_file_io(config: &LakehouseConfig) -> FileIO {
+    FileIOBuilder::new(s3_storage_factory())
         .with_props(vec![
             ("s3.endpoint", config.s3_endpoint.clone()),
             ("s3.region", "us-east-1".to_string()),
@@ -117,7 +126,6 @@ fn create_file_io(config: &LakehouseConfig) -> Result<FileIO> {
             ("s3.path-style-access", "true".to_string()),
         ])
         .build()
-        .context("Failed to build FileIO")
 }
 
 /// Write the RecordBatch to a Parquet file in S3 and return DataFile metadata
@@ -126,7 +134,7 @@ async fn write_parquet_file(
     batch: &RecordBatch,
     config: &LakehouseConfig,
 ) -> Result<Vec<DataFile>> {
-    let file_io = create_file_io(config)?;
+    let file_io = create_file_io(config);
     let location_generator = DefaultLocationGenerator::new(table.metadata().clone())?;
     let file_id = Uuid::new_v4();
     let file_name = format!("{file_id}.parquet");
