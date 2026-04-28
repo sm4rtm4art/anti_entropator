@@ -172,3 +172,209 @@ impl FileEntry {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_info() -> FileInfo {
+        FileInfo::new(
+            PathBuf::from("/test/photo.jpg"),
+            "photo.jpg".to_string(),
+            ".jpg".to_string(),
+            2048,
+            None,
+            None,
+        )
+    }
+
+    // ── FileInfo::new ──
+
+    #[test]
+    fn new_sets_category_from_extension() {
+        let info = make_info();
+        assert_eq!(info.category, FileCategory::Image);
+    }
+
+    #[test]
+    fn new_sets_basic_fields() {
+        let info = make_info();
+        assert_eq!(info.filename, "photo.jpg");
+        assert_eq!(info.extension, ".jpg");
+        assert_eq!(info.size_bytes, 2048);
+        assert_eq!(info.source_path, PathBuf::from("/test/photo.jpg"));
+    }
+
+    #[test]
+    fn new_initializes_optional_fields_to_none() {
+        let info = make_info();
+        assert!(info.mime_type.is_none());
+        assert!(info.content_hash.is_none());
+        assert!(info.partial_hash.is_none());
+        assert!(info.object_uri.is_none());
+        assert!(info.ingested_at.is_none());
+        assert!(info.suggested_name.is_none());
+        assert!(info.name_reason.is_none());
+        assert!(info.duplicate_of.is_none());
+        assert!(info.group_id.is_none());
+    }
+
+    #[test]
+    fn new_defaults_not_duplicate() {
+        let info = make_info();
+        assert!(!info.is_duplicate);
+    }
+
+    #[test]
+    fn new_generates_unique_ids() {
+        let a = make_info();
+        let b = make_info();
+        assert_ne!(a.id, b.id);
+    }
+
+    #[test]
+    fn new_unknown_extension() {
+        let info = FileInfo::new(
+            PathBuf::from("/test/data.xyz"),
+            "data.xyz".to_string(),
+            ".xyz".to_string(),
+            100,
+            None,
+            None,
+        );
+        assert_eq!(info.category, FileCategory::Other);
+    }
+
+    #[test]
+    fn new_no_extension() {
+        let info = FileInfo::new(
+            PathBuf::from("/test/Makefile"),
+            "Makefile".to_string(),
+            "(none)".to_string(),
+            100,
+            None,
+            None,
+        );
+        assert_eq!(info.category, FileCategory::Other);
+    }
+
+    // ── with_* builders ──
+
+    #[test]
+    fn with_mime_type_overrides_category() {
+        let info = make_info().with_mime_type("audio/mpeg".to_string());
+        assert_eq!(info.category, FileCategory::Audio);
+        assert_eq!(info.mime_type, Some("audio/mpeg".to_string()));
+    }
+
+    #[test]
+    fn with_parent_dir() {
+        let info = make_info().with_parent_dir("photos/2024".to_string());
+        assert_eq!(info.parent_dir, "photos/2024");
+    }
+
+    #[test]
+    fn with_group_id() {
+        let gid = Uuid::new_v4();
+        let info = make_info().with_group_id(gid);
+        assert_eq!(info.group_id, Some(gid));
+    }
+
+    #[test]
+    fn with_content_hash() {
+        let hash = ContentHash::new("abc123".to_string());
+        let info = make_info().with_content_hash(hash.clone());
+        assert_eq!(info.content_hash.unwrap().as_str(), "abc123");
+    }
+
+    #[test]
+    fn with_partial_hash() {
+        let hash = PartialHash::new("def456".to_string());
+        let info = make_info().with_partial_hash(hash.clone());
+        assert_eq!(info.partial_hash.unwrap().as_str(), "def456");
+    }
+
+    #[test]
+    fn mark_as_duplicate() {
+        let original_id = Uuid::new_v4();
+        let info = make_info().mark_as_duplicate(original_id);
+        assert!(info.is_duplicate);
+        assert_eq!(info.duplicate_of, Some(original_id));
+    }
+
+    #[test]
+    fn with_suggested_name() {
+        let info = make_info().with_suggested_name(
+            "2024-01-15_vacation.jpg".to_string(),
+            "exif_datetime".to_string(),
+        );
+        assert_eq!(info.suggested_name.unwrap(), "2024-01-15_vacation.jpg");
+        assert_eq!(info.name_reason.unwrap(), "exif_datetime");
+    }
+
+    #[test]
+    fn builder_chaining() {
+        let gid = Uuid::new_v4();
+        let dup_id = Uuid::new_v4();
+
+        let info = make_info()
+            .with_mime_type("image/png".to_string())
+            .with_parent_dir("album".to_string())
+            .with_content_hash(ContentHash::new("hash1".to_string()))
+            .with_partial_hash(PartialHash::new("hash2".to_string()))
+            .with_group_id(gid)
+            .mark_as_duplicate(dup_id)
+            .with_suggested_name("better.png".to_string(), "metadata".to_string());
+
+        assert_eq!(info.category, FileCategory::Image);
+        assert_eq!(info.parent_dir, "album");
+        assert!(info.content_hash.is_some());
+        assert!(info.partial_hash.is_some());
+        assert_eq!(info.group_id, Some(gid));
+        assert!(info.is_duplicate);
+        assert_eq!(info.duplicate_of, Some(dup_id));
+        assert_eq!(info.suggested_name.unwrap(), "better.png");
+    }
+
+    // ── FileEntry ──
+
+    #[test]
+    fn file_entry_category_from_mime() {
+        let entry = FileEntry {
+            path: PathBuf::from("/test/file.dat"),
+            filename: "file.dat".to_string(),
+            extension: ".dat".to_string(),
+            size_bytes: 100,
+            modified_at: None,
+            mime_type: Some("video/mp4".to_string()),
+        };
+        assert_eq!(entry.category(), FileCategory::Video);
+    }
+
+    #[test]
+    fn file_entry_category_falls_back_to_extension() {
+        let entry = FileEntry {
+            path: PathBuf::from("/test/song.mp3"),
+            filename: "song.mp3".to_string(),
+            extension: ".mp3".to_string(),
+            size_bytes: 100,
+            modified_at: None,
+            mime_type: None,
+        };
+        assert_eq!(entry.category(), FileCategory::Audio);
+    }
+
+    #[test]
+    fn file_entry_category_mime_takes_precedence() {
+        let entry = FileEntry {
+            path: PathBuf::from("/test/file.txt"),
+            filename: "file.txt".to_string(),
+            extension: ".txt".to_string(),
+            size_bytes: 100,
+            modified_at: None,
+            mime_type: Some("image/jpeg".to_string()),
+        };
+        // MIME says image, extension says document — MIME wins
+        assert_eq!(entry.category(), FileCategory::Image);
+    }
+}
