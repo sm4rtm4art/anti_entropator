@@ -24,7 +24,7 @@ rustyline = "18"
 # Storage (unified I/O via OpenDAL)
 opendal = { version = "0.55", features = ["services-s3"] }
 object_store_opendal = "0.55"
-object_store = { version = "0.12", default-features = false }
+object_store = { version = "0.13", default-features = false }
 
 # Lakehouse
 iceberg = "0.9"

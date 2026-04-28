@@ -11,7 +11,6 @@ use datafusion::prelude::*;
 use iceberg::CatalogBuilder;
 use iceberg_catalog_rest::{RestCatalog, RestCatalogBuilder};
 use iceberg_datafusion::IcebergCatalogProvider;
-use object_store::ObjectStore;
 use object_store_opendal::OpendalStore;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -55,7 +54,7 @@ pub async fn run(sql: String) -> Result<()> {
     let opendal_store = Arc::new(OpendalStore::new(operator));
     let s3_url =
         Url::parse(&format!("s3://{}", config.bucket)).context("Failed to parse bucket URL")?;
-    ctx.register_object_store(&s3_url, opendal_store as Arc<dyn ObjectStore>);
+    ctx.register_object_store(&s3_url, opendal_store);
 
     // 3. Register Iceberg Catalog
     let catalog_provider = IcebergCatalogProvider::try_new(Arc::new(catalog))
