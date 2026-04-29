@@ -118,3 +118,5 @@ Before go-live or visibility change:
 - Use `env.example` placeholders only (no real values).
 - Use secret-manager-backed runtime injection for any shared deployment.
 - Keep this repo private until secret scanning and rotation are complete.
+
+For deployment-specific control expectations, see [Deployment Security Profiles](deployment-profiles.md).

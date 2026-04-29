@@ -154,6 +154,9 @@ cargo run -- ingest ~/Downloads
 - [Security Policy](SECURITY.md)
 - [Secrets and .env Handling](docs/security/secrets-management.md)
 - [Go-Public Security Checklist](docs/security/go-public-checklist.md)
+- [Deployment Security Profiles](docs/security/deployment-profiles.md)
+- [Docker and CI Hardening Review](docs/security/docker-hardening-review.md)
+- [Blue-Green Showcase Deployment](docs/ci-cd/blue-green-showcase.md)
 - [ADRs](docs/adr/) - Why we made these technology choices
 - [Roadmap v0.3.0](docs/ROADMAP-v0.3.0.md) - Upcoming features and milestones
 
