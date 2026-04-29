@@ -454,15 +454,21 @@ s3_endpoint = "http://custom:9000"
 
     #[test]
     fn load_none_with_no_files_returns_default() {
+        // Panic-safe CWD guard: restores original dir even if assertions fail
+        struct CwdGuard(std::path::PathBuf);
+        impl Drop for CwdGuard {
+            fn drop(&mut self) {
+                let _ = std::env::set_current_dir(&self.0);
+            }
+        }
+
         let dir = tempfile::tempdir().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
+        let _guard = CwdGuard(std::env::current_dir().unwrap());
         std::env::set_current_dir(dir.path()).unwrap();
 
         let cfg = Config::load(None).unwrap();
         assert_eq!(cfg.lakehouse.s3_endpoint, default_s3_endpoint());
         assert_eq!(cfg.profile.max_hash_files, 5000);
-
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[test]
