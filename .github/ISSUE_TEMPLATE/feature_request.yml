@@ -1,0 +1,39 @@
+name: Feature Request
+description: Propose an enhancement with clear scope and value
+title: "[feature] "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the user value first, then the proposed implementation shape.
+  - type: input
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What pain point or gap does this solve?
+      placeholder: As a user, I cannot...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed Solution
+      description: Keep scope small and testable
+      placeholder: |
+        - CLI/API behavior:
+        - Files/modules likely touched:
+        - Validation approach:
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Other approaches and why they are less suitable
+  - type: textarea
+    id: risks
+    attributes:
+      label: Risks and Trade-offs
+      description: Any compatibility, performance, security, or maintenance trade-offs

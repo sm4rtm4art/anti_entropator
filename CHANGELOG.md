@@ -7,10 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Documentation and command-status synchronization for public showcase stabilization.
+
+### Planned
+
+- Interactive `sql` workflow beyond the current placeholder command.
+- `duplicates` implementation beyond the current placeholder command.
+- `merge` implementation beyond the current placeholder command.
+
+## [0.2.0] - 2026-03-14
+
 ### Added
 
-- Text extraction command for document corpus building (planned)
-- Full-text search integration (planned)
+- Unified object storage I/O through **OpenDAL** for core read/write/list/head/delete paths.
+- `src/storage/mod.rs` operator factory to centralize storage configuration.
+- DataFusion object store bridge using `object_store_opendal` under `s3://`.
+- Lakekeeper project bootstrapping and project-aware catalog request headers.
+- Storage contract tests for write/read/exists/list/delete behavior on memory backend.
+
+### Changed
+
+- Replaced `aws-sdk-s3` core data paths with a single OpenDAL boundary.
+- Updated compose image selection for `lakekeeper-migrate` to resolve schema mismatch during setup.
+
+### Verified
+
+- End-to-end local flow: `init` -> `ingest` (Iceberg commit) -> `query` (DataFusion read path).
 
 ## [0.1.0] - 2026-01-19
 
@@ -48,5 +72,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `duplicates` - Find and report duplicate files
 - Iceberg catalog commit integration
 
-[Unreleased]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sm4rtm4art/anti_entropator/releases/tag/v0.1.0
