@@ -153,6 +153,11 @@ fn parse_exif_datetime(s: &str) -> Option<String> {
 }
 
 /// Parse ISO datetime format "2024-01-15T14:30:45.000000Z"
+///
+/// TODO: This parser is fragile — it strips timezone by splitting on `-` which
+/// only works because ISO 8601 time components use colons. Replace with `chrono`
+/// parsing and add unit tests covering positive/negative offsets, milliseconds,
+/// and edge cases. See `.local/2026-04-28-session-plan.md` Known Issues.
 fn parse_iso_datetime(s: &str) -> Option<String> {
     // Simple parsing - just extract the date and time parts
     let s = s.trim();
