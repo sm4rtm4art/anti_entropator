@@ -3,7 +3,7 @@
 //! Wrappers around ffprobe, exiftool, and pdfinfo to extract metadata.
 
 use std::path::Path;
-use std::process::Command;
+use tokio::process::Command;
 
 /// Extract datetime from image EXIF using exiftool
 pub async fn exiftool_datetime(path: &Path) -> Option<(String, String)> {
@@ -13,6 +13,7 @@ pub async fn exiftool_datetime(path: &Path) -> Option<(String, String)> {
         .arg("-s3")
         .arg(path)
         .output()
+        .await
         .ok()?;
 
     if !output.status.success() {
@@ -56,6 +57,7 @@ pub async fn ffprobe_datetime(path: &Path) -> Option<(String, String)> {
         .arg("format_tags=creation_time")
         .arg(path)
         .output()
+        .await
         .ok()?;
 
     if !output.status.success() {
@@ -92,7 +94,7 @@ pub async fn ffprobe_datetime(path: &Path) -> Option<(String, String)> {
 
 /// Extract title from PDF using pdfinfo
 pub async fn pdfinfo_title(path: &Path) -> Option<(String, String)> {
-    let output = Command::new("pdfinfo").arg(path).output().ok()?;
+    let output = Command::new("pdfinfo").arg(path).output().await.ok()?;
 
     if !output.status.success() {
         return None;
