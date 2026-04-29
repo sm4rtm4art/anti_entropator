@@ -54,14 +54,17 @@ flowchart LR
     ICE -->|manifests| IO
 ```
 
-> **Note:** The dual-engine orchestration (procedural + dataflow-rs) is planned for v0.3.0 M4. The unified OpenDAL I/O boundary is implemented (M1 complete). See [Roadmap v0.3.0](../ROADMAP-v0.3.0.md) for details.
+> **Note:** The dual-engine orchestration (procedural + dataflow-rs) is planned for v0.3.0 M4.
+> The unified OpenDAL I/O boundary is implemented (M1 complete).
+> This project is local-first; shared or public deployment requires additional security controls.
+> See [Roadmap v0.3.0](../ROADMAP-v0.3.0.md) for milestone status.
 
 ## Component Responsibilities
 
 ### CLI Layer
 
 - **clap**: Command parsing and help generation
-- **rustyline**: Interactive SQL REPL with history
+- **rustyline**: Planned for a full interactive SQL REPL (current `sql` command is a placeholder)
 
 ### Core Commands
 
@@ -71,7 +74,10 @@ flowchart LR
 - **up**: Verify lakehouse services are running
 - **scan**: Enrich file metadata without uploading
 - **ingest**: Upload to RustFS + commit to Iceberg via Lakekeeper
-- **query**: Execute SQL via DataFusion
+- **query**: Execute one-shot SQL via DataFusion
+- **sql**: Placeholder command for the future interactive SQL REPL
+- **duplicates**: Placeholder command for duplicate management workflow
+- **merge**: Placeholder command for ingest branch merge workflow
 
 ### Orchestration Layer (v0.3.0)
 
@@ -154,15 +160,15 @@ Configuration is loaded from (in order):
 
 ## Error Handling
 
-Following the project's Rust rules:
+Current state:
 
-- **Library code**: Uses `thiserror` for typed errors
-- **Binary/CLI**: Uses `anyhow` for ergonomic error handling
-- **No `.unwrap()` on I/O**: All filesystem operations use `?` or `match`
+- **Binary/CLI**: Uses `anyhow` for command orchestration and user-facing failures.
+- **Library modules**: Still contain mixed `anyhow` usage; migration to typed `thiserror` boundaries is tracked as follow-up work.
+- **I/O safety direction**: Avoid `.unwrap()` and `.expect()` on fallible paths; remaining violations are tracked for cleanup.
 
 ## Safety Guarantees
 
-1. **Local files never deleted by default**: Ingest only copies, doesn't move
-2. **Dry-run mandatory**: Every mutation has `--dry-run` / `--apply` flags
-3. **Time travel workflow**: Every ingest produces an Iceberg snapshot that can be queried/rolled back
-4. **Atomic operations**: Iceberg commits are all-or-nothing
+1. **Local files are preserved**: Ingest copies into object storage and keeps source files in place.
+2. **Dry-run support (current)**: `scan` and `ingest` provide `--dry-run`; not every mutating command has dry-run parity yet.
+3. **Snapshot commits**: Ingest writes are committed through Iceberg transactions.
+4. **Local-first defaults**: Compose services bind to `127.0.0.1` and local development auth defaults are documented as non-production.

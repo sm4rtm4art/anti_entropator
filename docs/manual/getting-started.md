@@ -89,22 +89,31 @@ anti_entropator ingest ~/Downloads
 
 ### 5. Query Your Catalog
 
-> **Note:** `query` has a basic implementation via DataFusion. The interactive `sql` REPL is still in development.
+> **Note:** `query` is implemented as a one-shot command.
+> `sql` currently starts a placeholder REPL message and exits.
 
 ```bash
 # One-shot query (basic implementation)
 anti_entropator query "SELECT category, COUNT(*) FROM file_catalog GROUP BY category"
 
-# Interactive SQL REPL (in development)
+# Interactive SQL REPL (placeholder)
 anti_entropator sql
 ```
 
-### 6. Find Duplicates (In Development)
+### 6. Find Duplicates (Placeholder)
 
-> **Note:** The `duplicates` command is in development.
+> **Note:** The `duplicates` command is a placeholder and does not execute duplicate handling yet.
 
 ```bash
 anti_entropator duplicates
+```
+
+### 7. Merge Branches (Placeholder)
+
+> **Note:** The `merge` command is currently a placeholder command.
+
+```bash
+anti_entropator merge ingest/2026-04-29T12-00-00
 ```
 
 ## Command Reference
@@ -117,9 +126,10 @@ anti_entropator duplicates
 | `init`           | ✅      | Initialize lakehouse (bucket, warehouse, table) |
 | `scan <path>`    | ✅      | Enrich metadata without uploading            |
 | `ingest <path>`  | ✅      | Upload files & commit metadata to Iceberg    |
-| `query <sql>`    | 🚧      | SQL via DataFusion (basic implementation)    |
-| `sql`            | 🚧      | Interactive SQL REPL (in development)        |
-| `duplicates`     | 🚧      | Find duplicate files (in development)        |
+| `query <sql>`    | ✅      | Execute one-shot SQL via DataFusion (basic)  |
+| `sql`            | 🚧      | Interactive SQL REPL (placeholder)           |
+| `duplicates`     | 🚧      | Duplicate finder workflow (placeholder)      |
+| `merge <branch>` | 🚧      | Ingest branch merge workflow (placeholder)   |
 
 **Legend:** ✅ Implemented | 🚧 In Development
 

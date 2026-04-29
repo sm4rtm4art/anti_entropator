@@ -132,9 +132,10 @@ cargo run -- ingest ~/Downloads
 | `ingest`     | ✅      | Upload files & commit metadata to Iceberg    |
 | `init`       | ✅      | Initialize lakehouse (bucket, warehouse, table) |
 | `up`         | ✅      | Verify lakehouse services are running        |
-| `query`      | 🚧      | SQL via DataFusion (basic implementation)    |
-| `sql`        | 🚧      | Interactive SQL REPL (planned)               |
-| `duplicates` | 🚧      | Find duplicate files (planned)               |
+| `query`      | ✅      | One-shot SQL queries via DataFusion (basic)  |
+| `sql`        | 🚧      | Interactive SQL REPL (currently placeholder) |
+| `duplicates` | 🚧      | Duplicate finder workflow (currently placeholder) |
+| `merge`      | 🚧      | Ingest branch merge workflow (currently placeholder) |
 
 **Legend:** ✅ Implemented | 🚧 In Development
 

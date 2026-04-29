@@ -17,6 +17,13 @@
 - `doctor` command with port conflict detection
 - Proper tracing/logging throughout lakehouse module
 
+### Status update (2026-04-29)
+
+- M1 remains complete.
+- M2 is in progress: config/ingest/scan/storage/domain unit-test expansion has landed and coverage reporting is wired into CI.
+- M2 is not complete yet: the containerized end-to-end ingest-to-query integration test is still pending.
+- Query status is split: one-shot `query` is implemented; `sql`, `duplicates`, and `merge` remain placeholder workflows.
+
 ### Completed (M1 -- Unified Storage, 2026-03-14)
 
 - Replaced `aws-sdk-s3` + `aws-config` with OpenDAL for all S3 I/O
@@ -136,9 +143,10 @@ flowchart LR
   - **Prefer RustFS container** for S3 (if feasible).
   - If RustFS container is not feasible yet: use MinIO as a **test-only compatibility harness**.
 - Add unit tests for `writer.rs` functions (`files_to_batch`, `create_file_io`).
-- Add unit tests for `config/mod.rs` (pure parsing, easy win).
+- ~~Add unit tests for `config/mod.rs` (pure parsing, easy win).~~ **Done**
 - Add unit tests for `lakehouse/schema.rs` (schema building).
-- Set up `cargo-llvm-cov` in CI workflow.
+- Expand unit tests for `ingest/mod.rs`, `scan/mod.rs`, `storage/mod.rs`, and `domain/file_info.rs`. **In progress**
+- ~~Set up `cargo-llvm-cov` in CI workflow.~~ **Done**
 - Add test fixtures (sample files for scan tests).
 - Add “golden” tests for schema/Arrow conversion (snapshot testing).
 
@@ -296,4 +304,4 @@ Iceberg Tables:
 
 ---
 
-_Last updated: 2026-03-14_
+_Last updated: 2026-04-29_
