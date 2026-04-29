@@ -21,12 +21,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Improved Iceberg ingest behavior, including catalog URI handling fixes.
-- Simplified release CI to native builds and applied CI reliability adjustments.
+- Fixed Iceberg ingest pipeline behavior in the pre-release commits, including catalog URI handling.
+- Simplified release CI to native builds and applied CI reliability adjustments for the `v0.2.0` tag flow.
 
 ### Notes
 
 - This tag predates the later OpenDAL unified-storage migration (M1), which shipped after `v0.2.0`.
+- Entries above are constrained to changes present in the `v0.1.0..v0.2.0` range.
 
 ## [0.1.0] - 2026-01-19
 
