@@ -213,7 +213,9 @@ pub async fn run(args: ScanArgs) -> Result<()> {
 
 /// Scan a single file and return enriched FileInfo
 pub async fn scan_file(path: &Path) -> Result<FileInfo> {
-    let metadata = std::fs::metadata(path).context("Failed to read file metadata")?;
+    let metadata = tokio::fs::metadata(path)
+        .await
+        .context("Failed to read file metadata")?;
 
     let filename = path
         .file_name()
@@ -240,25 +242,39 @@ pub async fn scan_file(path: &Path) -> Result<FileInfo> {
         created_at,
     );
 
-    // Detect MIME type
-    if let Some(mime) = infer::get_from_path(path).ok().flatten() {
-        info = info.with_mime_type(mime.mime_type().to_string());
+    // Detect MIME type + compute hashes in a blocking task (all do synchronous file I/O)
+    let io_path = path.to_path_buf();
+    let (mime_type, partial_hash, full_hash) = tokio::task::spawn_blocking(move || {
+        let mime = infer::get_from_path(&io_path)
+            .ok()
+            .flatten()
+            .map(|m| m.mime_type().to_string());
+
+        let partial = if size_bytes > 0 && size_bytes < 100 * 1024 * 1024 {
+            compute_partial_hash(&io_path, 64 * 1024).ok()
+        } else {
+            None
+        };
+
+        let full = if size_bytes > 0 && size_bytes < 10 * 1024 * 1024 {
+            compute_full_hash(&io_path).ok()
+        } else {
+            None
+        };
+
+        (mime, partial, full)
+    })
+    .await
+    .context("Blocking I/O task panicked")?;
+
+    if let Some(mime) = mime_type {
+        info = info.with_mime_type(mime);
     }
-
-    // Compute hashes
-    if size_bytes > 0 && size_bytes < 100 * 1024 * 1024 {
-        // Skip files > 100MB for now
-        // Partial hash (first 64KB)
-        if let Ok(partial) = compute_partial_hash(path, 64 * 1024) {
-            info = info.with_partial_hash(PartialHash::new(partial));
-        }
-
-        // Full hash for smaller files
-        if size_bytes < 10 * 1024 * 1024 {
-            if let Ok(full) = compute_full_hash(path) {
-                info = info.with_content_hash(ContentHash::new(full));
-            }
-        }
+    if let Some(partial) = partial_hash {
+        info = info.with_partial_hash(PartialHash::new(partial));
+    }
+    if let Some(full) = full_hash {
+        info = info.with_content_hash(ContentHash::new(full));
     }
 
     // Try to get suggested name from external tools
