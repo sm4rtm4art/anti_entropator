@@ -5,6 +5,8 @@
 pub mod schema;
 pub mod writer;
 
+pub use crate::config::LakehouseConfig;
+
 use anyhow::{bail, Context, Result};
 use console::{style, Emoji};
 use schema::{build_file_catalog_schema, FILE_CATALOG_TABLE, NAMESPACE};
@@ -20,45 +22,6 @@ const WAREHOUSE_NAME: &str = "anti-entropator";
 
 /// The project name in Lakekeeper
 const PROJECT_NAME: &str = "anti-entropator";
-
-/// Configuration for lakehouse connections
-#[derive(Debug, Clone)]
-pub struct LakehouseConfig {
-    pub s3_endpoint: String,
-    /// S3 endpoint as seen from within Docker network (for Lakekeeper)
-    pub s3_endpoint_internal: String,
-    pub s3_access_key: String,
-    pub s3_secret_key: String,
-    pub bucket: String,
-    pub catalog_endpoint: String,
-    pub warehouse: String,
-    /// Lakekeeper project ID (resolved at runtime via `ensure_project`).
-    pub project_id: Option<String>,
-}
-
-impl Default for LakehouseConfig {
-    fn default() -> Self {
-        Self {
-            s3_endpoint: std::env::var("ANTI_ENTROPATOR_S3_ENDPOINT")
-                .unwrap_or_else(|_| "http://localhost:8200".to_string()),
-            s3_endpoint_internal: std::env::var("ANTI_ENTROPATOR_S3_ENDPOINT_INTERNAL")
-                .unwrap_or_else(|_| "http://rustfs:9000".to_string()),
-            s3_access_key: std::env::var("RUSTFS_ACCESS_KEY")
-                .or_else(|_| std::env::var("AWS_ACCESS_KEY_ID"))
-                .unwrap_or_default(),
-            s3_secret_key: std::env::var("RUSTFS_SECRET_KEY")
-                .or_else(|_| std::env::var("AWS_SECRET_ACCESS_KEY"))
-                .unwrap_or_default(),
-            bucket: std::env::var("ANTI_ENTROPATOR_BUCKET")
-                .unwrap_or_else(|_| "anti-entropator".to_string()),
-            catalog_endpoint: std::env::var("ANTI_ENTROPATOR_CATALOG_ENDPOINT")
-                .unwrap_or_else(|_| "http://localhost:8100".to_string()),
-            warehouse: std::env::var("ANTI_ENTROPATOR_WAREHOUSE")
-                .unwrap_or_else(|_| WAREHOUSE_NAME.to_string()),
-            project_id: std::env::var("ANTI_ENTROPATOR_PROJECT_ID").ok(),
-        }
-    }
-}
 
 /// Resolve the project ID from (in order): config field, env var, state file.
 ///

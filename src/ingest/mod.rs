@@ -368,3 +368,238 @@ fn parse_size(s: &str) -> Option<u64> {
 
     num_str.trim().parse::<u64>().ok().map(|n| n * multiplier)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::cli::IngestArgs;
+    use std::path::PathBuf;
+
+    fn default_args(path: PathBuf) -> IngestArgs {
+        IngestArgs {
+            path,
+            include: vec![],
+            exclude: vec![],
+            since: None,
+            types: vec![],
+            max_size: None,
+            limit: None,
+            auto_merge: false,
+            dry_run: true,
+            verbose: false,
+        }
+    }
+
+    // ── parse_size ──
+
+    #[test]
+    fn parse_size_megabytes() {
+        assert_eq!(parse_size("1MB"), Some(1024 * 1024));
+    }
+
+    #[test]
+    fn parse_size_kilobytes() {
+        assert_eq!(parse_size("100KB"), Some(100 * 1024));
+    }
+
+    #[test]
+    fn parse_size_gigabytes() {
+        assert_eq!(parse_size("2GB"), Some(2 * 1024 * 1024 * 1024));
+    }
+
+    #[test]
+    fn parse_size_bytes() {
+        assert_eq!(parse_size("500B"), Some(500));
+    }
+
+    #[test]
+    fn parse_size_zero() {
+        assert_eq!(parse_size("0MB"), Some(0));
+    }
+
+    #[test]
+    fn parse_size_with_whitespace() {
+        assert_eq!(parse_size("  10 MB  "), Some(10 * 1024 * 1024));
+    }
+
+    #[test]
+    fn parse_size_lowercase() {
+        assert_eq!(parse_size("5mb"), Some(5 * 1024 * 1024));
+    }
+
+    #[test]
+    fn parse_size_invalid_suffix() {
+        assert_eq!(parse_size("100TB"), None);
+    }
+
+    #[test]
+    fn parse_size_no_suffix() {
+        assert_eq!(parse_size("100"), None);
+    }
+
+    #[test]
+    fn parse_size_no_number() {
+        assert_eq!(parse_size("MB"), None);
+    }
+
+    #[test]
+    fn parse_size_garbage() {
+        assert_eq!(parse_size("abc"), None);
+    }
+
+    // ── collect_files ──
+
+    fn make_test_tree(dir: &std::path::Path) {
+        std::fs::write(dir.join("photo.jpg"), b"fake jpg").unwrap();
+        std::fs::write(dir.join("readme.txt"), b"hello world").unwrap();
+        std::fs::write(dir.join("data.csv"), b"a,b,c").unwrap();
+        std::fs::write(dir.join("debug.log"), b"log line").unwrap();
+        let sub = dir.join("subdir");
+        std::fs::create_dir_all(&sub).unwrap();
+        std::fs::write(sub.join("nested.rs"), b"fn main() {}").unwrap();
+    }
+
+    #[test]
+    fn collect_files_no_filters() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let args = default_args(dir.path().to_path_buf());
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert_eq!(files.len(), 5);
+    }
+
+    #[test]
+    fn collect_files_exclude_pattern() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.exclude = vec![".log".to_string()];
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert_eq!(files.len(), 4);
+        assert!(!files.iter().any(|f| f.to_string_lossy().contains(".log")));
+    }
+
+    #[test]
+    fn collect_files_include_pattern() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.include = vec![".txt".to_string()];
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].to_string_lossy().contains("readme.txt"));
+    }
+
+    #[test]
+    fn collect_files_limit() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.limit = Some(2);
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert_eq!(files.len(), 2);
+    }
+
+    #[test]
+    fn collect_files_max_size() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("small.txt"), b"hi").unwrap();
+        std::fs::write(dir.path().join("big.txt"), vec![0u8; 2048]).unwrap();
+        let mut args = default_args(dir.path().to_path_buf());
+        args.max_size = Some("1KB".to_string());
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].to_string_lossy().contains("small.txt"));
+    }
+
+    #[test]
+    fn collect_files_type_filter_by_category() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.types = vec!["image".to_string()];
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].to_string_lossy().contains("photo.jpg"));
+    }
+
+    #[test]
+    fn collect_files_type_filter_by_extension() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.types = vec!["rs".to_string()];
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].to_string_lossy().contains("nested.rs"));
+    }
+
+    #[test]
+    fn collect_files_empty_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let args = default_args(dir.path().to_path_buf());
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert!(files.is_empty());
+    }
+
+    #[test]
+    fn collect_files_combined_filters() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.exclude = vec!["subdir".to_string()];
+        args.limit = Some(3);
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert!(files.len() <= 3);
+        assert!(!files.iter().any(|f| f.to_string_lossy().contains("subdir")));
+    }
+
+    // ── compute_hash ──
+
+    #[test]
+    fn compute_hash_known_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.bin");
+        std::fs::write(&path, b"hello world").unwrap();
+
+        let hash = compute_hash(&path).unwrap();
+        // SHA-256 of "hello world"
+        assert_eq!(
+            hash,
+            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
+        );
+    }
+
+    #[test]
+    fn compute_hash_empty_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.bin");
+        std::fs::write(&path, b"").unwrap();
+
+        let hash = compute_hash(&path).unwrap();
+        // SHA-256 of empty input
+        assert_eq!(
+            hash,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
+    }
+
+    #[test]
+    fn compute_hash_deterministic() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("det.bin");
+        std::fs::write(&path, b"reproducible content").unwrap();
+
+        let hash1 = compute_hash(&path).unwrap();
+        let hash2 = compute_hash(&path).unwrap();
+        assert_eq!(hash1, hash2);
+    }
+}

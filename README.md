@@ -1,6 +1,7 @@
 # Anti-Entropator
 
 [![CI](https://github.com/sm4rtm4art/anti_entropator/actions/workflows/ci.yml/badge.svg)](https://github.com/sm4rtm4art/anti_entropator/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/sm4rtm4art/anti_entropator/graph/badge.svg)](https://codecov.io/gh/sm4rtm4art/anti_entropator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org)
 
