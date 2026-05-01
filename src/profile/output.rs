@@ -93,7 +93,7 @@ fn print_extension_table(result: &ProfileResult, decimal: bool) -> Result<()> {
 
     // Sort by total bytes
     let mut entries: Vec<_> = result.by_extension.iter().collect();
-    entries.sort_by(|a, b| b.1.total_bytes.cmp(&a.1.total_bytes));
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.1.total_bytes));
 
     for (ext, stats) in entries.iter().take(25) {
         table.add_row(vec![
@@ -131,7 +131,7 @@ fn print_category_table(result: &ProfileResult, decimal: bool) -> Result<()> {
         ]);
 
     let mut entries: Vec<_> = result.by_category.iter().collect();
-    entries.sort_by(|a, b| b.1.total_bytes.cmp(&a.1.total_bytes));
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.1.total_bytes));
 
     for (cat, stats) in entries {
         let pct = if result.total_bytes > 0 {
@@ -170,7 +170,7 @@ fn print_mime_table(result: &ProfileResult, decimal: bool) -> Result<()> {
         ]);
 
     let mut entries: Vec<_> = result.by_mime.iter().collect();
-    entries.sort_by(|a, b| b.1.total_bytes.cmp(&a.1.total_bytes));
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.1.total_bytes));
 
     for (mime, stats) in entries.iter().take(15) {
         table.add_row(vec![
@@ -195,7 +195,7 @@ fn print_name_patterns(result: &ProfileResult) -> Result<()> {
     println!();
 
     let mut entries: Vec<_> = result.name_patterns.iter().collect();
-    entries.sort_by(|a, b| b.1.cmp(a.1));
+    entries.sort_by_key(|entry| std::cmp::Reverse(*entry.1));
 
     for (pattern, count) in entries {
         let pct = if result.file_count > 0 {
@@ -325,7 +325,7 @@ pub fn generate_markdown_report(result: &ProfileResult, decimal: bool) -> Result
     md.push_str("|-----------|-------|-------|-----|-----|\n");
 
     let mut entries: Vec<_> = result.by_extension.iter().collect();
-    entries.sort_by(|a, b| b.1.total_bytes.cmp(&a.1.total_bytes));
+    entries.sort_by_key(|entry| std::cmp::Reverse(entry.1.total_bytes));
 
     for (ext, stats) in entries.iter().take(25) {
         md.push_str(&format!(

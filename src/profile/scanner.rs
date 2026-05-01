@@ -242,7 +242,7 @@ pub async fn scan(
             // Track largest files
             largest.push((size, path_str.clone()));
             if largest.len() > MAX_LARGEST * 2 {
-                largest.sort_by(|a, b| b.0.cmp(&a.0));
+                largest.sort_by_key(|entry| std::cmp::Reverse(entry.0));
                 largest.truncate(MAX_LARGEST);
             }
 
@@ -259,7 +259,7 @@ pub async fn scan(
     }
 
     // Finalize largest files
-    largest.sort_by(|a, b| b.0.cmp(&a.0));
+    largest.sort_by_key(|entry| std::cmp::Reverse(entry.0));
     largest.truncate(15);
     result.largest_files = largest;
 

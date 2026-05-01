@@ -1,0 +1,106 @@
+---
+description: Documentation standards for the Anti-Entropator. Enforces Architecture Decision Records (ADRs), Mermaid diagrams, and verifiable Rust examples.
+globs: ["*.md", "docs/**/*.md"]
+alwaysApply: false
+---
+
+# Documentation Standards & Philosophy
+
+## 1. The Core Directive: "Documentation as Architecture"
+
+This project is not a script; it is a **Local Data Lakehouse**. The documentation must reflect this complexity.
+
+- **No "Quick Scripts":** Do not write "Just run this file." Explain the _Pipeline_.
+- **Visuals First:** Complex flows (ETL, Lakekeeper Commits, Iceberg Snapshots) MUST be visualized using MermaidJS.
+- **Why > How:** We are over-engineering on purpose. You must justify _why_ we are using Lakekeeper/Iceberg for a Downloads folder (e.g., "To enable Time-Travel and atomic rollbacks").
+
+## 2. Project Structure (The "Lakehouse" Organization)
+
+Adhere to this directory structure. Do not dump files in root.
+
+- `README.md`: The Executive Summary (Hook + Quick Start).
+- `docs/adr/`: **Architecture Decision Records**. (Why Rust? Why Lakekeeper? Why **NOT** Nessie?).
+- `docs/design/`: Mermaid diagrams and Dataflow specifications.
+- `docs/manual/`: **HITL Guides** (How to intervene when the agent pauses).
+
+## 3. Architecture Decision Records (ADR)
+
+Since we are "Over-Engineering," every major tech choice must be documented.
+**Template:**
+
+```markdown
+# ADR-00X: [Title]
+
+## Context
+
+We need to manage state for [Problem].
+
+## Decision
+
+We will use [Technology/Pattern].
+
+## Consequences
+
+- Positive: [Benefit]
+- Negative: [Complexity Cost]
+```
+
+## 4. Visual Standards (MermaidJS)
+
+Use `mermaid` blocks for all logic flows.
+
+- **Flowcharts:** For ETL pipelines (Ingest -> Transform -> Load).
+- **Sequence Diagrams:** For HITL interactions (User <-> CLI <-> FileSystem).
+
+**Example:**
+
+```mermaid
+graph LR
+    A[Raw File] -->|Ingest| B(Validation)
+    B -->|Fail| C[Manual Queue]
+    B -->|Pass| D[Iceberg Table]
+```
+
+## 5. Writing Rust in Markdown
+
+**Rule:** All Rust code blocks in documentation must be "Didactic yet Verifiable."
+
+1.  **Refers to `rust.mdc`:** Code style must match the project's strict Rust rules (No `unwrap`, Typed Paths).
+2.  **Verifiable:** Code must be compile-ready (wrapped in `fn main` or test harnesses if standalone).
+3.  **Semantic Naming:**
+    - BAD: `let foo = path;`
+    - GOOD: `let landing_zone = PathBuf::from("/tmp/downloads");`
+
+## 6. The "Implicit Triad" (Section Structure)
+
+Every major section (H2/H3) must answer three questions without explicitly asking them:
+
+1.  **Definition:** What component is this? (e.g., "The Lakekeeper Catalog").
+2.  **Motivation:** Why is it here? (e.g., "To track file deletion state like Git").
+3.  **Intervention:** How does the Human control it? (e.g., "The CLI asks for confirmation before committing").
+
+## 7. Formatting & Grammar
+
+- **Capitalization:** **Iceberg**, **Lakekeeper**, **DataFusion**, **DataFrame**.
+- **Admonitions:** Use strict admonitions for safety.
+  > **Warning:** This operation alters the filesystem.
+- **Links:** Relative links only (`[Concept](design/concept.md)`).
+
+## 8. Code Block Implementation
+
+If you generate a Rust example in a README, it **MUST** follow this template:
+
+```rust
+// [Concept] - Example
+// -------------------
+// Explanation: [One sentence on what this demonstrates]
+
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    // 1. Setup Context
+    // ...
+    Ok(())
+}
+```

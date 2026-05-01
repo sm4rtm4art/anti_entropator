@@ -142,7 +142,7 @@ pub async fn run(args: ScanArgs) -> Result<()> {
 
     println!("  By category:");
     let mut cats: Vec<_> = by_category.iter().collect();
-    cats.sort_by(|a, b| b.1 .1.cmp(&a.1 .1));
+    cats.sort_by_key(|entry| std::cmp::Reverse(entry.1 .1));
 
     for (cat, (count, bytes)) in cats {
         println!(
@@ -333,11 +333,9 @@ async fn get_suggested_name(path: &Path, info: &FileInfo) -> Option<(String, Str
                 return Some(result);
             }
         }
-        FileCategory::Document => {
-            if extension == ".pdf" {
-                if let Some(result) = enrichers::pdfinfo_title(path).await {
-                    return Some(result);
-                }
+        FileCategory::Document if extension == ".pdf" => {
+            if let Some(result) = enrichers::pdfinfo_title(path).await {
+                return Some(result);
             }
         }
         _ => {}

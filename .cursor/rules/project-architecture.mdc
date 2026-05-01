@@ -1,0 +1,35 @@
+---
+description: Always-on guard rails. Prevents costly wrong turns in any session.
+alwaysApply: true
+---
+
+# Architecture Guard Rails
+
+Phase: **public-showcase stabilization**.
+
+## Stack (do not substitute)
+
+| Component | Is | Is NOT |
+|---|---|---|
+| Object store | RustFS | MinIO (test-only fallback) |
+| Catalog | Lakekeeper (Iceberg REST) | Nessie |
+| Storage I/O | OpenDAL | raw `aws-sdk-s3`, `reqwest` |
+| Query engine | DataFusion | DuckDB, Polars |
+| Catalog DB | Postgres | SQLite |
+| Containers | Docker Compose | Kubernetes, bare `docker run` |
+| SQL queries | DataFusion (over Iceberg) | Direct Postgres queries |
+
+## Hard Stops
+
+- Do not reintroduce Nessie or MinIO as active defaults.
+- Do not present planned features as implemented.
+- Do not bypass OpenDAL for object-store operations.
+- Do not add JVM dependencies.
+
+## Container Security
+
+- Bind ports to `127.0.0.1` only. Never `0.0.0.0`.
+- Never run containers as root. Use non-root UID (RustFS: 10001).
+- Prefer distroless or `-alpine` base images.
+- No secrets in `docker-compose.yml`. Reference `.env` variables.
+- Do not expose internal service ports beyond what the CLI needs.
