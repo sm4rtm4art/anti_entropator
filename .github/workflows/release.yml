@@ -5,15 +5,25 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  # GHCR requires lowercase image names
+  IMAGE_NAME: sm4rtm4art/anti_entropator
 
 jobs:
   build-binaries:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -92,7 +102,7 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-binaries]
+    needs: [build-binaries, build-container]
     runs-on: ubuntu-latest
     permissions:
       contents: write

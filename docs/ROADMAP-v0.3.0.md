@@ -24,6 +24,25 @@
 - M2 is not complete yet: the containerized end-to-end ingest-to-query integration test is still pending.
 - Query status is split: one-shot `query` is implemented; `sql`, `duplicates`, and `merge` remain placeholder workflows.
 
+### Status update (2026-04-30)
+
+- Public-showcase stabilization closeout is complete.
+- The active execution model now runs in stabilization blocks:
+  - S1: Security and reliability core fixes.
+  - S2: Test pyramid completion (unit/integration/E2E).
+  - S3: Secrets and auth hardening by deployment profile.
+  - S4: Technical debt and misleading-pattern audit.
+  - S5: CI/CD and multi-arch container path.
+- Order note: S4 intentionally precedes S5 so deployment expansion builds on lower debt and cleaner signal quality.
+
+### Status update (2026-05-01)
+
+- Authority rule: this roadmap remains the release contract for `v0.3.0`.
+- The local `v0.3-stabilization-plan.md` is the active execution lane and triage queue, not a replacement for this roadmap's success criteria.
+- S1-S4 stabilization work is the prerequisite gate before resuming M3/M4 implementation work.
+- S5 (CI/CD and multi-arch hardening) runs after feature gates and before release tagging.
+- `v0.3.0` completion still requires maintenance primitives, orchestration gate, and numeric coverage floor from the success criteria section below.
+
 ### Completed (M1 -- Unified Storage, 2026-03-14)
 
 - Replaced `aws-sdk-s3` + `aws-config` with OpenDAL for all S3 I/O
@@ -32,6 +51,7 @@
 - Implemented AWS SigV4 signing for bucket creation via direct HTTP (`reqwest`)
 - Added Lakekeeper project bootstrapping (required since Lakekeeper >= 0.11)
 - Threaded `X-Project-Id` header through `RestCatalog` for writer and query paths
+- Remaining direct catalog REST helper coverage for `X-Project-Id` is tracked in S1 stabilization queue and is not considered complete until those paths are fixed and tested.
 - Added storage contract tests (write/read/exists/list/delete against memory backend)
 - Aligned `lakekeeper-migrate` image to `latest-main` to fix schema mismatch
 - Added [ADR-006](adr/ADR-006-opendal-unified-io.md) (OpenDAL) and [ADR-007](adr/ADR-007-dataflow-rs-orchestration.md) (dataflow-rs)
@@ -250,6 +270,8 @@ flowchart LR
 4. **Orchestration:** dataflow-rs engine available **without removing** procedural ingest.
 5. **CI passes** with `cargo test`, `cargo clippy`, `cargo fmt --check`.
 
+> Execution note: S1-S4 are prerequisites for M3/M4 implementation work, and S5 must complete before tagging `v0.3.0`; all success criteria above remain required.
+
 ---
 
 ## Sprint Backlog (Next Up)
@@ -258,9 +280,11 @@ flowchart LR
 | -------- | ------------------------------------------------ | ------ | ----------- | -------------------------------------------------------- |
 | ~~P0~~   | ~~Replace `aws-sdk-s3` core paths with OpenDAL~~ | ~~Medium~~ | **Done** | Completed 2026-03-14                                     |
 | ~~P0~~   | ~~Bridge DataFusion via `object_store_opendal`~~  | ~~Small~~  | **Done** | Registered under `s3://` URL scheme                      |
-| P1       | Integration test: Ingest -> Query (containers)   | Medium | **Next**    | Builds on stable OpenDAL boundary                        |
-| P1       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | Pending     | Requires design note on "live references"                |
+| P0       | S1 correctness queue (ingest filters, SQL rewrite, ingest counters) | Medium | **Next** | Defined in local stabilization plan; must land before M3/M4 resume |
+| P1       | Integration test: Ingest -> Query (containers)   | Medium | **Next**    | Builds on stable OpenDAL boundary and S1 correctness fixes |
+| P1       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | Pending     | Required for `v0.3.0` success criteria                    |
 | P2       | Introduce dataflow-rs engine behind flag/switch  | Large  | Pending     | Run side-by-side with procedural                         |
+| P2       | S5 CI/CD hardening (Trivy + multi-arch path)     | Medium | Pending     | Starts after M3/M4 feature gates, required before release tag |
 | P2       | Add `optimize plan` (report-only)                | Small  | Pending     |                                                          |
 | P2       | Refactor `files_to_batch` into helpers           | Small  | Deferred    | Already clean with `BatchColumnsBuilder`                 |
 
@@ -304,4 +328,4 @@ Iceberg Tables:
 
 ---
 
-_Last updated: 2026-04-29_
+_Last updated: 2026-05-01_

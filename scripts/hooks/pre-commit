@@ -7,7 +7,7 @@ cargo fmt --all -- --check
 echo "==> pre-commit: cargo clippy"
 cargo clippy --all-targets --all-features -- -D warnings
 
-echo "==> pre-commit: cargo test"
-cargo test --all-features
+echo "==> pre-commit: cargo test --no-run"
+cargo test --all-features --no-run
 
 echo "==> pre-commit: all checks passed"
