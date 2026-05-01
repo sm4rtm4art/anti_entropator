@@ -25,6 +25,7 @@ Hook policy:
 - `pre-commit`: `fmt` + `clippy` + `cargo test --no-run`
 - `pre-push`: full `cargo test --all-features`
 
+
 ## Local Validation Checklist
 
 Run these before opening a PR:

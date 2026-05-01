@@ -67,6 +67,13 @@ When you are ready to make the repository public:
 4. [ ] Confirm `SECURITY.md` and this checklist are up-to-date.
 5. [ ] Merge hardening branch, then switch repository visibility.
 
+## 7) Deployment Profile and Rollout Narrative
+
+- [ ] Confirm target profile in [Deployment Security Profiles](deployment-profiles.md).
+- [ ] If demonstrating deployments publicly, document the reference flow in [Blue-Green Showcase Deployment](../ci-cd/blue-green-showcase.md).
+- [ ] Confirm rollback steps are documented and tested at least once in a local simulation.
+- [ ] Confirm hardening exceptions and follow-ups are tracked in [Docker and CI Hardening Review](docker-hardening-review.md).
+
 ## Notes
 
 - This project is local-first; defaults are optimized for local development.

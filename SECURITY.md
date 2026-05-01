@@ -35,3 +35,13 @@ Include:
 - Use non-default credentials and strong encryption keys in `.env`.
 - Do not commit secrets (`.env`, tokens, credentials, private keys).
 - Enable dependency and secret scanning in CI before making the repository public.
+
+## Deployment Security Profiles
+
+Security controls differ by environment.
+Treat local demo defaults, shared internal deployments, and public showcase exposure as separate security profiles.
+
+- Local demo profile: [docs/security/deployment-profiles.md](docs/security/deployment-profiles.md)
+- Go-public runbook: [docs/security/go-public-checklist.md](docs/security/go-public-checklist.md)
+- Secrets handling: [docs/security/secrets-management.md](docs/security/secrets-management.md)
+- Container and CI hardening review: [docs/security/docker-hardening-review.md](docs/security/docker-hardening-review.md)

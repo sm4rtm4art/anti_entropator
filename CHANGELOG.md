@@ -17,17 +17,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `duplicates` implementation beyond the current placeholder command.
 - `merge` implementation beyond the current placeholder command.
 
-## [0.2.0] - 2026-01-21
+## [0.2.0] - 2026-03-14
+
+### Added
+
+- Unified object storage I/O through **OpenDAL** for core read/write/list/head/delete paths.
+- `src/storage/mod.rs` operator factory to centralize storage configuration.
+- DataFusion object store bridge using `object_store_opendal` under `s3://`.
+- Lakekeeper project bootstrapping and project-aware catalog request headers.
+- Storage contract tests for write/read/exists/list/delete behavior on memory backend.
 
 ### Changed
 
-- Fixed Iceberg ingest pipeline behavior in the pre-release commits, including catalog URI handling.
-- Simplified release CI to native builds and applied CI reliability adjustments for the `v0.2.0` tag flow.
+- Replaced `aws-sdk-s3` core data paths with a single OpenDAL boundary.
+- Updated compose image selection for `lakekeeper-migrate` to resolve schema mismatch during setup.
 
-### Notes
+### Verified
 
-- This tag predates the later OpenDAL unified-storage migration (M1), which shipped after `v0.2.0`.
-- Entries above are constrained to changes present in the `v0.1.0..v0.2.0` range.
+- End-to-end local flow: `init` -> `ingest` (Iceberg commit) -> `query` (DataFusion read path).
 
 ## [0.1.0] - 2026-01-19
 
