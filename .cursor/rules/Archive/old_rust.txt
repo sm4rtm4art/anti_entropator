@@ -1,0 +1,60 @@
+---
+description: Technical constraints for the Anti-Entropator Local Lakehouse. Enforces architecture, I/O safety, and testability.
+globs: ["**/*.rs", "Cargo.toml"]
+alwaysApply: false
+---
+
+# Rust Architecture & Safety Rules
+
+## 1. The "Over-Engineering" Stack
+
+This is a Local Data Lakehouse, not a script.
+
+- **Query Engine:** `datafusion` (Async).
+- **Table Format:** `iceberg-rust` (via `object_store`).
+- **Catalog:** `nessie` (Git-like data versioning).
+- **Orchestration:** `tokio` (Async Runtime).
+
+## 2. I/O Safety & Error Handling
+
+**Crucial:** The compiler does NOT check filesystem state. Runtime failure is expected.
+
+- **Strict Error Handling:**
+  - Never use `.unwrap()` or `.expect()` on I/O operations.
+  - Use `match` or `?` to handle `std::io::Error`.
+  - Library code must use `thiserror`. Binary/CLI uses `anyhow`.
+- **Atomic Operations:** File moves must be treated as transactions. If the Iceberg metadata write fails, the physical file move must be rolled back (or not happen).
+
+## 3. HITL via "Testability First"
+
+To keep the Human-in-the-Loop safe, logic must be decoupled from execution.
+
+- **Pattern:** "Functional Core, Imperative Shell".
+  - **The Core (Testable):** Pure functions that take file metadata and return a `Plan` (e.g., `RenameAction`, `DeleteAction`). These must be unit tested.
+  - **The Shell (Executable):** The async code that actually touches the disk based on the `Plan`.
+- **Dry Run Mandatory:** Every executable function must accept a `dry_run: bool` flag.
+  - `true`: Log the intent (INFO level).
+  - `false`: Execute the I/O.
+
+## 4. Type System & Domain
+
+- **Anti-Primitive Obsession:** Do not pass `String` or `PathBuf` around.
+- **Define Types:**
+  ```rust
+  struct RawPath(PathBuf);
+  struct CleanPath(PathBuf);
+  struct FileHash(String);
+  ```
+- **Validation:** Parse strings into Types immediately. If it's a `CleanPath`, the compiler guarantees it has passed validation rules.
+
+## 5. Testing Requirements
+
+- **Unit Tests:** Must cover the "Functional Core" (decision logic).
+- **Integration Tests:** Use `testcontainers` (or local Docker) to test the `nessie` and `minio` interactions.
+- **Mocking:** Use `mockall` only if necessary; prefer testing against real (temporary) filesystems using `tempfile` crate to verify I/O behavior.
+
+## 6. Code Style & CI
+
+- **Linter:** Code must pass `cargo clippy -- -D warnings`.
+- **Formatter:** `cargo fmt`.
+- **Async:** Use `#[tokio::main]` for the entry point.

@@ -35,6 +35,7 @@ Use it in order, and treat each section as a small, testable milestone.
 
 ## 3) Dependency and Supply Chain
 
+- [ ] Run container vulnerability scan in CI (planned for S5 stabilization block).
 - [ ] Pin container base images to fixed versions/digests where possible.
 - [ ] Re-enable build provenance/SBOM in CI once registry constraints are solved.
 - [ ] Add a lockfile review step for dependency upgrades.

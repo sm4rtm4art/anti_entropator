@@ -12,6 +12,20 @@ This project is currently in a public-showcase stabilization phase, so correctne
    - `cp env.example .env`
    - `docker compose up -d`
 
+## Git Hooks (Recommended)
+
+This repository ships hook scripts in `scripts/hooks/`.
+Install them in your local clone so quality checks run before commit/push:
+
+- `ln -sf ../../scripts/hooks/pre-commit .git/hooks/pre-commit`
+- `ln -sf ../../scripts/hooks/pre-push .git/hooks/pre-push`
+
+Hook policy:
+
+- `pre-commit`: `fmt` + `clippy` + `cargo test --no-run`
+- `pre-push`: full `cargo test --all-features`
+
+
 ## Local Validation Checklist
 
 Run these before opening a PR:

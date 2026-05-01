@@ -1,0 +1,66 @@
+---
+description: Rust code enforcement for Anti-Entropator. Strict rules that fire on .rs files.
+globs: ["**/*.rs", "Cargo.toml"]
+alwaysApply: false
+---
+
+# Rust Rules
+
+## Banned Patterns
+
+| Pattern | Do Instead |
+|---------|------------|
+| `.unwrap()` in production code | `?` operator or explicit `match`. `.unwrap()` allowed only in `#[cfg(test)]`. |
+| `.expect()` in production code | `?` with `.context()` (`anyhow`) or typed error (`thiserror`). |
+| `.clone()` to satisfy borrow checker | Fix lifetimes, use `Arc`, or restructure ownership. |
+| `println!` / `eprintln!` | `tracing::info!`, `tracing::debug!`, `tracing::warn!`, `tracing::error!`. |
+| Blocking I/O in `async fn` | Wrap in `tokio::task::spawn_blocking`. No `std::fs` in async context. |
+| Raw `String` / `PathBuf` across layers | Use typed domain values. Parse into domain types at boundaries. |
+| Direct S3/HTTP for object store | Use `opendal::Operator` via `src/storage/`. No raw `reqwest`/`aws-sdk-s3`. |
+
+## Error Boundaries
+
+```text
+src/main.rs, src/cli/   → anyhow::Result  (CLI orchestration)
+src/domain/, src/scan/,
+src/lakehouse/, ...      → thiserror       (typed domain errors)
+```
+
+NEVER mix: do not return `anyhow::Error` from library modules.
+Do not use `thiserror` in `main.rs`.
+
+## Async Safety
+
+- No `std::fs::read`, `std::fs::write`, or other blocking calls inside `async fn`.
+- Use `tokio::fs` or wrap in `tokio::task::spawn_blocking`.
+- CPU-heavy work (hashing, compression): `spawn_blocking`.
+
+## Mutation Safety
+
+Functions that touch filesystem, object store, or catalog MUST accept
+`dry_run: bool`. When `true`: log intent via `tracing::info!`, execute nothing.
+
+```rust
+// ✅
+async fn ingest_files(files: &[FileInfo], dry_run: bool) -> Result<()> {
+    if dry_run {
+        tracing::info!(count = files.len(), "dry run: would ingest files");
+        return Ok(());
+    }
+    // actual I/O here
+    Ok(())
+}
+```
+
+## Dependencies
+
+- Check `Cargo.toml` before adding any `use` statement for external crates.
+- Prefer `std` over new crate. Prefer existing crate over adding another.
+- Adding a heavy crate (async runtime, framework, serialization): ask first.
+
+## Testing
+
+- Unit test pure logic in `domain/`, `config/`, `lakehouse/schema.rs`.
+- Integration test I/O boundaries with `testcontainers-rs`.
+- Use `tempfile` for filesystem tests. No hardcoded paths.
+- `#[tokio::test]` for async tests. `#[test]` for sync.

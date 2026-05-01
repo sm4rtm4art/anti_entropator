@@ -1,0 +1,100 @@
+---
+description: Documentation enforcement for Anti-Entropator markdown files.
+globs: ["**/*.md"]
+alwaysApply: false
+---
+
+# Documentation Rules
+
+## Banned Language
+
+| Don't Write | Write Instead |
+|-------------|---------------|
+| "blazing fast", "revolutionary", "enterprise-grade" | State measurable facts or omit. |
+| "simply", "just", "easily" | Describe the actual steps. |
+| Vague claims ("robust", "seamless") | Name what works and what doesn't. |
+| Feature described as shipped when it's not | Use status labels: ✅ Implemented, 🚧 In Development, 📋 Planned. |
+| Absolute URLs to docs within repo | Relative links only: `[ADRs](docs/adr/)`. |
+
+## Tone
+
+Active, professional, honest. Occasional dry humor is fine. Do not sell or
+oversell. State limitations next to capabilities.
+
+Emoji: sparingly. OK for status labels (✅ 🚧 📋) and architecture diagrams.
+Not for every heading or bullet.
+
+## Formatting
+
+- One sentence per line. Clean git diffs.
+- Heading hierarchy: H1 → H2 → H3. No skipping levels.
+
+## Capitalization
+
+Always bold on first mention: **Iceberg**, **Lakekeeper**, **DataFusion**,
+**DataFrame**, **OpenDAL**, **RustFS**, **Postgres**.
+
+## ADR Template
+
+New ADRs in `docs/adr/` MUST follow this structure:
+
+```markdown
+# ADR-00X: [Title]
+
+## Context
+[Problem we need to solve]
+
+## Decision
+We will use [Technology/Pattern].
+
+## Consequences
+### Positive
+- [Benefit]
+### Negative
+- [Cost or limitation]
+
+## Alternatives Considered
+- [Option]: [Why rejected]
+
+## Examples (optional)
+[Concrete usage: SQL queries, CLI commands, code snippets]
+
+## References
+- [Links]
+```
+
+## Mermaid Diagrams
+
+Use `mermaid` blocks for architecture and data flows.
+
+| Diagram Type | Use For | Example |
+|---|---|---|
+| `flowchart LR` | Pipelines, data flow, architecture | Ingest → Storage → Catalog |
+| `sequenceDiagram` | User interactions, service calls | CLI ↔ Lakekeeper ↔ RustFS |
+
+Style rules:
+- Group related components with `subgraph`.
+- Keep node labels short (2-3 words max).
+- Emoji in node labels: one per node, only for top-level components.
+- Use `classDef` for consistent coloring across diagrams.
+- Direction: `LR` for pipelines, `TB` for hierarchies.
+
+## Rust Code in Markdown
+
+Rust examples in docs must be verifiable and follow `rust-standards.mdc`:
+
+- No `.unwrap()`. Use `?` with `anyhow::Result`.
+- Semantic variable names: `landing_zone` not `foo`.
+- Wrap standalone examples in `async fn main() -> Result<()>`.
+
+```rust
+// ✅
+use anyhow::Result;
+
+#[tokio::main]
+async fn main() -> Result<()> {
+    let landing_zone = std::path::PathBuf::from("/tmp/downloads");
+    // ...
+    Ok(())
+}
+```

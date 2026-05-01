@@ -1,5 +1,5 @@
 # Anti-Entropator Container Image
-# Multi-arch build - detects host architecture
+# Single-arch build by default (multi-arch planned in S5).
 
 # Build stage
 FROM rust:latest AS builder

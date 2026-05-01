@@ -1,0 +1,42 @@
+---
+description: Documentation standards for public-showcase readiness.
+globs: ["*.md", "docs/**/*.md"]
+alwaysApply: false
+---
+
+# Documentation Standards
+
+Write for a public technical reader who is evaluating the repository, not for an
+internal planning session. Prefer clarity, honesty, and reproducibility over
+ambitious wording.
+
+## Status Accuracy
+
+- Lead with what works today.
+- Mark planned, experimental, and incomplete features clearly.
+- Do not describe roadmap items as shipped behavior.
+- Keep README, getting-started docs, architecture docs, and roadmap status in
+  sync with the current CLI.
+
+## Reader Experience
+
+- Start with the project purpose and a short practical use case.
+- Provide commands that a reviewer can copy and run.
+- Keep examples concise and explain why each step matters.
+- Prefer short sections with descriptive headings.
+- Avoid long internal history unless it helps explain a design decision.
+
+## Security And Privacy
+
+- Make the local-first threat model visible.
+- State that default services bind to localhost unless intentionally changed.
+- Never include real secrets, tokens, private paths, or personal filenames in
+  examples.
+- Explain `.env` handling as local convenience, not a security boundary.
+- Avoid production claims unless a separate deployment threat model exists.
+
+## Roadmap Language
+
+- Use roadmap documents to show judgment and prioritization.
+- Separate must-have stabilization work from future ideas.
+- Defer broad architecture expansion unless it supports the public demo.
