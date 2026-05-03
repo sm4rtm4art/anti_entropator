@@ -1,5 +1,5 @@
 ---
-description: Documentation truth and public-showcase standards.
+description: Documentation truth and verification standards.
 globs: ["**/*.md"]
 alwaysApply: false
 ---
