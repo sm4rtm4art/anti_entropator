@@ -1,11 +1,11 @@
 ---
-description: Always-on guard rails. Prevents costly wrong turns in any session.
+description: Always-on architecture guard rails for v0.3 stabilization.
 alwaysApply: true
 ---
 
 # Architecture Guard Rails
 
-Phase: **public-showcase stabilization**.
+Phase: **v0.3 stabilization**.
 
 ## Stack (do not substitute)
 
@@ -13,23 +13,41 @@ Phase: **public-showcase stabilization**.
 |---|---|---|
 | Object store | RustFS | MinIO (test-only fallback) |
 | Catalog | Lakekeeper (Iceberg REST) | Nessie |
-| Storage I/O | OpenDAL | raw `aws-sdk-s3`, `reqwest` |
+| Object-store data I/O | OpenDAL | raw `aws-sdk-s3`, ad hoc S3 clients |
 | Query engine | DataFusion | DuckDB, Polars |
 | Catalog DB | Postgres | SQLite |
-| Containers | Docker Compose | Kubernetes, bare `docker run` |
+| Local orchestration | Docker Compose | Kubernetes, bare `docker run` as docs default |
 | SQL queries | DataFusion (over Iceberg) | Direct Postgres queries |
 
 ## Hard Stops
 
 - Do not reintroduce Nessie or MinIO as active defaults.
 - Do not present planned features as implemented.
-- Do not bypass OpenDAL for object-store operations.
+- Do not bypass OpenDAL for object-store reads, writes, list, head, or delete.
 - Do not add JVM dependencies.
+- Do not add Kubernetes guidance for v0.3.
 
-## Container Security
+## Allowed Integration Boundaries
 
-- Bind ports to `127.0.0.1` only. Never `0.0.0.0`.
-- Never run containers as root. Use non-root UID (RustFS: 10001).
-- Prefer distroless or `-alpine` base images.
-- No secrets in `docker-compose.yml`. Reference `.env` variables.
-- Do not expose internal service ports beyond what the CLI needs.
+Direct HTTP is allowed only for explicit integration boundaries:
+
+- Lakekeeper catalog bootstrap and project/warehouse setup.
+- Health checks and doctor/preflight checks.
+- Signed setup calls where a crate boundary does not expose the needed operation.
+
+Keep these calls narrow, documented, fallible, and covered by tests when touched.
+
+## Data Correctness
+
+- Catalog/store consistency is a correctness requirement.
+- Ingest must not report full success if object upload succeeds but Iceberg
+  metadata commit fails.
+- Re-running unchanged ingest/query flows should be deterministic or document
+  the known limitation.
+- Placeholder workflows must not return success semantics once their behavior is
+  touched.
+
+## Delivery Boundary
+
+Container, Compose, CI, release, and deployment documentation rules live in
+`.cursor/rules/docker-ci-standards`. Do not duplicate those rules here.

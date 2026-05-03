@@ -1,33 +1,42 @@
 ---
-description: Rust code enforcement for Anti-Entropator. Strict rules that fire on .rs files.
+description: Rust stabilization standards for Anti-Entropator.
 globs: ["**/*.rs", "Cargo.toml"]
 alwaysApply: false
 ---
 
-# Rust Rules
+# Rust Stabilization Rules
 
-## Banned Patterns
+## Operating Principle
 
-| Pattern | Do Instead |
-|---------|------------|
-| `.unwrap()` in production code | `?` operator or explicit `match`. `.unwrap()` allowed only in `#[cfg(test)]`. |
-| `.expect()` in production code | `?` with `.context()` (`anyhow`) or typed error (`thiserror`). |
-| `.clone()` to satisfy borrow checker | Fix lifetimes, use `Arc`, or restructure ownership. |
-| `println!` / `eprintln!` | `tracing::info!`, `tracing::debug!`, `tracing::warn!`, `tracing::error!`. |
-| Blocking I/O in `async fn` | Wrap in `tokio::task::spawn_blocking`. No `std::fs` in async context. |
-| Raw `String` / `PathBuf` across layers | Use typed domain values. Parse into domain types at boundaries. |
-| Direct S3/HTTP for object store | Use `opendal::Operator` via `src/storage/`. No raw `reqwest`/`aws-sdk-s3`. |
+During v0.3 stabilization, enforce direction without normalizing legacy debt:
+do not add new violations, and migrate touched code toward the standard when the
+change is local and testable.
 
 ## Error Boundaries
 
-```text
-src/main.rs, src/cli/   → anyhow::Result  (CLI orchestration)
-src/domain/, src/scan/,
-src/lakehouse/, ...      → thiserror       (typed domain errors)
-```
+- Treat filesystem, object-store, catalog, subprocess, crypto, and config
+  operations as fallible.
+- Do not introduce new `.unwrap()` or `.expect()` on runtime I/O, catalog,
+  object-store, subprocess, or crypto paths.
+- `.unwrap()` and `.expect()` are acceptable in `#[cfg(test)]` code when they
+  keep tests clear.
+- `anyhow::Result` is acceptable in `main.rs`, `cli/`, and top-level command
+  orchestration functions such as `ingest::run`, `scan::run`, `profile::run`,
+  and `query::run`.
+- Library internals such as `domain/`, `storage/`, and `lakehouse/schema.rs`
+  should prefer typed errors when touched.
+- Existing broad `anyhow` use is tracked debt; do not expand it without reason.
 
-NEVER mix: do not return `anyhow::Error` from library modules.
-Do not use `thiserror` in `main.rs`.
+## Boundary Rules
+
+- Keep domain decisions separate from execution where practical.
+- Prefer typed domain values over raw `String` / `PathBuf` across multiple
+  layers.
+- Route object-store reads, writes, list, head, and delete through OpenDAL.
+- Direct HTTP is allowed for Lakekeeper catalog/bootstrap, health checks, and
+  explicit setup calls. Keep it narrow and fallible.
+- Catalog/store consistency failures must propagate as command-level failures
+  unless explicitly documented as partial success with non-success semantics.
 
 ## Async Safety
 
@@ -35,32 +44,43 @@ Do not use `thiserror` in `main.rs`.
 - Use `tokio::fs` or wrap in `tokio::task::spawn_blocking`.
 - CPU-heavy work (hashing, compression): `spawn_blocking`.
 
-## Mutation Safety
+## CLI Contract Rules
 
-Functions that touch filesystem, object store, or catalog MUST accept
-`dry_run: bool`. When `true`: log intent via `tracing::info!`, execute nothing.
+- Tracked legacy exceptions documented in `.local/v0.3-stabilization-plan.md`
+  are deferred; do not introduce new inert flags or placeholder success
+  semantics.
+- Every public CLI flag must have runtime behavior, tests, and docs, or be
+  hidden/removed before it is presented as stable.
+- Placeholder commands must return explicit non-success once their exit
+  semantics are touched.
+- Mutating operations must expose safe preview semantics (`--dry-run`) or state
+  clearly that dry-run is not implemented yet.
+- CLI help, runtime behavior, tests, and docs must agree for changed commands.
 
-```rust
-// ✅
-async fn ingest_files(files: &[FileInfo], dry_run: bool) -> Result<()> {
-    if dry_run {
-        tracing::info!(count = files.len(), "dry run: would ingest files");
-        return Ok(());
-    }
-    // actual I/O here
-    Ok(())
-}
-```
+## Legacy Debt Policy
+
+- Do not add broad `#[allow(dead_code)]` suppressions without inline rationale.
+- Do not add new `println!` / `eprintln!` in reusable library-style modules.
+  Existing operator-facing output is legacy debt; avoid expanding it.
+- Do not migrate existing `println!` calls unless that migration is the primary
+  objective of the current block.
+- Avoid unnecessary `.clone()` in hot paths or ownership-sensitive code, but do
+  not contort simple code only to remove a cheap clone.
+- External tools (`exiftool`, `ffprobe`, `pdfinfo`) need bounded execution
+  before being described as hardened.
 
 ## Dependencies
 
 - Check `Cargo.toml` before adding any `use` statement for external crates.
 - Prefer `std` over new crate. Prefer existing crate over adding another.
 - Adding a heavy crate (async runtime, framework, serialization): ask first.
+- Remove unused crates from `Cargo.toml` when touched, or document why they stay.
 
 ## Testing
 
 - Unit test pure logic in `domain/`, `config/`, `lakehouse/schema.rs`.
-- Integration test I/O boundaries with `testcontainers-rs`.
+- Container-backed integration tests are planned for S2. Do not import a
+  testcontainers crate until the dependency is added and accepted.
 - Use `tempfile` for filesystem tests. No hardcoded paths.
 - `#[tokio::test]` for async tests. `#[test]` for sync.
+- Add positive and negative assertions for changed user-facing behavior.
