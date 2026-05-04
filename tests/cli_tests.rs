@@ -362,7 +362,7 @@ fn ingest_then_query_flow() -> Result<()> {
         .arg(&query)
         .assert()
         .success()
-        .stdout(predicate::str::contains("2"));
+        .stdout(predicate::str::contains("| 2 |"));
 
     // 5. Re-ingest -- no new uploads (idempotent)
     cmd()?
@@ -378,7 +378,7 @@ fn ingest_then_query_flow() -> Result<()> {
         .arg(&query)
         .assert()
         .success()
-        .stdout(predicate::str::contains("2"));
+        .stdout(predicate::str::contains("| 2 |"));
 
     Ok(())
 }
