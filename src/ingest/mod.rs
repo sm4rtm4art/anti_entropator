@@ -16,6 +16,12 @@ use std::collections::HashSet;
 use std::path::Path;
 use walkdir::WalkDir;
 
+/// Result of processing a single file during ingest.
+enum IngestOutcome {
+    Uploaded(Box<FileInfo>),
+    AlreadyExists,
+}
+
 /// Run the ingest command
 pub async fn run(args: IngestArgs) -> Result<()> {
     let path = args.path.canonicalize().unwrap_or(args.path.clone());
@@ -80,7 +86,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     let mut uploaded_files = Vec::new();
     let mut uploaded_count = 0u64;
-    let mut skipped_count = 0u64;
+    let mut exists_count = 0u64;
     let mut errors = Vec::new();
     let mut total_bytes = 0u64;
 
@@ -101,13 +107,13 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         pb.set_message(file_name.clone());
 
         match process_file(file_path, &path, &config, operator.as_ref(), args.dry_run).await {
-            Ok(Some(info)) => {
+            Ok(IngestOutcome::Uploaded(info)) => {
                 uploaded_count += 1;
                 total_bytes += info.size_bytes;
-                uploaded_files.push(info);
+                uploaded_files.push(*info);
             }
-            Ok(None) => {
-                skipped_count += 1;
+            Ok(IngestOutcome::AlreadyExists) => {
+                exists_count += 1;
             }
             Err(e) => {
                 errors.push(format!("{}: {}", file_path.display(), e));
@@ -117,29 +123,52 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     pb.finish_and_clear();
 
-    // Commit to Iceberg if not dry-run
-    if !args.dry_run && !uploaded_files.is_empty() {
+    // Commit to Iceberg if not dry-run and there are new uploads
+    let commit_result = if !args.dry_run && !uploaded_files.is_empty() {
         print!("  Committing metadata to Iceberg catalog... ");
         match writer::commit_files(uploaded_files, &config).await {
-            Ok(_) => println!("{}", style("OK").green()),
+            Ok(_) => {
+                println!("{}", style("OK").green());
+                Some(Ok(()))
+            }
             Err(e) => {
                 println!("{}", style("FAILED").red());
-                println!("  Warning: Metadata commit failed: {}", e);
+                Some(Err(e))
             }
         }
-    }
+    } else {
+        None
+    };
 
-    // Print summary
+    finalize_ingest(
+        commit_result,
+        uploaded_count,
+        exists_count,
+        &errors,
+        total_bytes,
+        args.dry_run,
+    )
+}
+
+/// Finalize the ingest operation: print summary and determine command outcome.
+fn finalize_ingest(
+    commit_result: Option<Result<()>>,
+    uploaded_count: u64,
+    exists_count: u64,
+    errors: &[String],
+    total_bytes: u64,
+    dry_run: bool,
+) -> Result<()> {
     println!();
     println!("─── Ingest Results ─────────────────────────────────────────────");
     println!();
     println!(
-        "  Uploaded: {} files ({})",
+        "  Uploaded:        {} files ({})",
         uploaded_count,
         humansize::format_size(total_bytes, humansize::BINARY)
     );
-    println!("  Skipped:  {} files (already exist)", skipped_count);
-    println!("  Errors:   {} files", errors.len());
+    println!("  Already in store: {} files", exists_count);
+    println!("  Errors:          {} files", errors.len());
     println!();
 
     if !errors.is_empty() {
@@ -153,22 +182,35 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         println!();
     }
 
-    if args.dry_run {
+    if dry_run {
         println!(
             "{}",
             style("  Dry run - no files were uploaded. Remove --dry-run to actually ingest.").dim()
         );
-    } else {
-        println!("{}", style("  Files ingested successfully!").green());
         println!();
-        println!("  Next steps:");
-        println!("    1. Run `anti_entropator query` to explore your catalog");
-        println!("    2. Run `anti_entropator duplicates` to find duplicate files");
+        return Ok(());
     }
 
-    println!();
-
-    Ok(())
+    match commit_result {
+        Some(Err(e)) => {
+            println!(
+                "{}",
+                style("  Ingest incomplete: metadata commit failed.").red()
+            );
+            println!("  Objects may have been uploaded but are not registered in the catalog.");
+            println!();
+            Err(e.context("metadata commit failed"))
+        }
+        _ => {
+            println!("{}", style("  Files ingested successfully!").green());
+            println!();
+            println!("  Next steps:");
+            println!("    1. Run `anti_entropator query` to explore your catalog");
+            println!("    2. Run `anti_entropator duplicates` to find duplicate files");
+            println!();
+            Ok(())
+        }
+    }
 }
 
 /// Check lakehouse connectivity
@@ -277,14 +319,14 @@ fn collect_files(path: &Path, args: &IngestArgs) -> Result<Vec<std::path::PathBu
     Ok(files)
 }
 
-/// Process a single file: scan, hash, upload, return enriched FileInfo
+/// Process a single file: scan, hash, upload, return outcome.
 async fn process_file(
     path: &Path,
     root_path: &Path,
     config: &LakehouseConfig,
     operator: Option<&Operator>,
     dry_run: bool,
-) -> Result<Option<FileInfo>> {
+) -> Result<IngestOutcome> {
     // 1. Scan file for initial metadata
     let mut info = scan_file(path).await?;
 
@@ -310,7 +352,7 @@ async fn process_file(
     info.object_uri = Some(object_uri);
 
     if dry_run {
-        return Ok(Some(info));
+        return Ok(IngestOutcome::Uploaded(Box::new(info)));
     }
 
     let op = operator.ok_or_else(|| anyhow::anyhow!("Storage operator not available"))?;
@@ -322,7 +364,7 @@ async fn process_file(
         .context("Failed to check object existence")?;
 
     if exists {
-        return Ok(Some(info));
+        return Ok(IngestOutcome::AlreadyExists);
     }
 
     // 5. Upload file
@@ -336,7 +378,7 @@ async fn process_file(
 
     info.ingested_at = Some(Utc::now());
 
-    Ok(Some(info))
+    Ok(IngestOutcome::Uploaded(Box::new(info)))
 }
 
 /// Compute SHA-256 hash of a file (fallback if scan didn't do it)
@@ -670,5 +712,103 @@ mod tests {
         let hash1 = compute_hash(&path).unwrap();
         let hash2 = compute_hash(&path).unwrap();
         assert_eq!(hash1, hash2);
+    }
+
+    // ── IngestOutcome tally tests ──
+
+    fn make_test_info(name: &str, size: u64) -> FileInfo {
+        use crate::domain::FileCategory;
+        FileInfo {
+            id: uuid::Uuid::new_v4(),
+            source_path: std::path::PathBuf::from(format!("/test/{}", name)),
+            filename: name.to_string(),
+            extension: "txt".to_string(),
+            mime_type: None,
+            category: FileCategory::Document,
+            size_bytes: size,
+            content_hash: None,
+            partial_hash: None,
+            created_at: None,
+            modified_at: None,
+            scanned_at: chrono::Utc::now(),
+            object_uri: None,
+            ingested_at: Some(chrono::Utc::now()),
+            suggested_name: None,
+            name_reason: None,
+            is_duplicate: false,
+            duplicate_of: None,
+            parent_dir: String::new(),
+            group_id: None,
+        }
+    }
+
+    /// Fold outcomes into counts and commit batch (pure, no I/O).
+    fn tally_outcomes(outcomes: Vec<IngestOutcome>) -> (Vec<FileInfo>, u64, u64, u64) {
+        let mut uploaded_files = Vec::new();
+        let mut uploaded_count = 0u64;
+        let mut exists_count = 0u64;
+        let mut total_bytes = 0u64;
+        for outcome in outcomes {
+            match outcome {
+                IngestOutcome::Uploaded(info) => {
+                    uploaded_count += 1;
+                    total_bytes += info.size_bytes;
+                    uploaded_files.push(*info);
+                }
+                IngestOutcome::AlreadyExists => {
+                    exists_count += 1;
+                }
+            }
+        }
+        (uploaded_files, uploaded_count, exists_count, total_bytes)
+    }
+
+    #[test]
+    fn tally_mixed_outcomes() {
+        let outcomes = vec![
+            IngestOutcome::Uploaded(Box::new(make_test_info("a.txt", 100))),
+            IngestOutcome::Uploaded(Box::new(make_test_info("b.txt", 200))),
+            IngestOutcome::AlreadyExists,
+        ];
+        let (files, uploaded, exists, bytes) = tally_outcomes(outcomes);
+        assert_eq!(uploaded, 2);
+        assert_eq!(exists, 1);
+        assert_eq!(files.len(), 2);
+        assert_eq!(bytes, 300);
+    }
+
+    #[test]
+    fn tally_all_exists() {
+        let outcomes = vec![
+            IngestOutcome::AlreadyExists,
+            IngestOutcome::AlreadyExists,
+            IngestOutcome::AlreadyExists,
+        ];
+        let (files, uploaded, exists, _bytes) = tally_outcomes(outcomes);
+        assert_eq!(uploaded, 0);
+        assert_eq!(exists, 3);
+        assert!(files.is_empty());
+    }
+
+    // ── finalize_ingest tests ──
+
+    #[test]
+    fn finalize_commit_success() {
+        let result = finalize_ingest(Some(Ok(())), 3, 1, &[], 1024, false);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn finalize_commit_failure() {
+        let err = anyhow::anyhow!("catalog connection refused");
+        let result = finalize_ingest(Some(Err(err)), 3, 0, &[], 1024, false);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("metadata commit"));
+    }
+
+    #[test]
+    fn finalize_no_commit() {
+        let result = finalize_ingest(None, 0, 5, &[], 0, false);
+        assert!(result.is_ok());
     }
 }
