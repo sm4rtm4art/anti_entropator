@@ -31,7 +31,10 @@ pub async fn resolve_project_id(config: &LakehouseConfig) -> Result<String> {
     if let Some(ref id) = config.project_id {
         return Ok(id.clone());
     }
-    if let Some(id) = load_project_id_from_state() {
+    let id = tokio::task::spawn_blocking(load_project_id_from_state)
+        .await
+        .context("state file load task failed")?;
+    if let Some(id) = id {
         return Ok(id);
     }
     bail!(
@@ -40,22 +43,52 @@ pub async fn resolve_project_id(config: &LakehouseConfig) -> Result<String> {
     )
 }
 
-const STATE_FILE: &str = ".lakehouse_state.json";
+const LEGACY_STATE_FILE: &str = ".lakehouse_state.json";
 
-fn save_project_id_to_state(project_id: &str) -> Result<()> {
+/// Compute the stable state file path using the platform data directory.
+/// Reuses the same ProjectDirs identity as config (`src/config/mod.rs`).
+fn state_file_path() -> Option<std::path::PathBuf> {
+    directories::ProjectDirs::from("com", "anti-entropator", "anti_entropator")
+        .map(|p| p.data_dir().join("lakehouse_state.json"))
+}
+
+/// Save a project ID to the given path (sync, injectable for testing).
+fn save_state(path: &std::path::Path, project_id: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).context("Failed to create state file directory")?;
+    }
     let state = serde_json::json!({ "project_id": project_id });
-    std::fs::write(STATE_FILE, serde_json::to_string_pretty(&state)?)
+    std::fs::write(path, serde_json::to_string_pretty(&state)?)
         .context("Failed to write lakehouse state file")?;
-    tracing::debug!(path = %STATE_FILE, "Saved project ID to state file");
+    tracing::debug!(path = %path.display(), "Saved project ID to state file");
     Ok(())
 }
 
-fn load_project_id_from_state() -> Option<String> {
-    let data = std::fs::read_to_string(STATE_FILE).ok()?;
+/// Load a project ID, trying new_path first, then legacy_path as fallback (sync).
+fn load_state(new_path: &std::path::Path, legacy_path: &std::path::Path) -> Option<String> {
+    load_state_from_path(new_path).or_else(|| load_state_from_path(legacy_path))
+}
+
+fn load_state_from_path(path: &std::path::Path) -> Option<String> {
+    let data = std::fs::read_to_string(path).ok()?;
     let val: serde_json::Value = serde_json::from_str(&data).ok()?;
     val.get("project_id")
         .and_then(|v| v.as_str())
         .map(String::from)
+}
+
+/// Save project ID to the stable platform path (async-safe wrapper).
+fn save_project_id_to_state(project_id: &str) -> Result<()> {
+    let path =
+        state_file_path().context("Could not determine platform data directory for state file")?;
+    save_state(&path, project_id)
+}
+
+/// Load project ID from stable path with legacy CWD fallback (sync, called via spawn_blocking).
+fn load_project_id_from_state() -> Option<String> {
+    let new_path = state_file_path()?;
+    let legacy_path = std::path::Path::new(LEGACY_STATE_FILE);
+    load_state(&new_path, legacy_path)
 }
 
 // ============================================================================
@@ -190,11 +223,10 @@ pub async fn init() -> Result<()> {
 
     // Ensure Lakekeeper project exists (required since Lakekeeper >= 0.11)
     print!("  Creating Lakekeeper project '{}'... ", PROJECT_NAME);
-    let project_id = if let Some(id) = config
-        .project_id
-        .clone()
-        .or_else(load_project_id_from_state)
-    {
+    let loaded_id = tokio::task::spawn_blocking(load_project_id_from_state)
+        .await
+        .context("state file load task failed")?;
+    let project_id = if let Some(id) = config.project_id.clone().or(loaded_id) {
         if verify_project_exists(&config, &id).await {
             println!("{}", style("already exists").yellow());
             id
@@ -224,7 +256,11 @@ pub async fn init() -> Result<()> {
         }
     };
     config.project_id = Some(project_id.clone());
-    if let Err(e) = save_project_id_to_state(&project_id) {
+    let pid = project_id.clone();
+    if let Err(e) = tokio::task::spawn_blocking(move || save_project_id_to_state(&pid))
+        .await
+        .context("state file save task failed")?
+    {
         tracing::warn!(error = %e, "Could not persist project ID to state file");
     }
 
@@ -534,24 +570,27 @@ async fn send_signed_s3(
 
     // Derive signing key
     type HmacSha256 = Hmac<Sha256>;
-    let mut mac =
-        HmacSha256::new_from_slice(format!("AWS4{}", config.s3_secret_key).as_bytes()).unwrap();
+    fn hmac_sha256(key: &[u8]) -> Result<HmacSha256> {
+        HmacSha256::new_from_slice(key).map_err(|e| anyhow::anyhow!("HMAC-SHA256 key error: {}", e))
+    }
+
+    let mut mac = hmac_sha256(format!("AWS4{}", config.s3_secret_key).as_bytes())?;
     mac.update(date_stamp.as_bytes());
     let date_key = mac.finalize().into_bytes();
 
-    let mut mac = HmacSha256::new_from_slice(&date_key).unwrap();
+    let mut mac = hmac_sha256(&date_key)?;
     mac.update(region.as_bytes());
     let region_key = mac.finalize().into_bytes();
 
-    let mut mac = HmacSha256::new_from_slice(&region_key).unwrap();
+    let mut mac = hmac_sha256(&region_key)?;
     mac.update(service.as_bytes());
     let service_key = mac.finalize().into_bytes();
 
-    let mut mac = HmacSha256::new_from_slice(&service_key).unwrap();
+    let mut mac = hmac_sha256(&service_key)?;
     mac.update(b"aws4_request");
     let signing_key = mac.finalize().into_bytes();
 
-    let mut mac = HmacSha256::new_from_slice(&signing_key).unwrap();
+    let mut mac = hmac_sha256(&signing_key)?;
     mac.update(string_to_sign.as_bytes());
     let signature = format!("{:x}", mac.finalize().into_bytes());
 
@@ -750,7 +789,12 @@ async fn create_namespace(config: &LakehouseConfig) -> Result<bool> {
 
     tracing::debug!(url = %check_url, namespace = %NAMESPACE, "Checking namespace existence");
 
-    if let Ok(resp) = client.head(&check_url).send().await {
+    if let Ok(resp) = client
+        .head(&check_url)
+        .header("X-Project-Id", &catalog_config.project_id)
+        .send()
+        .await
+    {
         if resp.status().is_success() {
             tracing::debug!(namespace = %NAMESPACE, "Namespace already exists");
             return Ok(false);
@@ -773,6 +817,7 @@ async fn create_namespace(config: &LakehouseConfig) -> Result<bool> {
 
     let resp = client
         .post(&create_url)
+        .header("X-Project-Id", &catalog_config.project_id)
         .json(&req)
         .send()
         .await
@@ -814,7 +859,12 @@ async fn create_file_catalog_table(config: &LakehouseConfig) -> Result<bool> {
 
     tracing::debug!(url = %check_url, table = %FILE_CATALOG_TABLE, "Checking table existence");
 
-    if let Ok(resp) = client.head(&check_url).send().await {
+    if let Ok(resp) = client
+        .head(&check_url)
+        .header("X-Project-Id", &catalog_config.project_id)
+        .send()
+        .await
+    {
         if resp.status().is_success() {
             tracing::debug!(table = %FILE_CATALOG_TABLE, "Table already exists");
             return Ok(false);
@@ -847,6 +897,7 @@ async fn create_file_catalog_table(config: &LakehouseConfig) -> Result<bool> {
 
     let resp = client
         .post(&create_url)
+        .header("X-Project-Id", &catalog_config.project_id)
         .json(&req)
         .send()
         .await
@@ -867,5 +918,65 @@ async fn create_file_catalog_table(config: &LakehouseConfig) -> Result<bool> {
             tracing::error!(table = %FILE_CATALOG_TABLE, status = %status, body = %body, "Failed to create table");
             bail!("Failed to create table: {} - {}", status, body);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn state_file_path_is_absolute() {
+        let path = state_file_path().expect("ProjectDirs should resolve on test platform");
+        assert!(
+            path.is_absolute(),
+            "state path should be absolute, got: {:?}",
+            path
+        );
+    }
+
+    #[test]
+    fn state_file_path_uses_project_identity() {
+        let path = state_file_path().expect("ProjectDirs should resolve on test platform");
+        let path_str = path.to_string_lossy();
+        assert!(
+            path_str.contains("anti-entropator") || path_str.contains("anti_entropator"),
+            "state path should contain project identity, got: {:?}",
+            path
+        );
+    }
+
+    #[test]
+    fn save_and_load_roundtrip() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("lakehouse_state.json");
+        let legacy = dir.path().join("nonexistent_legacy.json");
+
+        save_state(&path, "test-project-id-123").unwrap();
+        let loaded = load_state(&path, &legacy);
+        assert_eq!(loaded, Some("test-project-id-123".to_string()));
+    }
+
+    #[test]
+    fn load_returns_none_when_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let new_path = dir.path().join("does_not_exist.json");
+        let legacy = dir.path().join("also_missing.json");
+
+        let loaded = load_state(&new_path, &legacy);
+        assert_eq!(loaded, None);
+    }
+
+    #[test]
+    fn load_falls_back_to_legacy_path() {
+        let dir = tempfile::tempdir().unwrap();
+        let new_path = dir.path().join("new_state.json");
+        let legacy_path = dir.path().join("legacy_state.json");
+
+        let state = serde_json::json!({ "project_id": "legacy-id-456" });
+        std::fs::write(&legacy_path, serde_json::to_string_pretty(&state).unwrap()).unwrap();
+
+        let loaded = load_state(&new_path, &legacy_path);
+        assert_eq!(loaded, Some("legacy-id-456".to_string()));
     }
 }

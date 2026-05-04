@@ -70,12 +70,12 @@ anti_entropator init
 This creates:
 
 - The `anti-entropator` bucket in RustFS (S3-compatible storage)
-- A Lakekeeper project (ID persisted to `.lakehouse_state.json`)
+- A Lakekeeper project (ID persisted to the platform data directory)
 - The `anti-entropator` warehouse in Lakekeeper
 - The `anti_entropator` Iceberg namespace
 - The `file_catalog` Iceberg table (with schema for file metadata)
 
-The command is idempotent - run it multiple times safely. The project ID is stored locally in `.lakehouse_state.json` so subsequent commands (ingest, query) reuse the same project.
+The command is idempotent - run it multiple times safely. The project ID is stored in the platform data directory (e.g., `~/Library/Application Support/anti_entropator/` on macOS) so subsequent commands (ingest, query) reuse the same project. A legacy `.lakehouse_state.json` in the working directory is also checked as a fallback.
 
 ### 4. Ingest Files
 
