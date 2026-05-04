@@ -117,11 +117,11 @@ pub struct IngestArgs {
     /// Path to the directory to ingest
     pub path: PathBuf,
 
-    /// Include only files matching these globs
+    /// Include only files whose names match these glob patterns (e.g., *.jpg)
     #[arg(long)]
     pub include: Vec<String>,
 
-    /// Exclude files matching these globs
+    /// Exclude files whose names match these glob patterns (e.g., *.log)
     #[arg(long)]
     pub exclude: Vec<String>,
 

@@ -1,6 +1,6 @@
 ---
 description: Docker, Compose, and CI delivery guardrails for v0.3 stabilization.
-globs: ["Dockerfile", "docker-compose*.yml", ".github/workflows/*.yml", "docs/security/docker-hardening-review.md", "docs/security/deployment-profiles.md", "docs/security/go-public-checklist.md", "docs/ci-cd/blue-green-showcase.md"]
+globs: ["Dockerfile", "Dockerfile.*", "docker-compose*.yml", "compose.yaml", ".dockerignore", ".github/workflows/*.yml", ".github/workflows/*.yaml", "docs/security/docker-hardening-review.md", "docs/security/deployment-profiles.md", "docs/security/go-public-checklist.md", "docs/ci-cd/blue-green-showcase.md"]
 alwaysApply: false
 ---
 
@@ -9,14 +9,22 @@ alwaysApply: false
 Use this rule for local stack, container, workflow, release, and deployment
 documentation changes. Keep v0.3 stability ahead of release expansion.
 
+## Operating Principle
+
+- During v0.3 stabilization, do not weaken Docker, Compose, CI, or delivery
+  controls to make local workflows easier or CI greener.
+- Preserve reproducibility, least privilege, and honest release posture.
+- Migrate touched delivery code toward the standard when the change is local and
+  testable.
+
 ## Activation Policy
 
 - Release-grade container delivery requires explicit activation: multi-arch
   images, blocking vulnerability scans, SBOM/provenance, and release gating.
 - Until those controls are enabled, document the gap and avoid release-grade
   claims.
-- Blue/green remains a showcase simulation/reference pattern until real target
-  infrastructure exists.
+- Blue/green remains a reference simulation until real target infrastructure
+  exists.
 
 ## Dockerfile
 
@@ -27,6 +35,10 @@ documentation changes. Keep v0.3 stability ahead of release expansion.
   condition next to the image tag or in `docs/security/docker-hardening-review.md`.
 - Do not bake secrets into `ENV`, `ARG`, labels, layers, or examples.
 - Keep build changes reproducible on GitHub-hosted runners.
+- Prefer multi-stage builds for release images.
+- Keep runtime images minimal and free of build-only tooling.
+- Use `.dockerignore` when build context size or secret exposure risk grows.
+- Avoid host-local paths, caches, or machine-specific state in image builds.
 
 ## Docker Compose
 
@@ -39,6 +51,9 @@ documentation changes. Keep v0.3 stability ahead of release expansion.
 - Init or migration helper containers, such as `lakekeeper-migrate`, are allowed
   when they are tied to a documented runtime service and do not introduce a new
   system dependency.
+- Prefer healthchecks/readiness checks over fixed sleeps.
+- Keep volumes and test data disposable unless persistence is explicitly documented.
+- Do not expose new host ports without a documented CLI, operator, or health-check need.
 
 ## GitHub Actions
 
@@ -50,6 +65,15 @@ documentation changes. Keep v0.3 stability ahead of release expansion.
 - If workflow files change, run or document `actionlint` / `zizmor` status.
 - Release claims must match the actual release workflow. If release jobs do not
   directly gate on audit, tests, image scan, SBOM, or provenance, say so.
+
+## CI Correctness
+
+- Do not hide failing commands with `|| true`, broad `continue-on-error`, or
+  non-blocking placeholders unless the exception is documented.
+- Do not weaken fmt, clippy, test, audit, coverage, or scan jobs only to make CI pass.
+- CI jobs must fail when the checked behavior fails.
+- Cache misses must still produce correct builds.
+- Workflow changes must preserve reproducibility on GitHub-hosted runners.
 
 ## Supply Chain
 
@@ -63,7 +87,7 @@ documentation changes. Keep v0.3 stability ahead of release expansion.
 ## Documentation
 
 - Docker and deployment docs must distinguish local demo, shared internal, and
-  public showcase profiles.
+  public deployment profiles.
 - Do not call the local compose stack production-ready.
 - Rollback and blue/green docs must say whether they are simulated, manually
   executed, or automated.

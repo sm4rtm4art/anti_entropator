@@ -65,6 +65,18 @@ impl CheckResult {
     }
 }
 
+/// Evaluate doctor check results and return an error if any check failed.
+///
+/// This is the pure decision function: it does not print or perform I/O.
+/// Use it to test doctor outcome logic without requiring Docker or network.
+fn doctor_outcome(results: &[CheckResult]) -> Result<()> {
+    let has_errors = results.iter().any(|r| r.status == CheckStatus::Error);
+    if has_errors {
+        anyhow::bail!("doctor: one or more checks failed");
+    }
+    Ok(())
+}
+
 /// Run all doctor checks
 pub async fn run() -> Result<()> {
     println!();
@@ -105,20 +117,14 @@ pub async fn run() -> Result<()> {
     println!("─── Results ────────────────────────────────────────────────────");
     println!();
 
-    let mut has_errors = false;
-    let mut has_warnings = false;
+    let has_errors = results.iter().any(|r| r.status == CheckStatus::Error);
+    let has_warnings = results.iter().any(|r| r.status == CheckStatus::Warning);
 
     for result in &results {
         let emoji = match result.status {
             CheckStatus::Ok => CHECK,
-            CheckStatus::Warning => {
-                has_warnings = true;
-                WARN
-            }
-            CheckStatus::Error => {
-                has_errors = true;
-                CROSS
-            }
+            CheckStatus::Warning => WARN,
+            CheckStatus::Error => CROSS,
         };
 
         let status_style = match result.status {
@@ -141,7 +147,6 @@ pub async fn run() -> Result<()> {
             "{}",
             style("Some checks failed. Please fix the issues above before proceeding.").red()
         );
-        std::process::exit(1);
     } else if has_warnings {
         println!(
             "{}",
@@ -155,7 +160,7 @@ pub async fn run() -> Result<()> {
         );
     }
 
-    Ok(())
+    doctor_outcome(&results)
 }
 
 /// Check if Docker is running
@@ -397,4 +402,37 @@ async fn check_ports() -> Vec<CheckResult> {
     }
 
     results
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn doctor_outcome_all_ok() {
+        let results = vec![
+            CheckResult::ok("Docker", "running"),
+            CheckResult::ok("RustFS", "reachable"),
+        ];
+        assert!(doctor_outcome(&results).is_ok());
+    }
+
+    #[test]
+    fn doctor_outcome_warning_only() {
+        let results = vec![
+            CheckResult::ok("Docker", "running"),
+            CheckResult::warn("exiftool", "not installed", "brew install exiftool"),
+        ];
+        assert!(doctor_outcome(&results).is_ok());
+    }
+
+    #[test]
+    fn doctor_outcome_has_error() {
+        let results = vec![
+            CheckResult::ok("Docker", "running"),
+            CheckResult::error("RustFS", "cannot connect", "run docker compose up"),
+        ];
+        let err = doctor_outcome(&results).unwrap_err();
+        assert!(err.to_string().contains("failed"));
+    }
 }

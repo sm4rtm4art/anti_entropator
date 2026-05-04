@@ -7,7 +7,6 @@ correctness, clear operator behavior, honest docs, and repeatable evidence over
 feature volume.
 
 Phase: **v0.3 stabilization**.
-Target audience: employer-reviewable public GitHub repository.
 Baseline objective: reach a clean G0/V0 snapshot before implementation work.
 Do not describe planned, placeholder, or partially verified behavior as shipped.
 
@@ -16,8 +15,7 @@ Do not describe planned, placeholder, or partially verified behavior as shipped.
 - Active execution plan: `.local/v0.3-stabilization-plan.md`.
 - Documentation cleanup lane: `.local/v0.3-doc-plan.md`.
 - Release contract: `docs/ROADMAP-v0.3.0.md`.
-- Public-showcase work remains historical context; v0.3 stabilization is the
-  current execution frame.
+- v0.3 stabilization is the current execution frame.
 
 ## Tech Stack
 
@@ -41,6 +39,8 @@ Before implementation starts for a stabilization block:
 
 - Start from current `origin/main` on a dedicated branch.
 - Ensure git status is clean except deliberate guardrail activation changes.
+- Record the G0/V0 snapshot in `.local/v0.3-stabilization-plan.md` unless a
+  block-specific note says otherwise.
 - Record baseline commit SHA, branch, current backlog priorities, and known
   exceptions.
 - Record current coverage percentage and whether it is allowed to regress.
@@ -91,9 +91,10 @@ behavior and exit semantics are implemented and tested.
 
 ```text
 src/
-├── main.rs, cli/        # Entry point + clap definitions
+├── lib.rs, main.rs      # Library exports + binary entry point
+├── cli/                 # clap definitions
 ├── config/, doctor/     # Runtime config, preflight checks
-├── domain/              # Core types and statistics
+├── domain/              # FileInfo, Stats, typed domain values + tests
 ├── ingest/, scan/       # Ingest pipeline, directory scanning, enrichment
 ├── lakehouse/           # Warehouse init, Iceberg schema, writer
 ├── profile/             # Read-only directory profiling
@@ -156,7 +157,7 @@ unverified behavior clearly.
   sync with actual commands.
 - Label security claims as enforced today, required for shared/public
   deployments, or planned.
-- Keep blue/green language as showcase simulation until real infrastructure
+- Keep blue/green language as a reference simulation until real infrastructure
   exists.
 - `.env` is local convenience, not a security boundary.
 

@@ -124,6 +124,7 @@ dependencies = [
  "console",
  "datafusion",
  "directories",
+ "glob",
  "hmac",
  "humansize",
  "iceberg",
