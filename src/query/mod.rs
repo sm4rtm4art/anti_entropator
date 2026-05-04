@@ -64,11 +64,8 @@ pub async fn run(sql: String) -> Result<()> {
 
     ctx.register_catalog("iceberg", Arc::new(catalog_provider));
 
-    // 4. Execute Query
-    let query_sql = sql.replace(
-        "files",
-        &format!("iceberg.{}.{}", NAMESPACE, FILE_CATALOG_TABLE),
-    );
+    // 4. Execute Query (rewrite `FROM files` / `JOIN files` shorthand)
+    let query_sql = rewrite_table_reference(&sql);
     println!("  Executing query: {}", query_sql);
     let df = ctx.sql(&query_sql).await?;
 
@@ -78,6 +75,15 @@ pub async fn run(sql: String) -> Result<()> {
     Ok(())
 }
 
+/// Rewrite the `files` shorthand to the fully qualified Iceberg table name,
+/// but only in table-reference positions (after FROM or JOIN keywords).
+fn rewrite_table_reference(sql: &str) -> String {
+    let re = regex::Regex::new(r"(?i)((?:FROM|JOIN)\s+)files\b").unwrap();
+    let qualified = format!("iceberg.{}.{}", NAMESPACE, FILE_CATALOG_TABLE);
+    re.replace_all(sql, format!("${{1}}{}", qualified))
+        .into_owned()
+}
+
 /// Start an interactive SQL REPL
 pub async fn repl() -> Result<()> {
     println!("Interactive SQL REPL starting...");
@@ -85,4 +91,50 @@ pub async fn repl() -> Result<()> {
     println!("Tip: Try 'SELECT category, count(*) FROM files GROUP BY category'");
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rewrite_from_files() {
+        let result = rewrite_table_reference("SELECT * FROM files");
+        assert_eq!(result, "SELECT * FROM iceberg.anti_entropator.file_catalog");
+    }
+
+    #[test]
+    fn rewrite_join_files() {
+        let result =
+            rewrite_table_reference("SELECT * FROM other JOIN files ON other.id = files.id");
+        assert!(result.contains("JOIN iceberg.anti_entropator.file_catalog ON"));
+    }
+
+    #[test]
+    fn rewrite_preserves_filesize() {
+        let result = rewrite_table_reference("SELECT filesize FROM files LIMIT 10");
+        assert!(result.contains("filesize"));
+        assert!(result.contains("FROM iceberg.anti_entropator.file_catalog"));
+    }
+
+    #[test]
+    fn rewrite_preserves_profiles() {
+        let result = rewrite_table_reference("SELECT * FROM files WHERE category = 'profiles'");
+        assert!(result.contains("'profiles'"));
+        assert!(result.contains("FROM iceberg.anti_entropator.file_catalog"));
+    }
+
+    #[test]
+    fn rewrite_preserves_string_literal() {
+        let result = rewrite_table_reference("SELECT 'files' AS label FROM files");
+        assert!(result.contains("'files'"));
+        assert!(result.contains("FROM iceberg.anti_entropator.file_catalog"));
+    }
+
+    #[test]
+    fn rewrite_no_match() {
+        let input = "SELECT * FROM iceberg.anti_entropator.file_catalog LIMIT 5";
+        let result = rewrite_table_reference(input);
+        assert_eq!(result, input);
+    }
 }
