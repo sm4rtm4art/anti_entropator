@@ -9,10 +9,21 @@ pub use crate::config::LakehouseConfig;
 
 use anyhow::{bail, Context, Result};
 use console::{style, Emoji};
+use iceberg_storage_opendal::OpenDalStorageFactory;
 use schema::{build_file_catalog_schema, FILE_CATALOG_TABLE, NAMESPACE};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
+
+/// Shared S3 storage factory for Iceberg catalog operations.
+/// Used by both writer and query modules.
+pub(crate) fn s3_storage_factory() -> Arc<dyn iceberg::io::StorageFactory> {
+    Arc::new(OpenDalStorageFactory::S3 {
+        configured_scheme: "s3".to_string(),
+        customized_credential_load: None,
+    })
+}
 
 static CHECK: Emoji<'_, '_> = Emoji("✅ ", "[OK] ");
 static CROSS: Emoji<'_, '_> = Emoji("❌ ", "[FAIL] ");

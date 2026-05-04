@@ -331,25 +331,54 @@ fn duplicates_command_shows_not_implemented() -> Result<()> {
 // ==================== Full Flow Tests ====================
 
 #[test]
-#[ignore] // Requires full Docker stack running
+#[ignore] // Requires: docker compose up -d && source .env
 fn ingest_then_query_flow() -> Result<()> {
-    let temp = tempdir()?;
-    std::fs::write(temp.path().join("test.txt"), "hello world")?;
+    // 1. Init (idempotent)
+    cmd()?.arg("init").assert().success();
 
-    // 1. Ingest
+    // 2. Create temp dir with unique marker filenames
+    let temp = tempdir()?;
+    let marker = &uuid::Uuid::new_v4().to_string()[..8];
+    let file_a = format!("s2b_{}_a.txt", marker);
+    let file_b = format!("s2b_{}_b.txt", marker);
+    std::fs::write(temp.path().join(&file_a), b"hello")?;
+    std::fs::write(temp.path().join(&file_b), b"world")?;
+
+    // 3. Ingest -- should upload 2 files
     cmd()?
         .arg("ingest")
         .arg(temp.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("successfully"));
+        .stdout(predicate::str::contains("Uploaded:        2"));
 
-    // 2. Query
+    // 4. Query with marker to isolate this run's rows
+    let query = format!(
+        "SELECT count(*) FROM files WHERE filename LIKE 's2b_{}%'",
+        marker
+    );
     cmd()?
-        .args(["query", "SELECT count(*) FROM files"])
+        .arg("query")
+        .arg(&query)
         .assert()
         .success()
-        .stdout(predicate::str::contains("count"));
+        .stdout(predicate::str::contains("| 2 |"));
+
+    // 5. Re-ingest -- no new uploads (idempotent)
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Uploaded:        0"));
+
+    // 6. Query again -- still exactly 2 rows (no duplicates)
+    cmd()?
+        .arg("query")
+        .arg(&query)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("| 2 |"));
 
     Ok(())
 }
@@ -381,5 +410,63 @@ fn config_flag_with_nonexistent_file_still_works() -> Result<()> {
         .arg(temp.path())
         .assert()
         .success();
+    Ok(())
+}
+
+// ==================== Profile E2E Tests ====================
+
+#[test]
+fn profile_json_exact_counts() -> Result<()> {
+    let dir = tempdir()?;
+    std::fs::write(dir.path().join("a.txt"), b"hello")?; // 5 bytes
+    std::fs::write(dir.path().join("b.txt"), b"world")?; // 5 bytes
+    std::fs::write(dir.path().join("c.jpg"), vec![0u8; 100])?; // 100 bytes
+
+    let output = cmd()?
+        .arg("profile")
+        .arg(dir.path())
+        .arg("--format")
+        .arg("json")
+        .arg("--no-mime")
+        .arg("--no-duplicates")
+        .output()?;
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+
+    assert_eq!(json["file_count"].as_u64(), Some(3));
+    assert_eq!(json["total_bytes"].as_u64(), Some(110));
+    assert_eq!(json["by_extension"][".txt"]["count"].as_u64(), Some(2));
+    assert_eq!(json["by_extension"][".jpg"]["count"].as_u64(), Some(1));
+    assert_eq!(json["by_category"]["document"]["count"].as_u64(), Some(2));
+    assert_eq!(json["by_category"]["image"]["count"].as_u64(), Some(1));
+
+    Ok(())
+}
+
+#[test]
+fn profile_out_flag_creates_files() -> Result<()> {
+    let dir = tempdir()?;
+    std::fs::write(dir.path().join("test.txt"), b"data")?;
+    let out_dir = tempdir()?;
+
+    cmd()?
+        .arg("profile")
+        .arg(dir.path())
+        .arg("--out")
+        .arg(out_dir.path())
+        .arg("--no-mime")
+        .arg("--no-duplicates")
+        .assert()
+        .success();
+
+    assert!(out_dir.path().join("profile.json").exists());
+    assert!(out_dir.path().join("profile.md").exists());
+
+    let json: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(
+        out_dir.path().join("profile.json"),
+    )?)?;
+    assert_eq!(json["file_count"].as_u64(), Some(1));
+
     Ok(())
 }

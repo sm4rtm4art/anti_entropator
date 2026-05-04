@@ -349,3 +349,96 @@ pub async fn scan(
 
     Ok(result)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── get_extension ──
+
+    #[test]
+    fn ext_simple() {
+        assert_eq!(get_extension("photo.jpg"), ".jpg");
+    }
+
+    #[test]
+    fn ext_compound_tar_gz() {
+        assert_eq!(get_extension("archive.tar.gz"), ".tar.gz");
+    }
+
+    #[test]
+    fn ext_none() {
+        assert_eq!(get_extension("Makefile"), "(none)");
+    }
+
+    #[test]
+    fn ext_case_insensitive() {
+        assert_eq!(get_extension("FILE.PDF"), ".pdf");
+    }
+
+    // ── quick_hash ──
+
+    #[test]
+    fn quick_hash_deterministic() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("test.bin");
+        std::fs::write(&path, b"hello world, this is test content").unwrap();
+
+        let h1 = quick_hash(&path, 1024).unwrap();
+        let h2 = quick_hash(&path, 1024).unwrap();
+        assert_eq!(h1, h2);
+    }
+
+    #[test]
+    fn quick_hash_block_limits_read() {
+        use sha2::Digest;
+
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("large.bin");
+        let content = vec![0xABu8; 2048];
+        std::fs::write(&path, &content).unwrap();
+
+        let block_size = 512;
+        let hash_result = quick_hash(&path, block_size).unwrap();
+
+        // Independently compute SHA-256 of exactly the first block_size bytes
+        let mut hasher = Sha256::new();
+        hasher.update(&content[..block_size]);
+        let expected = format!("{:x}", hasher.finalize());
+
+        assert_eq!(hash_result, expected);
+    }
+
+    // ── NamePatterns::check ──
+
+    #[test]
+    fn name_patterns_screenshot() {
+        let patterns = NamePatterns::new().unwrap();
+        let result = patterns.check("Screenshot 2024-01-15 at 14.30.45.png");
+        assert!(result.contains(&"screenshot"));
+    }
+
+    #[test]
+    fn name_patterns_image_generic() {
+        let patterns = NamePatterns::new().unwrap();
+        let result = patterns.check("IMG_20240115_143045.jpg");
+        assert!(result.contains(&"image_generic"));
+    }
+
+    #[test]
+    fn name_patterns_uuid_like() {
+        let patterns = NamePatterns::new().unwrap();
+        let result = patterns.check("550e8400-e29b-41d4-a716-446655440000.pdf");
+        assert!(result.contains(&"uuid_like"));
+    }
+
+    #[test]
+    fn name_patterns_meaningful_name() {
+        let patterns = NamePatterns::new().unwrap();
+        let result = patterns.check("annual-report-2024.pdf");
+        assert!(
+            result.is_empty(),
+            "meaningful name should not match any pattern"
+        );
+    }
+}

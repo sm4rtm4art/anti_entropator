@@ -362,3 +362,65 @@ pub fn generate_markdown_report(result: &ProfileResult, decimal: bool) -> Result
 
     Ok(md)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::stats::{DuplicateEstimate, GroupStats, ProfileResult};
+    use std::collections::HashMap;
+
+    fn make_test_profile_result() -> ProfileResult {
+        let mut by_extension = HashMap::new();
+        let mut txt_stats = GroupStats::new();
+        txt_stats.add(1024, "/test/a.txt");
+        txt_stats.add(1024, "/test/b.txt");
+        txt_stats.add(1024, "/test/c.txt");
+        by_extension.insert(".txt".to_string(), txt_stats);
+
+        ProfileResult {
+            path: "/test/dir".to_string(),
+            file_count: 3,
+            dir_count: 1,
+            symlink_count: 0,
+            total_bytes: 3072,
+            zero_byte_count: 0,
+            by_extension,
+            by_mime: HashMap::new(),
+            by_category: HashMap::new(),
+            largest_files: vec![(1024, "/test/c.txt".to_string())],
+            no_extension_examples: vec![],
+            name_patterns: HashMap::new(),
+            duplicate_estimate: DuplicateEstimate::default(),
+            errors: vec![],
+        }
+    }
+
+    #[test]
+    fn format_bytes_binary() {
+        let result = format_bytes(1536, false);
+        assert!(
+            result.contains("1.5") || result.contains("1,5"),
+            "expected ~1.5 KiB, got: {}",
+            result
+        );
+        assert!(result.contains("KiB"), "expected KiB unit, got: {}", result);
+    }
+
+    #[test]
+    fn format_bytes_decimal() {
+        let result = format_bytes(1500, true);
+        assert!(
+            result.contains("1.5") || result.contains("1,5"),
+            "expected ~1.5 kB, got: {}",
+            result
+        );
+        assert!(result.contains("kB"), "expected kB unit, got: {}", result);
+    }
+
+    #[test]
+    fn markdown_report_snapshot() {
+        let result = make_test_profile_result();
+        let report = generate_markdown_report(&result, false).unwrap();
+        insta::assert_snapshot!(report);
+    }
+}

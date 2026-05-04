@@ -215,3 +215,154 @@ fn sanitize_filename(s: &str) -> String {
         .take(100) // Limit length
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── parse_exif_datetime ──
+
+    #[test]
+    fn parse_exif_valid() {
+        assert_eq!(
+            parse_exif_datetime("2024:01:15 14:30:45"),
+            Some("2024-01-15_14-30-45".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_exif_missing_seconds() {
+        assert_eq!(
+            parse_exif_datetime("2024:01:15 14:30"),
+            Some("2024-01-15_14-30-00".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_exif_empty() {
+        assert_eq!(parse_exif_datetime(""), None);
+    }
+
+    #[test]
+    fn parse_exif_garbage() {
+        assert_eq!(parse_exif_datetime("not a date"), None);
+    }
+
+    #[test]
+    fn parse_exif_non_numeric_date() {
+        assert_eq!(parse_exif_datetime("abcd:ef:gh 12:34:56"), None);
+    }
+
+    #[test]
+    fn parse_exif_non_numeric_time() {
+        // Known weakness: time parts are not validated. Hardening deferred to S4 (triage #12).
+        assert_eq!(
+            parse_exif_datetime("2024:01:15 aa:bb:cc"),
+            Some("2024-01-15_aa-bb-cc".to_string())
+        );
+    }
+
+    // ── parse_iso_datetime ──
+
+    #[test]
+    fn parse_iso_basic() {
+        assert_eq!(
+            parse_iso_datetime("2024-01-15T14:30:45Z"),
+            Some("2024-01-15_14-30-45".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_iso_with_millis() {
+        assert_eq!(
+            parse_iso_datetime("2024-01-15T14:30:45.123456Z"),
+            Some("2024-01-15_14-30-45".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_iso_positive_offset() {
+        assert_eq!(
+            parse_iso_datetime("2024-01-15T14:30:45+02:00"),
+            Some("2024-01-15_14-30-45".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_iso_negative_offset() {
+        // The parser chain: split('.') -> split('Z') -> split('+') -> split('-').
+        // For "14:30:45-05:00": no '.', no 'Z', no '+', split('-') gives "14:30:45".
+        // This happens to produce correct output for this case, but the approach is
+        // fragile for edge cases. Hardening deferred to S4 (triage #12).
+        assert_eq!(
+            parse_iso_datetime("2024-01-15T14:30:45-05:00"),
+            Some("2024-01-15_14-30-45".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_iso_malformed_with_t() {
+        // Known weakness: parser accepts any string containing `T`, no date/time validation.
+        // Hardening deferred to S4 (triage #12).
+        assert_eq!(
+            parse_iso_datetime("not-a-dateThello"),
+            Some("not-a-date_hello".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_iso_no_t() {
+        assert_eq!(parse_iso_datetime("2024-01-15 14:30:45"), None);
+    }
+
+    #[test]
+    fn parse_iso_empty() {
+        assert_eq!(parse_iso_datetime(""), None);
+    }
+
+    // ── is_useless_title ──
+
+    #[test]
+    fn useless_title_untitled() {
+        assert!(is_useless_title("Untitled"));
+    }
+
+    #[test]
+    fn useless_title_document() {
+        assert!(is_useless_title("document"));
+    }
+
+    #[test]
+    fn useless_title_short() {
+        assert!(is_useless_title("ab"));
+    }
+
+    #[test]
+    fn useless_title_numeric() {
+        assert!(is_useless_title("123-456"));
+    }
+
+    #[test]
+    fn useless_title_real() {
+        assert!(!is_useless_title("Annual Report 2024"));
+    }
+
+    // ── sanitize_filename ──
+
+    #[test]
+    fn sanitize_replaces_slashes() {
+        assert_eq!(sanitize_filename("a/b\\c"), "a_b_c");
+    }
+
+    #[test]
+    fn sanitize_limits_length() {
+        let long = "a".repeat(200);
+        let result = sanitize_filename(&long);
+        assert_eq!(result.len(), 100);
+    }
+
+    #[test]
+    fn sanitize_preserves_normal() {
+        assert_eq!(sanitize_filename("photo_2024.jpg"), "photo_2024.jpg");
+    }
+}
