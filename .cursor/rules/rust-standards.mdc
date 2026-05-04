@@ -11,6 +11,8 @@ alwaysApply: false
 During v0.3 stabilization, enforce direction without normalizing legacy debt:
 do not add new violations, and migrate touched code toward the standard when the
 change is local and testable.
+Do not expand stabilization PRs into broad maintainability refactors unless that
+is the block objective.
 
 ## Maintainability Rules
 
@@ -22,7 +24,7 @@ change is local and testable.
 - Make invalid states unrepresentable where practical.
 - Comments should explain invariants, tradeoffs, safety, consistency, or non-obvious behavior.
 - Do not add comments that merely restate the code.
-- Do not add TODO/FIXME without a reason, owner, or tracking reference.
+- Do not add TODO/FIXME breadcrumbs without a reason, owner, or tracking reference.
 
 ## Error Boundaries
 

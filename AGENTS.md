@@ -39,6 +39,8 @@ Before implementation starts for a stabilization block:
 
 - Start from current `origin/main` on a dedicated branch.
 - Ensure git status is clean except deliberate guardrail activation changes.
+- Record the G0/V0 snapshot in `.local/v0.3-stabilization-plan.md` unless a
+  block-specific note says otherwise.
 - Record baseline commit SHA, branch, current backlog priorities, and known
   exceptions.
 - Record current coverage percentage and whether it is allowed to regress.
@@ -89,9 +91,10 @@ behavior and exit semantics are implemented and tested.
 
 ```text
 src/
-├── main.rs, cli/        # Entry point + clap definitions
+├── lib.rs, main.rs      # Library exports + binary entry point
+├── cli/                 # clap definitions
 ├── config/, doctor/     # Runtime config, preflight checks
-├── domain/              # Core types and statistics
+├── domain/              # FileInfo, Stats, typed domain values + tests
 ├── ingest/, scan/       # Ingest pipeline, directory scanning, enrichment
 ├── lakehouse/           # Warehouse init, Iceberg schema, writer
 ├── profile/             # Read-only directory profiling
