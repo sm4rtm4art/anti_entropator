@@ -1,6 +1,6 @@
 ---
 description: Documentation truth and verification standards.
-globs: ["**/*.md"]
+globs: ["README.md", "docs/**/*.md", "SECURITY.md", "CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/*.md"]
 alwaysApply: false
 ---
 
@@ -8,9 +8,16 @@ alwaysApply: false
 
 ## Core Posture
 
-Write for a public technical reviewer evaluating whether this repository is
-credible. Prefer accuracy, reproducibility, and explicit limitations over
-polished claims.
+- Write for a technical reviewer evaluating repository credibility.
+- Prefer accuracy, reproducibility, and explicit limitations over polished claims.
+
+## Change Discipline
+
+- Do not rewrite documentation for style alone unless that is the explicit task.
+- Prefer small, targeted documentation edits over large rewrites.
+- When touching docs, fix nearby stale claims if the correction is local and verifiable.
+- Do not broaden claims beyond what code, workflows, compose files, or security docs support.
+- If code and docs disagree, treat code, workflows, and configuration as the source of truth.
 
 ## Status Accuracy
 
@@ -31,6 +38,8 @@ polished claims.
   `.github/workflows/*`.
 - Docker and deployment claims must match `Dockerfile`, `docker-compose.yml`,
   and `docs/security/*`.
+- Do not claim that tests, scans, audits, coverage, or workflows passed unless
+  they were run or explicitly documented as not run.
 - If behavior is not verified, label it as planned, placeholder, experimental,
   or unknown.
 
@@ -41,7 +50,7 @@ polished claims.
 | "blazing fast", "revolutionary", "enterprise-grade" | Measured facts or omit |
 | "simply", "just", "easily" | Actual steps and assumptions |
 | Vague claims like "robust" or "seamless" | Name the behavior and limitation |
-| "production-ready" | Local-first, showcase, or deployment-profile-specific wording |
+| "production-ready" | Local-first or deployment-profile-specific wording |
 | Planned feature as shipped | Explicit status label |
 | Absolute repo-doc URLs | Relative links |
 
@@ -60,18 +69,20 @@ polished claims.
 - Label controls as `enforced today`, `required for shared/public deployment`,
   or `planned`.
 - `.env` is local convenience, not a security boundary.
+- Do not include secrets, tokens, private endpoints, real credentials, or copied
+  `.env` values.
 - Local compose ports should be described as localhost-bound by default.
-- Blue/green deployment language must remain a showcase simulation/reference
-  pattern unless real infrastructure exists.
+- Blue/green deployment language must remain a reference simulation unless real
+  infrastructure exists.
 - If SBOM, provenance, image scanning, or release gating are disabled or planned,
   state that plainly.
 
 ## Capitalization
 
-Bold the first mention per document for core technologies when editing the
-surrounding text: **Iceberg**, **Lakekeeper**, **DataFusion**, **DataFrame**,
-**OpenDAL**, **RustFS**, **Postgres**.
-Do not create cosmetic-only churn just to enforce this rule.
+- Bold the first mention per document for core technologies when editing nearby text:
+  **Iceberg**, **Lakekeeper**, **DataFusion**, **DataFrame**, **OpenDAL**,
+  **RustFS**, **Postgres**.
+- Do not create cosmetic-only churn just to enforce capitalization.
 
 ## Formatting
 
@@ -112,8 +123,9 @@ We will use [Technology/Pattern].
 - [Links]
 ```
 
-ADRs may preserve historical decisions, but stale commands, schema fields, ports,
-or table names need current-state notes instead of silent drift.
+- ADRs may preserve historical decisions.
+- Add current-state notes for stale commands, schema fields, ports, or table names.
+- Do not silently drift historical ADRs into inaccurate current-state docs.
 
 ## Rust Code in Markdown
 
@@ -121,16 +133,5 @@ Rust examples in docs must be verifiable and follow current Rust standards:
 
 - Avoid `.unwrap()` in examples. Use `?` with `anyhow::Result` where practical.
 - Semantic variable names: `landing_zone` not `foo`.
-- Wrap standalone examples in `async fn main() -> Result<()>`.
-
-```rust
-// ✅
-use anyhow::Result;
-
-#[tokio::main]
-async fn main() -> Result<()> {
-    let landing_zone = std::path::PathBuf::from("/tmp/downloads");
-    // ...
-    Ok(())
-}
-```
+- Wrap standalone async examples in `#[tokio::main] async fn main() -> Result<()>`.
+- Wrap standalone sync examples in `fn main() -> Result<()>` when fallibility is shown.
