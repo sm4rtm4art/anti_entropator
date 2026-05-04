@@ -202,7 +202,14 @@ fn finalize_ingest(
             Err(e.context("metadata commit failed"))
         }
         _ => {
-            println!("{}", style("  Files ingested successfully!").green());
+            if errors.is_empty() {
+                println!("{}", style("  Files ingested successfully!").green());
+            } else {
+                println!(
+                    "{}",
+                    style("  Ingest completed with errors (see above).").yellow()
+                );
+            }
             println!();
             println!("  Next steps:");
             println!("    1. Run `anti_entropator query` to explore your catalog");
