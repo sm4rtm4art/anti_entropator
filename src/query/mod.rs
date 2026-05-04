@@ -4,7 +4,7 @@
 //! Storage access is routed through OpenDAL via `object_store_opendal`.
 
 use crate::lakehouse::schema::{FILE_CATALOG_TABLE, NAMESPACE};
-use crate::lakehouse::LakehouseConfig;
+use crate::lakehouse::{s3_storage_factory, LakehouseConfig};
 use crate::storage;
 use anyhow::{Context, Result};
 use datafusion::prelude::*;
@@ -44,6 +44,7 @@ pub async fn run(sql: String) -> Result<()> {
     props.insert("s3.remote-signing-enabled".to_string(), "false".to_string());
 
     let catalog: RestCatalog = RestCatalogBuilder::default()
+        .with_storage_factory(s3_storage_factory())
         .load("anti_entropator", props)
         .await
         .context("Failed to build RestCatalog")?;

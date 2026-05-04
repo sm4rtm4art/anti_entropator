@@ -4,7 +4,7 @@
 
 use crate::domain::FileInfo;
 use crate::lakehouse::schema::{build_file_catalog_schema, FILE_CATALOG_TABLE, NAMESPACE};
-use crate::lakehouse::{get_warehouse_prefix, LakehouseConfig};
+use crate::lakehouse::{get_warehouse_prefix, s3_storage_factory, LakehouseConfig};
 use anyhow::{Context, Result};
 use arrow::array::{
     ArrayRef, BooleanArray, FixedSizeBinaryBuilder, Int64Array, StringArray,
@@ -21,7 +21,6 @@ use iceberg::writer::file_writer::location_generator::{
 use iceberg::writer::file_writer::{FileWriter, FileWriterBuilder, ParquetWriterBuilder};
 use iceberg::{Catalog, CatalogBuilder, TableIdent};
 use iceberg_catalog_rest::{RestCatalog, RestCatalogBuilder};
-use iceberg_storage_opendal::OpenDalStorageFactory;
 use parquet::file::properties::WriterProperties;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -57,13 +56,6 @@ pub async fn commit_files(files: Vec<FileInfo>, config: &LakehouseConfig) -> Res
 }
 
 // ==================== Helper Functions ====================
-
-fn s3_storage_factory() -> Arc<dyn iceberg::io::StorageFactory> {
-    Arc::new(OpenDalStorageFactory::S3 {
-        configured_scheme: "s3".to_string(),
-        customized_credential_load: None,
-    })
-}
 
 /// Initialize the RestCatalog with S3 credentials
 ///

@@ -331,25 +331,54 @@ fn duplicates_command_shows_not_implemented() -> Result<()> {
 // ==================== Full Flow Tests ====================
 
 #[test]
-#[ignore] // Requires full Docker stack running
+#[ignore] // Requires: docker compose up -d && source .env
 fn ingest_then_query_flow() -> Result<()> {
-    let temp = tempdir()?;
-    std::fs::write(temp.path().join("test.txt"), "hello world")?;
+    // 1. Init (idempotent)
+    cmd()?.arg("init").assert().success();
 
-    // 1. Ingest
+    // 2. Create temp dir with unique marker filenames
+    let temp = tempdir()?;
+    let marker = &uuid::Uuid::new_v4().to_string()[..8];
+    let file_a = format!("s2b_{}_a.txt", marker);
+    let file_b = format!("s2b_{}_b.txt", marker);
+    std::fs::write(temp.path().join(&file_a), b"hello")?;
+    std::fs::write(temp.path().join(&file_b), b"world")?;
+
+    // 3. Ingest -- should upload 2 files
     cmd()?
         .arg("ingest")
         .arg(temp.path())
         .assert()
         .success()
-        .stdout(predicate::str::contains("successfully"));
+        .stdout(predicate::str::contains("Uploaded:        2"));
 
-    // 2. Query
+    // 4. Query with marker to isolate this run's rows
+    let query = format!(
+        "SELECT count(*) FROM files WHERE filename LIKE 's2b_{}%'",
+        marker
+    );
     cmd()?
-        .args(["query", "SELECT count(*) FROM files"])
+        .arg("query")
+        .arg(&query)
         .assert()
         .success()
-        .stdout(predicate::str::contains("count"));
+        .stdout(predicate::str::contains("2"));
+
+    // 5. Re-ingest -- no new uploads (idempotent)
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Uploaded:        0"));
+
+    // 6. Query again -- still exactly 2 rows (no duplicates)
+    cmd()?
+        .arg("query")
+        .arg(&query)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("2"));
 
     Ok(())
 }
