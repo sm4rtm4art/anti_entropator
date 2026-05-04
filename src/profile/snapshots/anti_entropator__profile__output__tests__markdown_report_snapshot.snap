@@ -1,0 +1,33 @@
+---
+source: src/profile/output.rs
+assertion_line: 424
+expression: report
+---
+# Anti-Entropator Swamp Profile
+
+**Path:** `/test/dir`
+
+| Metric | Value |
+|--------|-------|
+| Files | 3 |
+| Directories | 1 |
+| Symlinks | 0 |
+| Total Size | 3 KiB |
+| Zero-byte Files | 0 |
+| Errors | 0 |
+
+## By Extension (top 25)
+
+| Extension | Count | Total | Avg | Max |
+|-----------|-------|-------|-----|-----|
+| .txt | 3 | 3 KiB | 1 KiB | 1 KiB |
+
+## Duplicate Estimate
+
+- **Size-candidate groups:** 0
+- **Confirmed groups:** 0
+- **Estimated reclaimable:** 0 B
+
+## Largest Files
+
+- `/test/c.txt` (1 KiB)
