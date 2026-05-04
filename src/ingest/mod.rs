@@ -192,6 +192,22 @@ fn collect_files(path: &Path, args: &IngestArgs) -> Result<Vec<std::path::PathBu
     let mut files = Vec::new();
     let mut type_filter: Option<HashSet<String>> = None;
 
+    // Parse glob patterns upfront (fail early on invalid syntax)
+    let exclude_patterns: Vec<glob::Pattern> = args
+        .exclude
+        .iter()
+        .map(|p| {
+            glob::Pattern::new(p).with_context(|| format!("invalid exclude glob pattern: '{}'", p))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let include_patterns: Vec<glob::Pattern> = args
+        .include
+        .iter()
+        .map(|p| {
+            glob::Pattern::new(p).with_context(|| format!("invalid include glob pattern: '{}'", p))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
     // Parse type filter
     if !args.types.is_empty() {
         type_filter = Some(args.types.iter().map(|t| t.to_lowercase()).collect());
@@ -208,29 +224,21 @@ fn collect_files(path: &Path, args: &IngestArgs) -> Result<Vec<std::path::PathBu
         }
 
         let file_path = entry.path();
+        let filename = file_path
+            .file_name()
+            .map(|n| n.to_string_lossy())
+            .unwrap_or_default();
 
-        // Apply exclude patterns
-        if !args.exclude.is_empty() {
-            let path_str = file_path.to_string_lossy();
-            if args
-                .exclude
-                .iter()
-                .any(|pattern| path_str.contains(pattern))
-            {
-                continue;
-            }
+        // Apply exclude patterns (match against filename)
+        if exclude_patterns.iter().any(|pat| pat.matches(&filename)) {
+            continue;
         }
 
-        // Apply include patterns (if specified)
-        if !args.include.is_empty() {
-            let path_str = file_path.to_string_lossy();
-            if !args
-                .include
-                .iter()
-                .any(|pattern| path_str.contains(pattern))
-            {
-                continue;
-            }
+        // Apply include patterns (match against filename)
+        if !include_patterns.is_empty()
+            && !include_patterns.iter().any(|pat| pat.matches(&filename))
+        {
+            continue;
         }
 
         // Apply type filter
@@ -474,7 +482,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         make_test_tree(dir.path());
         let mut args = default_args(dir.path().to_path_buf());
-        args.exclude = vec![".log".to_string()];
+        args.exclude = vec!["*.log".to_string()];
 
         let files = collect_files(dir.path(), &args).unwrap();
         assert_eq!(files.len(), 4);
@@ -486,7 +494,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         make_test_tree(dir.path());
         let mut args = default_args(dir.path().to_path_buf());
-        args.include = vec![".txt".to_string()];
+        args.include = vec!["*.txt".to_string()];
 
         let files = collect_files(dir.path(), &args).unwrap();
         assert_eq!(files.len(), 1);
@@ -554,12 +562,73 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         make_test_tree(dir.path());
         let mut args = default_args(dir.path().to_path_buf());
-        args.exclude = vec!["subdir".to_string()];
+        args.exclude = vec!["*.rs".to_string()];
         args.limit = Some(3);
 
         let files = collect_files(dir.path(), &args).unwrap();
         assert!(files.len() <= 3);
-        assert!(!files.iter().any(|f| f.to_string_lossy().contains("subdir")));
+        assert!(!files.iter().any(|f| f.to_string_lossy().ends_with(".rs")));
+    }
+
+    #[test]
+    fn collect_files_include_glob_star() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.include = vec!["*.jpg".to_string()];
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].to_string_lossy().contains("photo.jpg"));
+    }
+
+    #[test]
+    fn collect_files_exclude_glob_star() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.exclude = vec!["*.rs".to_string()];
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert_eq!(files.len(), 4);
+        assert!(!files.iter().any(|f| f.to_string_lossy().ends_with(".rs")));
+    }
+
+    #[test]
+    fn collect_files_include_matches_nested_filename() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.include = vec!["*.rs".to_string()];
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert_eq!(files.len(), 1);
+        assert!(files[0].to_string_lossy().contains("nested.rs"));
+    }
+
+    #[test]
+    fn collect_files_glob_does_not_substring_match() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.include = vec!["files".to_string()];
+
+        let files = collect_files(dir.path(), &args).unwrap();
+        assert!(
+            files.is_empty(),
+            "bare word should not substring-match filenames"
+        );
+    }
+
+    #[test]
+    fn collect_files_invalid_glob_returns_error() {
+        let dir = tempfile::tempdir().unwrap();
+        make_test_tree(dir.path());
+        let mut args = default_args(dir.path().to_path_buf());
+        args.include = vec!["[invalid".to_string()];
+
+        let result = collect_files(dir.path(), &args);
+        assert!(result.is_err());
     }
 
     // ── compute_hash ──
