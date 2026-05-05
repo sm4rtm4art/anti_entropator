@@ -17,11 +17,26 @@ updates:
           - "datafusion"
           - "arrow"
           - "parquet"
+          - "iceberg-datafusion"
       iceberg-core:
         patterns:
           - "iceberg"
           - "iceberg-catalog-rest"
           - "iceberg-storage-opendal"
+    ignore:
+      # Deferred until an aligned Iceberg/DataFusion line is available.
+      - dependency-name: "datafusion"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "arrow"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "parquet"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "iceberg-datafusion"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: "github-actions"
     directory: "/"
