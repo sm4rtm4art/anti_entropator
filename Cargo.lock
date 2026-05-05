@@ -134,14 +134,14 @@ dependencies = [
  "indicatif",
  "infer",
  "insta",
- "object_store",
+ "object_store 0.12.5",
  "object_store_opendal",
  "once_cell",
- "opendal",
+ "opendal 0.55.0",
  "parquet",
  "predicates",
  "regex",
- "reqwest",
+ "reqwest 0.12.28",
  "rustyline",
  "serde",
  "serde_json",
@@ -1143,7 +1143,7 @@ dependencies = [
  "itertools 0.14.0",
  "liblzma",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parking_lot",
  "parquet",
  "rand 0.9.4",
@@ -1176,7 +1176,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parking_lot",
  "tokio",
 ]
@@ -1201,7 +1201,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "log",
- "object_store",
+ "object_store 0.12.5",
 ]
 
 [[package]]
@@ -1219,7 +1219,7 @@ dependencies = [
  "indexmap 2.14.0",
  "libc",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parquet",
  "paste",
  "recursive",
@@ -1266,7 +1266,7 @@ dependencies = [
  "itertools 0.14.0",
  "liblzma",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "rand 0.9.4",
  "tokio",
  "tokio-util",
@@ -1294,7 +1294,7 @@ dependencies = [
  "datafusion-session",
  "futures",
  "itertools 0.14.0",
- "object_store",
+ "object_store 0.12.5",
  "tokio",
 ]
 
@@ -1316,7 +1316,7 @@ dependencies = [
  "datafusion-physical-plan",
  "datafusion-session",
  "futures",
- "object_store",
+ "object_store 0.12.5",
  "regex",
  "tokio",
 ]
@@ -1339,7 +1339,7 @@ dependencies = [
  "datafusion-physical-plan",
  "datafusion-session",
  "futures",
- "object_store",
+ "object_store 0.12.5",
  "tokio",
 ]
 
@@ -1367,7 +1367,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parking_lot",
  "parquet",
  "tokio",
@@ -1393,7 +1393,7 @@ dependencies = [
  "datafusion-expr",
  "futures",
  "log",
- "object_store",
+ "object_store 0.12.5",
  "parking_lot",
  "rand 0.9.4",
  "tempfile",
@@ -2454,7 +2454,7 @@ dependencies = [
  "ordered-float 4.6.0",
  "parquet",
  "rand 0.8.6",
- "reqwest",
+ "reqwest 0.12.28",
  "roaring",
  "serde",
  "serde_bytes",
@@ -2482,7 +2482,7 @@ dependencies = [
  "http",
  "iceberg",
  "itertools 0.13.0",
- "reqwest",
+ "reqwest 0.12.28",
  "serde",
  "serde_derive",
  "serde_json",
@@ -2520,9 +2520,9 @@ dependencies = [
  "bytes",
  "cfg-if",
  "iceberg",
- "opendal",
+ "opendal 0.55.0",
  "reqsign",
- "reqwest",
+ "reqwest 0.12.28",
  "serde",
  "typetag",
  "url",
@@ -2769,10 +2769,12 @@ checksum = "f00b5dbd620d61dfdcb6007c9c1f6054ebd75319f163d886a9055cec1155073d"
 dependencies = [
  "jiff-static",
  "jiff-tzdb-platform",
+ "js-sys",
  "log",
  "portable-atomic",
  "portable-atomic-util",
  "serde_core",
+ "wasm-bindgen",
  "windows-sys 0.61.2",
 ]
 
@@ -3008,6 +3010,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mea"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6747f54621d156e1b47eb6b25f39a941b9fc347f98f67d25d8881ff99e8ed832"
+dependencies = [
+ "slab",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3175,17 +3186,44 @@ dependencies = [
 ]
 
 [[package]]
-name = "object_store_opendal"
-version = "0.55.0"
+name = "object_store"
+version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "113ab0769e972eee585e57407b98de08bda5354fa28e8ba4d89038d6cb6a8991"
+checksum = "622acbc9100d3c10e2ee15804b0caa40e55c933d5aa53814cd520805b7958a49"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "chrono",
+ "futures-channel",
+ "futures-core",
+ "futures-util",
+ "http",
+ "humantime",
+ "itertools 0.14.0",
+ "parking_lot",
+ "percent-encoding",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "walkdir",
+ "wasm-bindgen-futures",
+ "web-time",
+]
+
+[[package]]
+name = "object_store_opendal"
+version = "0.56.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08298874eee5935c95bcaa393148834f9c53d904461ca15584a041d8a1c907c2"
 dependencies = [
  "async-trait",
  "bytes",
  "chrono",
  "futures",
- "object_store",
- "opendal",
+ "mea",
+ "object_store 0.13.2",
+ "opendal 0.56.0",
  "pin-project",
  "tokio",
 ]
@@ -3223,12 +3261,49 @@ dependencies = [
  "percent-encoding",
  "quick-xml 0.38.4",
  "reqsign",
- "reqwest",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "tokio",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "opendal"
+version = "0.56.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "97b31d3d8e99a85d83b73ec26647f5607b80578ed9375810b6e44ffa3590a236"
+dependencies = [
+ "opendal-core",
+]
+
+[[package]]
+name = "opendal-core"
+version = "0.56.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1849dd2687e173e776d3af5fce1ba3ae47b9dd37a09d1c4deba850ef45fe00ca"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bytes",
+ "futures",
+ "http",
+ "http-body",
+ "jiff",
+ "log",
+ "md-5",
+ "mea",
+ "percent-encoding",
+ "quick-xml 0.38.4",
+ "reqsign-core",
+ "reqwest 0.13.3",
+ "serde",
+ "serde_json",
+ "tokio",
+ "url",
+ "uuid",
+ "web-time",
 ]
 
 [[package]]
@@ -3320,7 +3395,7 @@ dependencies = [
  "num-bigint",
  "num-integer",
  "num-traits",
- "object_store",
+ "object_store 0.12.5",
  "paste",
  "seq-macro",
  "simdutf8",
@@ -3789,13 +3864,35 @@ dependencies = [
  "percent-encoding",
  "quick-xml 0.37.5",
  "rand 0.8.6",
- "reqwest",
+ "reqwest 0.12.28",
  "rust-ini",
  "serde",
  "serde_json",
  "sha1",
  "sha2",
  "tokio",
+]
+
+[[package]]
+name = "reqsign-core"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b10302cf0a7d7e7352ba211fc92c3c5bebf1286153e49cc5aa87348078a8e102"
+dependencies = [
+ "anyhow",
+ "base64",
+ "bytes",
+ "form_urlencoded",
+ "futures",
+ "hex",
+ "hmac",
+ "http",
+ "jiff",
+ "log",
+ "percent-encoding",
+ "sha1",
+ "sha2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3834,9 +3931,41 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams",
+ "wasm-streams 0.4.2",
  "web-sys",
  "webpki-roots",
+]
+
+[[package]]
+name = "reqwest"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62e0021ea2c22aed41653bc7e1419abb2c97e038ff2c33d0e1309e49a97deec0"
+dependencies = [
+ "base64",
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "js-sys",
+ "log",
+ "percent-encoding",
+ "pin-project-lite",
+ "sync_wrapper",
+ "tokio",
+ "tokio-util",
+ "tower",
+ "tower-http",
+ "tower-service",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-streams 0.5.0",
+ "web-sys",
 ]
 
 [[package]]
@@ -5029,6 +5158,19 @@ name = "wasm-streams"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "15053d8d85c7eccdbefef60f06769760a563c7f0a9d6902a13d35c7800b0ad65"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "wasm-streams"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9d1ec4f6517c9e11ae630e200b2b65d193279042e28edd4a2cda233e46670bbb"
 dependencies = [
  "futures-util",
  "js-sys",
