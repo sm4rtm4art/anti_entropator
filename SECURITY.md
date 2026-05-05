@@ -46,7 +46,11 @@ Enforced today:
 - Local compose ports bind to `127.0.0.1`.
 - Compose requires critical secret variables (`${VAR:?}`).
 - Dependency vulnerability checks run via `cargo audit` in CI.
+
+Implemented (pending test coverage):
+
 - External tool subprocesses have bounded execution (30s timeout, kill-on-drop).
+  Implementation reviewed; timeout behavior test pending.
 
 Before public/shared deployment:
 

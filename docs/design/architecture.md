@@ -151,12 +151,28 @@ Benefits:
 
 ## Configuration
 
-Configuration is loaded from (in order):
+The CLI defines a `--config` flag and `ANTI_ENTROPATOR_CONFIG` env var, and the
+config module supports loading from TOML files. However, **the binary does not
+currently wire config file loading into command execution.** Commands use
+`LakehouseConfig::default()` which reads environment variables directly.
 
-1. `--config` CLI flag
+Config file loading paths (defined in `src/config/mod.rs`, not yet active):
+
+1. `--config` CLI flag (parsed, not passed to commands)
 2. `ANTI_ENTROPATOR_CONFIG` environment variable
 3. `./anti_entropator.toml`
-4. `~/.config/anti_entropator/config.toml`
+4. Platform config directory (e.g., `~/.config/anti_entropator/` on Linux,
+   `~/Library/Application Support/` on macOS)
+
+Implementation of config file wiring is tracked as S4 scope (triage #9).
+
+## State
+
+The Lakekeeper project ID is persisted to the platform data directory
+(`~/.local/share/anti_entropator/lakehouse_state.json` on Linux,
+`~/Library/Application Support/` on macOS). A legacy fallback reads
+`.lakehouse_state.json` from the working directory if the platform path
+does not exist.
 
 ## Error Handling
 

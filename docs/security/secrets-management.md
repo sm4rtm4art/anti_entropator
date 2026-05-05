@@ -34,7 +34,9 @@ Requirements already enforced by this repo:
 
 - `.env` is ignored by git.
 - `docker-compose.yml` requires critical secret variables.
-- Rust runtime validates missing S3 credentials and fails fast.
+- S3-touching commands (`init`, `ingest`) validate required credentials before
+  use and fail fast if missing. Other commands (e.g., `profile`, `doctor`) do
+  not require S3 credentials.
 
 ## Pattern B: Simple Production-Like (Single Host)
 
@@ -100,10 +102,13 @@ Then consume with secret mounts in Dockerfile build steps (not copied to final i
 Before go-live or visibility change:
 
 1. `git ls-files .env` returns nothing.
-2. Secret scanning passes (history + current tree).
+2. Secret scanning passes (history + current tree) -- run locally via gitleaks
+   or equivalent. GitHub secret scanning enabled at repo level when available
+   (requires public repo or Advanced Security).
 3. `docker compose config` succeeds only when required secrets are set.
 4. `cargo test --all-features` passes.
-5. Security workflow (`cargo audit`) passes in CI.
+5. Dependency audit (`cargo audit`) passes in CI via `security.yml`.
+   Note: this is dependency vulnerability scanning, not secret scanning.
 
 ## Common Pitfalls
 
@@ -117,6 +122,7 @@ Before go-live or visibility change:
 - Keep `.env` for local only.
 - Use `env.example` placeholders only (no real values).
 - Use secret-manager-backed runtime injection for any shared deployment.
-- Keep this repo private until secret scanning and rotation are complete.
+- Before making the repo public, complete the go-public security checklist
+  (secret scan, GitHub settings, CI log review).
 
 For deployment-specific control expectations, see [Deployment Security Profiles](deployment-profiles.md).

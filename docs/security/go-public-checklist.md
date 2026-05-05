@@ -56,7 +56,8 @@ Use it in order, and treat each section as a small, testable milestone.
 ## 4) Runtime Safety
 
 - [x] Add timeouts for `exiftool`, `ffprobe`, and `pdfinfo` subprocess execution.
-  Added 30s timeout with `kill_on_drop(true)` on all three tools (2026-05-05).
+  Added 30s timeout with `kill_on_drop(true)` via spawn/wait_with_output pattern
+  (2026-05-05). Timeout behavior test coverage pending.
 - [x] Add clear handling for tool hangs and non-zero exits (with bounded retries).
   Timeout returns `None` (graceful skip). Non-zero exits already return `None`.
   No retries -- a single attempt with timeout is sufficient for metadata enrichment.

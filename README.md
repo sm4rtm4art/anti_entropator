@@ -15,7 +15,7 @@ Your downloads folder is a data swamp. This project turns it into a lakehouse by
 
 - **Cataloging** every file with rich metadata (type, size, hash, MIME)
 - **Detecting duplicates** via content hashing
-- **Organizing** files by category with safe, reversible operations
+- **Organizing** files by category through metadata-driven workflows
 - **Querying** your catalog with SQL
 
 ## Architecture
@@ -62,6 +62,9 @@ flowchart LR
     DF -->|"read / write"| IO
     ICE -->|manifests| IO
 ```
+
+> **Note:** The `--engine` switch and `dataflow-rs` orchestration are targeted for v0.3.
+> Current implementation uses procedural execution only. SQL REPL is a placeholder.
 
 ## Quick Start
 
