@@ -3,22 +3,42 @@
 //! Wrappers around ffprobe, exiftool, and pdfinfo to extract metadata.
 
 use std::path::Path;
+use std::process::Output;
+use std::time::Duration;
 use tokio::process::Command;
+
+/// Timeout for external tool subprocess execution.
+/// Prevents hangs on malformed files.
+const TOOL_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Run a command with a timeout and kill-on-drop guarantee.
+/// Returns `None` if the command fails to spawn, times out, or exits non-zero.
+async fn run_tool(mut cmd: Command) -> Option<Output> {
+    let child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()
+        .ok()?;
+    let output = tokio::time::timeout(TOOL_TIMEOUT, child.wait_with_output())
+        .await
+        .ok()?
+        .ok()?;
+    if output.status.success() {
+        Some(output)
+    } else {
+        None
+    }
+}
 
 /// Extract datetime from image EXIF using exiftool
 pub async fn exiftool_datetime(path: &Path) -> Option<(String, String)> {
-    let output = Command::new("exiftool")
-        .arg("-DateTimeOriginal")
+    let mut cmd = Command::new("exiftool");
+    cmd.arg("-DateTimeOriginal")
         .arg("-CreateDate")
         .arg("-s3")
-        .arg(path)
-        .output()
-        .await
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
+        .arg(path);
+    let output = run_tool(cmd).await?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -48,21 +68,15 @@ pub async fn exiftool_datetime(path: &Path) -> Option<(String, String)> {
 
 /// Extract datetime from video/audio using ffprobe
 pub async fn ffprobe_datetime(path: &Path) -> Option<(String, String)> {
-    let output = Command::new("ffprobe")
-        .arg("-v")
+    let mut cmd = Command::new("ffprobe");
+    cmd.arg("-v")
         .arg("quiet")
         .arg("-print_format")
         .arg("json")
         .arg("-show_entries")
         .arg("format_tags=creation_time")
-        .arg(path)
-        .output()
-        .await
-        .ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
+        .arg(path);
+    let output = run_tool(cmd).await?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -94,11 +108,9 @@ pub async fn ffprobe_datetime(path: &Path) -> Option<(String, String)> {
 
 /// Extract title from PDF using pdfinfo
 pub async fn pdfinfo_title(path: &Path) -> Option<(String, String)> {
-    let output = Command::new("pdfinfo").arg(path).output().await.ok()?;
-
-    if !output.status.success() {
-        return None;
-    }
+    let mut cmd = Command::new("pdfinfo");
+    cmd.arg(path);
+    let output = run_tool(cmd).await?;
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
@@ -364,5 +376,29 @@ mod tests {
     #[test]
     fn sanitize_preserves_normal() {
         assert_eq!(sanitize_filename("photo_2024.jpg"), "photo_2024.jpg");
+    }
+
+    // ── run_tool ──
+
+    #[tokio::test]
+    async fn run_tool_missing_command_returns_none() {
+        let cmd = Command::new("nonexistent_tool_xyz_12345");
+        assert!(run_tool(cmd).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn run_tool_nonzero_exit_returns_none() {
+        let mut cmd = Command::new("sh");
+        cmd.arg("-c").arg("exit 1");
+        assert!(run_tool(cmd).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn run_tool_success_returns_output() {
+        let mut cmd = Command::new("echo");
+        cmd.arg("hello");
+        let output = run_tool(cmd).await;
+        assert!(output.is_some());
+        assert!(String::from_utf8_lossy(&output.unwrap().stdout).contains("hello"));
     }
 }

@@ -13,7 +13,8 @@ Scope:
 - Services are bound to `127.0.0.1` in local compose.
 - Runtime container runs as non-root user.
 - Sensitive compose values are required via environment variables.
-- CI and release jobs publish images through GitHub Actions with scoped permissions.
+- CI publishes container images on main-branch push; release workflow publishes
+  on version tags. Both use GitHub Actions with scoped `packages: write` permissions.
 
 ## Findings and Follow-ups
 

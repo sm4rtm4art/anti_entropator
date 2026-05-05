@@ -29,7 +29,9 @@ Required controls:
 - Inject secrets at runtime from a secret manager or secured runner environment.
 - Restrict network exposure to the minimal required entry points.
 - Enforce CI checks (`fmt`, `clippy`, `test`, `audit`) before deployment.
-- Enable dependency and secret scanning in repository settings.
+- Enable dependency scanning (`cargo audit` in CI) and GitHub secret
+  scanning/push protection when available (requires public repo or Advanced
+  Security license).
 
 Recommended controls:
 - Add image vulnerability scanning in CI.
