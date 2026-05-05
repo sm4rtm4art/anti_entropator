@@ -24,6 +24,20 @@ updates:
           - "iceberg-catalog-rest"
           - "iceberg-storage-opendal"
     ignore:
+      # Deferred until DataFusion line can consume object_store/opendal major updates.
+      - dependency-name: "opendal"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "object_store_opendal"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "object_store"
+        update-types:
+          - "version-update:semver-major"
+      # Deferred until digest/hmac stack is upgraded together.
+      - dependency-name: "sha2"
+        update-types:
+          - "version-update:semver-major"
       # Deferred until an aligned Iceberg/DataFusion line is available.
       - dependency-name: "datafusion"
         update-types:
