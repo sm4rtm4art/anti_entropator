@@ -4,12 +4,60 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
+      day: "sunday"
     open-pull-requests-limit: 10
+    groups:
+      opendal-stack:
+        patterns:
+          - "opendal"
+          - "object_store_opendal"
+          - "object_store"
+      datafusion-stack:
+        patterns:
+          - "datafusion"
+          - "arrow"
+          - "parquet"
+          - "iceberg-datafusion"
+      iceberg-core:
+        patterns:
+          - "iceberg"
+          - "iceberg-catalog-rest"
+          - "iceberg-storage-opendal"
+    ignore:
+      # Deferred until an aligned Iceberg/DataFusion line is available.
+      - dependency-name: "datafusion"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "arrow"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "parquet"
+        update-types:
+          - "version-update:semver-major"
+      - dependency-name: "iceberg-datafusion"
+        update-types:
+          - "version-update:semver-major"
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-      day: "monday"
+      day: "sunday"
     open-pull-requests-limit: 10
+    groups:
+      ci-core-actions:
+        patterns:
+          - "actions/checkout"
+          - "actions/cache"
+          - "actions/upload-artifact"
+          - "actions/download-artifact"
+          - "codecov/codecov-action"
+          - "dtolnay/rust-toolchain"
+          - "taiki-e/install-action"
+          - "softprops/action-gh-release"
+      ci-docker-actions:
+        patterns:
+          - "docker/setup-buildx-action"
+          - "docker/login-action"
+          - "docker/metadata-action"
+          - "docker/build-push-action"
