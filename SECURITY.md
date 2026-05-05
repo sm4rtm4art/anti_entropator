@@ -18,7 +18,7 @@ Please do not open a public issue for potential vulnerabilities.
 
 Use one of these channels instead:
 
-1. GitHub private vulnerability reporting (preferred):
+1. GitHub private vulnerability reporting (preferred, if available):
    - `https://github.com/sm4rtm4art/anti_entropator/security/advisories/new`
 2. If private reporting is unavailable, open an issue with minimal details and request a private follow-up.
 
@@ -34,7 +34,28 @@ Include:
 - Keep all service ports local-only unless intentionally exposing them.
 - Use non-default credentials and strong encryption keys in `.env`.
 - Do not commit secrets (`.env`, tokens, credentials, private keys).
-- Enable dependency and secret scanning in CI before making the repository public.
+- Do not expose secrets through workflow logs, artifacts, or release assets.
+- Enable dependency checks in CI and secret scanning/push protection before
+  making the repository public.
+
+## Current Security Controls
+
+Enforced today:
+
+- `.env` and `.env.*` are git-ignored.
+- Local compose ports bind to `127.0.0.1`.
+- Compose requires critical secret variables (`${VAR:?}`).
+- Dependency vulnerability checks run via `cargo audit` in CI.
+- External tool subprocesses have bounded execution (30s timeout, kill-on-drop).
+
+Before public/shared deployment:
+
+- Run current-tree and full-history secret scanning (gitleaks or equivalent).
+- Review failed CI logs, post-job cleanup output, caches, artifacts, and
+  release assets for accidental disclosure.
+- Enable GitHub secret scanning and push protection when available.
+- Use a non-`allowall` Lakekeeper authorization backend.
+- Use managed/runtime secret injection instead of local `.env`.
 
 ## Deployment Security Profiles
 
