@@ -32,7 +32,7 @@ iceberg-catalog-rest = "0.9"
 iceberg-storage-opendal = { version = "0.9", features = ["opendal-s3"] }
 datafusion = "52"
 iceberg-datafusion = "0.9"
-arrow = { version = "57", features = ["prettyprint"] }
+arrow = { version = "58", features = ["prettyprint"] }
 parquet = { version = "57", features = ["zstd"] }
 
 # File Processing & Crypto
