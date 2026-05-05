@@ -38,7 +38,8 @@ Use it in order, and treat each section as a small, testable milestone.
 - [x] Replace insecure compose fallbacks with required env vars for secrets.
 - [x] Keep service ports bound to `127.0.0.1` by default.
 - [x] Keep `allowall` auth backend marked as local-dev-only.
-- [x] Before any shared deployment, set:
+- [ ] Before any shared deployment, set (documented requirement, not current
+  deployment state — repo remains local-demo):
   - strong `RUSTFS_*` credentials
   - strong `POSTGRES_PASSWORD`
   - strong `LAKEKEEPER_PG_ENCRYPTION_KEY`
@@ -58,9 +59,9 @@ Use it in order, and treat each section as a small, testable milestone.
 - [x] Add timeouts for `exiftool`, `ffprobe`, and `pdfinfo` subprocess execution.
   Added 30s timeout with `kill_on_drop(true)` via spawn/wait_with_output pattern
   (2026-05-05). Timeout behavior test coverage pending.
-- [x] Add clear handling for tool hangs and non-zero exits (with bounded retries).
-  Timeout returns `None` (graceful skip). Non-zero exits already return `None`.
-  No retries -- a single attempt with timeout is sufficient for metadata enrichment.
+- [x] Add clear handling for tool hangs and non-zero exits (bounded execution).
+  Single attempt with 30s timeout; timeout or non-zero exit returns `None`
+  (graceful skip). Retries not needed for metadata enrichment.
 - [ ] Consider resource guardrails for scan/ingest on very large trees (post-v0.3).
 
 ## 5) Privacy and Data Exposure

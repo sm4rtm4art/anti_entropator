@@ -34,9 +34,12 @@ Requirements already enforced by this repo:
 
 - `.env` is ignored by git.
 - `docker-compose.yml` requires critical secret variables.
-- S3-touching commands (`init`, `ingest`) validate required credentials before
-  use and fail fast if missing. Other commands (e.g., `profile`, `doctor`) do
-  not require S3 credentials.
+- `init` validates missing S3 credentials before creating lakehouse resources.
+- Other S3-touching flows (`ingest`, `query`) use the configured credentials
+  during connectivity, storage, or catalog access and may fail at that point
+  if credentials are missing or invalid.
+- Unified upfront credential validation for all S3-touching commands is tracked
+  as follow-up.
 
 ## Pattern B: Simple Production-Like (Single Host)
 
