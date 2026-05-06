@@ -372,7 +372,7 @@ fn is_generic_filename(name: &str) -> bool {
         || lower.contains("(1)")
         || lower.contains("(2)")
         || lower.contains("(3)")
-        || is_uuid_like(&lower)
+        || is_uuid_like(lower.split('.').next().unwrap_or(&lower))
         || is_hex_hash(&lower)
 }
 
@@ -445,13 +445,22 @@ mod tests {
     }
 
     #[test]
-    fn uuid_with_extension_not_detected_yet() {
-        // BUG: is_uuid_like checks the full filename including extension, so
-        // ".jpg" breaks the 8-4-4-4-12 pattern. This test documents the current
-        // (wrong) behavior so the fix shows up as a clear test change.
-        // Fix: strip extension before UUID check in is_generic_filename.
-        assert!(!is_generic_filename(
+    fn uuid_with_extension_is_detected() {
+        assert!(is_generic_filename(
             "550e8400-e29b-41d4-a716-446655440000.jpg"
+        ));
+    }
+
+    #[test]
+    fn uuid_with_common_extensions() {
+        assert!(is_generic_filename(
+            "550e8400-e29b-41d4-a716-446655440000.pdf"
+        ));
+        assert!(is_generic_filename(
+            "550e8400-e29b-41d4-a716-446655440000.mp4"
+        ));
+        assert!(is_generic_filename(
+            "550e8400-e29b-41d4-a716-446655440000.png"
         ));
     }
 

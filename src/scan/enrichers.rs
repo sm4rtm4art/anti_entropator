@@ -142,12 +142,19 @@ fn parse_exif_datetime(s: &str) -> Option<String> {
     let date_parts: Vec<&str> = parts[0].split(':').collect();
     let time_parts: Vec<&str> = parts[1].split(':').collect();
 
-    if date_parts.len() != 3 || time_parts.len() < 2 {
+    if date_parts.len() != 3 || time_parts.len() < 2 || time_parts.len() > 3 {
         return None;
     }
 
-    // Validate parts are numeric
+    // Validate date parts are numeric
     for part in &date_parts {
+        if part.parse::<u32>().is_err() {
+            return None;
+        }
+    }
+
+    // Validate time parts are numeric
+    for part in &time_parts {
         if part.parse::<u32>().is_err() {
             return None;
         }
@@ -166,35 +173,84 @@ fn parse_exif_datetime(s: &str) -> Option<String> {
 
 /// Parse ISO datetime format "2024-01-15T14:30:45.000000Z"
 ///
-/// TODO: This parser is fragile — it strips timezone by splitting on `-` which
-/// only works because ISO 8601 time components use colons. Replace with `chrono`
-/// parsing and add unit tests covering positive/negative offsets, milliseconds,
-/// and edge cases.
+/// Handles the common external-tool ISO 8601 formats:
+/// - `2024-01-15T14:30:45Z`
+/// - `2024-01-15T14:30:45.123456Z`
+/// - `2024-01-15T14:30:45+02:00`
+/// - `2024-01-15T14:30:45-05:00`
+/// - `2024-01-15T14:30:45.123456-05:00`
+///
+/// Timezone decision: wall-clock date/time from the metadata string is
+/// preserved and timezone suffixes (Z, +HH:MM, -HH:MM) are stripped without
+/// conversion. No normalization to UTC or any fixed offset. These values drive
+/// suggested filenames only, not catalog timestamp fields.
+///
+/// Validates shape and numeric fields only. Calendar and range validation
+/// (e.g., month 1-12, hour 0-23) is deferred post-v0.3.
 fn parse_iso_datetime(s: &str) -> Option<String> {
-    // Simple parsing - just extract the date and time parts
     let s = s.trim();
+    let t_pos = s.find('T')?;
+    let date = &s[..t_pos];
+    let time_part = &s[t_pos + 1..];
 
-    if let Some(t_pos) = s.find('T') {
-        let date = &s[..t_pos];
-        let time_part = &s[t_pos + 1..];
-
-        // Remove timezone and milliseconds
-        let time = time_part
-            .split('.')
-            .next()?
-            .split('Z')
-            .next()?
-            .split('+')
-            .next()?
-            .split('-')
-            .next()?;
-
-        let time_clean = time.replace(':', "-");
-
-        return Some(format!("{}_{}", date, time_clean));
+    // Validate date: must be 3 numeric dash-separated parts
+    let date_parts: Vec<&str> = date.split('-').collect();
+    if date_parts.len() != 3 {
+        return None;
+    }
+    for part in &date_parts {
+        if part.parse::<u32>().is_err() {
+            return None;
+        }
     }
 
-    None
+    // Strip milliseconds (everything after first '.')
+    let time_no_millis = time_part.split('.').next()?;
+    // Strip trailing 'Z'
+    let time_no_tz = time_no_millis.split('Z').next()?;
+    // Strip +HH:MM or -HH:MM offset using rfind to avoid confusion with date dashes
+    let time_clean = if let Some(plus_pos) = time_no_tz.rfind('+') {
+        let suffix = &time_no_tz[plus_pos + 1..];
+        if !is_offset_shape(suffix) {
+            return None;
+        }
+        &time_no_tz[..plus_pos]
+    } else if let Some(minus_pos) = time_no_tz.rfind('-') {
+        if minus_pos > 0 {
+            let suffix = &time_no_tz[minus_pos + 1..];
+            if !is_offset_shape(suffix) {
+                return None;
+            }
+            &time_no_tz[..minus_pos]
+        } else {
+            time_no_tz
+        }
+    } else {
+        time_no_tz
+    };
+
+    // Validate time is exactly HH:MM or HH:MM:SS (2-3 colon-separated numeric parts)
+    let time_parts: Vec<&str> = time_clean.split(':').collect();
+    if time_parts.len() < 2 || time_parts.len() > 3 {
+        return None;
+    }
+    for part in &time_parts {
+        if part.parse::<u32>().is_err() {
+            return None;
+        }
+    }
+
+    let formatted_time = time_clean.replace(':', "-");
+    Some(format!("{}_{}", date, formatted_time))
+}
+
+/// Validate that a timezone offset suffix looks like "HH:MM" (digits:digits).
+fn is_offset_shape(s: &str) -> bool {
+    let parts: Vec<&str> = s.split(':').collect();
+    parts.len() == 2
+        && parts
+            .iter()
+            .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
 }
 
 /// Check if PDF title is useless (generic, placeholder, etc.)
@@ -267,11 +323,22 @@ mod tests {
 
     #[test]
     fn parse_exif_non_numeric_time() {
-        // Known weakness: time parts are not validated. Hardening deferred to S4 (triage #12).
-        assert_eq!(
-            parse_exif_datetime("2024:01:15 aa:bb:cc"),
-            Some("2024-01-15_aa-bb-cc".to_string())
-        );
+        assert_eq!(parse_exif_datetime("2024:01:15 aa:bb:cc"), None);
+    }
+
+    #[test]
+    fn parse_exif_single_time_component() {
+        assert_eq!(parse_exif_datetime("2024:01:15 12"), None);
+    }
+
+    #[test]
+    fn parse_exif_empty_time_part() {
+        assert_eq!(parse_exif_datetime("2024:01:15 12::45"), None);
+    }
+
+    #[test]
+    fn parse_exif_extra_time_components() {
+        assert_eq!(parse_exif_datetime("2024:01:15 12:34:56:78"), None);
     }
 
     // ── parse_iso_datetime ──
@@ -302,10 +369,6 @@ mod tests {
 
     #[test]
     fn parse_iso_negative_offset() {
-        // The parser chain: split('.') -> split('Z') -> split('+') -> split('-').
-        // For "14:30:45-05:00": no '.', no 'Z', no '+', split('-') gives "14:30:45".
-        // This happens to produce correct output for this case, but the approach is
-        // fragile for edge cases. Hardening deferred to S4 (triage #12).
         assert_eq!(
             parse_iso_datetime("2024-01-15T14:30:45-05:00"),
             Some("2024-01-15_14-30-45".to_string())
@@ -314,12 +377,45 @@ mod tests {
 
     #[test]
     fn parse_iso_malformed_with_t() {
-        // Known weakness: parser accepts any string containing `T`, no date/time validation.
-        // Hardening deferred to S4 (triage #12).
+        assert_eq!(parse_iso_datetime("not-a-dateThello"), None);
+    }
+
+    #[test]
+    fn parse_iso_just_t() {
+        assert_eq!(parse_iso_datetime("T"), None);
+    }
+
+    #[test]
+    fn parse_iso_no_date_digits() {
+        assert_eq!(parse_iso_datetime("abcT12:00:00"), None);
+    }
+
+    #[test]
+    fn parse_iso_single_time_component() {
+        assert_eq!(parse_iso_datetime("2024-01-15T14"), None);
+    }
+
+    #[test]
+    fn parse_iso_millis_with_negative_offset() {
         assert_eq!(
-            parse_iso_datetime("not-a-dateThello"),
-            Some("not-a-date_hello".to_string())
+            parse_iso_datetime("2024-01-15T14:30:45.123456-05:00"),
+            Some("2024-01-15_14-30-45".to_string())
         );
+    }
+
+    #[test]
+    fn parse_iso_garbage_after_plus() {
+        assert_eq!(parse_iso_datetime("2024-01-15T14:30:45+garbage"), None);
+    }
+
+    #[test]
+    fn parse_iso_garbage_after_minus() {
+        assert_eq!(parse_iso_datetime("2024-01-15T14:30:45-hello"), None);
+    }
+
+    #[test]
+    fn parse_iso_extra_time_components() {
+        assert_eq!(parse_iso_datetime("2024-01-15T12:34:56:78Z"), None);
     }
 
     #[test]
