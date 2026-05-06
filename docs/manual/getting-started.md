@@ -90,7 +90,7 @@ anti_entropator ingest ~/Downloads
 ### 5. Query Your Catalog
 
 > **Note:** `query` is implemented as a one-shot command.
-> `sql` currently starts a placeholder REPL message and exits.
+> `sql` exits with an error indicating the interactive REPL is planned but not yet implemented.
 
 ```bash
 # One-shot query (basic implementation)
@@ -113,7 +113,7 @@ anti_entropator duplicates
 > **Note:** The `merge` command is currently a placeholder command.
 
 ```bash
-anti_entropator merge ingest/2026-04-29T12-00-00
+anti_entropator merge
 ```
 
 ## Command Reference
@@ -127,11 +127,11 @@ anti_entropator merge ingest/2026-04-29T12-00-00
 | `scan <path>`    | ✅      | Enrich metadata without uploading            |
 | `ingest <path>`  | ✅      | Upload files & commit metadata to Iceberg    |
 | `query <sql>`    | ✅      | Execute one-shot SQL via DataFusion (basic)  |
-| `sql`            | 🚧      | Interactive SQL REPL (placeholder)           |
-| `duplicates`     | 🚧      | Duplicate finder workflow (placeholder)      |
-| `merge <branch>` | 🚧      | Ingest branch merge workflow (placeholder)   |
+| `sql`              | 🚧      | Interactive SQL REPL (planned, not yet implemented)      |
+| `duplicates`       | 🚧      | Duplicate finder workflow (planned, not yet implemented) |
+| `merge`            | 🚧      | Ingest branch merge workflow (planned, not yet implemented) |
 
-**Legend:** ✅ Implemented | 🚧 In Development
+**Legend:** ✅ Implemented | 🚧 Planned (not yet implemented)
 
 ## Environment Variables
 

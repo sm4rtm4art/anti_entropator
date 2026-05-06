@@ -162,11 +162,19 @@ fn finalize_ingest(
     println!();
     println!("─── Ingest Results ─────────────────────────────────────────────");
     println!();
-    println!(
-        "  Uploaded:        {} files ({})",
-        uploaded_count,
-        humansize::format_size(total_bytes, humansize::BINARY)
-    );
+    if dry_run {
+        println!(
+            "  Would upload:    {} files ({})",
+            uploaded_count,
+            humansize::format_size(total_bytes, humansize::BINARY)
+        );
+    } else {
+        println!(
+            "  Uploaded:        {} files ({})",
+            uploaded_count,
+            humansize::format_size(total_bytes, humansize::BINARY)
+        );
+    }
     println!("  Already in store: {} files", exists_count);
     println!("  Errors:          {} files", errors.len());
     println!();
@@ -437,13 +445,10 @@ mod tests {
             path,
             include: vec![],
             exclude: vec![],
-            since: None,
             types: vec![],
             max_size: None,
             limit: None,
-            auto_merge: false,
             dry_run: true,
-            verbose: false,
         }
     }
 

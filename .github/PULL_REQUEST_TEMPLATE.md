@@ -9,6 +9,11 @@
 - [ ] Docs updated if behavior changed
 - [ ] No planned-as-shipped claims
 
+## Tracking
+
+- Stabilization block / issue:
+- Inventory finding(s):
+
 ## Validation
 
 - [ ] `cargo fmt --all -- --check`

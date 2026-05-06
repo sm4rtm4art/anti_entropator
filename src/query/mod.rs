@@ -85,15 +85,6 @@ fn rewrite_table_reference(sql: &str) -> String {
         .into_owned()
 }
 
-/// Start an interactive SQL REPL
-pub async fn repl() -> Result<()> {
-    println!("Interactive SQL REPL starting...");
-    println!("(Not yet fully implemented - using one-shot query for now)");
-    println!("Tip: Try 'SELECT category, count(*) FROM files GROUP BY category'");
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -167,3 +167,21 @@ Use read-only mode for review and planning, agent mode for scoped edits, then
 read-only again for reflection. Work in small increments and update evidence
 after each block. If a change spans multiple subsystems, summarize scope before
 editing.
+
+### Stabilization PR Workflow
+
+For v0.3 stabilization blocks, prefer one standalone PR per sub-block targeting
+`main` directly.
+Use a GitHub tracking issue for the parent block, created from
+`.github/ISSUE_TEMPLATE/stabilization_block.yml`.
+
+Each sub-block PR should use `.github/PULL_REQUEST_TEMPLATE.md` and link:
+
+- the parent stabilization issue,
+- relevant findings when applicable (i.e `.local/s4-0-inventory.md`),
+- validation evidence,
+- deferred follow-ups.
+
+Do not use umbrella or integration PRs for Blocks (i.e. S4) unless explicitly approved.
+Do not mix workflow/template changes into implementation PRs unless explicitly
+approved.

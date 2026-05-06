@@ -151,20 +151,21 @@ Benefits:
 
 ## Configuration
 
-The CLI defines a `--config` flag and `ANTI_ENTROPATOR_CONFIG` env var, and the
-config module supports loading from TOML files. However, **the binary does not
-currently wire config file loading into command execution.** Commands use
-`LakehouseConfig::default()` which reads environment variables directly.
+Config file loading is **deferred to post-v0.3**. The `--config` CLI flag and
+`ANTI_ENTROPATOR_CONFIG` env var have been removed in v0.3 as part of the CLI
+contract honesty pass (S4-A). The underlying config module (`src/config/mod.rs`)
+remains in the codebase but is not wired to any command.
 
-Config file loading paths (defined in `src/config/mod.rs`, not yet active):
+All commands use `LakehouseConfig::default()`, which reads runtime configuration
+from environment variables directly (see Environment Variables in the manual).
 
-1. `--config` CLI flag (parsed, not passed to commands)
+Planned config file loading paths (not yet active, deferred post-v0.3):
+
+1. `--config` CLI flag
 2. `ANTI_ENTROPATOR_CONFIG` environment variable
 3. `./anti_entropator.toml`
 4. Platform config directory (e.g., `~/.config/anti_entropator/` on Linux,
    `~/Library/Application Support/` on macOS)
-
-Implementation of config file wiring is tracked as S4 scope (triage #9).
 
 ## State
 

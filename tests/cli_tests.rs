@@ -231,6 +231,33 @@ fn scan_with_limit_respects_limit() -> Result<()> {
     Ok(())
 }
 
+// Unix-only: requires chmod to create permission-denied directories
+#[test]
+#[cfg(unix)]
+fn scan_partial_errors_exits_nonzero() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempdir()?;
+    // One readable file so WalkDir starts scanning
+    std::fs::write(temp.path().join("readable.txt"), b"hello")?;
+    // One unreadable subdirectory so WalkDir produces Err entries
+    let blocked = temp.path().join("blocked");
+    std::fs::create_dir(&blocked)?;
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o000))?;
+
+    let result = cmd()?
+        .arg("scan")
+        .arg(temp.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("scan incomplete"));
+
+    // Restore permissions so tempdir cleanup succeeds
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o755))?;
+    drop(result);
+    Ok(())
+}
+
 // ==================== Doctor Command Tests ====================
 
 #[test]
@@ -291,8 +318,9 @@ fn ingest_dry_run_does_not_upload() -> Result<()> {
         .arg("--dry-run")
         .assert()
         .success()
-        .stdout(predicate::str::contains("Dry run"))
-        .stdout(predicate::str::contains("no files were uploaded"));
+        .stdout(predicate::str::contains("Would upload"))
+        .stdout(predicate::str::contains("no files were uploaded"))
+        .stdout(predicate::str::contains("Uploaded:").not());
     Ok(())
 }
 
@@ -304,7 +332,27 @@ fn sql_help_shows_options() -> Result<()> {
         .args(["sql", "--help"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Open an interactive SQL REPL"));
+        .stdout(predicate::str::contains("not yet implemented"));
+    Ok(())
+}
+
+#[test]
+fn sql_command_exits_nonzero() -> Result<()> {
+    cmd()?
+        .arg("sql")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not yet implemented"));
+    Ok(())
+}
+
+#[test]
+fn merge_command_exits_nonzero() -> Result<()> {
+    cmd()?
+        .arg("merge")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not yet implemented"));
     Ok(())
 }
 
@@ -319,12 +367,12 @@ fn query_help_shows_options() -> Result<()> {
 }
 
 #[test]
-fn duplicates_command_shows_not_implemented() -> Result<()> {
+fn duplicates_command_exits_nonzero() -> Result<()> {
     cmd()?
         .arg("duplicates")
         .assert()
-        .success()
-        .stdout(predicate::str::contains("not yet implemented"));
+        .failure()
+        .stderr(predicate::str::contains("not yet implemented"));
     Ok(())
 }
 
@@ -383,33 +431,75 @@ fn ingest_then_query_flow() -> Result<()> {
     Ok(())
 }
 
-// ==================== Global Flags Tests ====================
+// ==================== Removed Flag Rejection Tests ====================
 
 #[test]
-fn verbose_flag_is_accepted() -> Result<()> {
+fn removed_config_flag_rejected() -> Result<()> {
     let temp = tempdir()?;
-
-    cmd()?
-        .arg("-v")
-        .arg("profile")
-        .arg(temp.path())
-        .assert()
-        .success();
-    Ok(())
-}
-
-#[test]
-fn config_flag_with_nonexistent_file_still_works() -> Result<()> {
-    // Config file is optional, so nonexistent should not fail
-    let temp = tempdir()?;
-
     cmd()?
         .arg("--config")
         .arg("/nonexistent/config.toml")
         .arg("profile")
         .arg(temp.path())
         .assert()
-        .success();
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument"));
+    Ok(())
+}
+
+#[test]
+fn removed_global_verbose_flag_rejected() -> Result<()> {
+    let temp = tempdir()?;
+    cmd()?
+        .arg("-v")
+        .arg("profile")
+        .arg(temp.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument"));
+    Ok(())
+}
+
+#[test]
+fn removed_since_flag_rejected() -> Result<()> {
+    let temp = tempdir()?;
+    cmd()?
+        .arg("ingest")
+        .arg("--since")
+        .arg("7d")
+        .arg("--dry-run")
+        .arg(temp.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument"));
+    Ok(())
+}
+
+#[test]
+fn removed_auto_merge_flag_rejected() -> Result<()> {
+    let temp = tempdir()?;
+    cmd()?
+        .arg("ingest")
+        .arg("--auto-merge")
+        .arg("--dry-run")
+        .arg(temp.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument"));
+    Ok(())
+}
+
+#[test]
+fn removed_ingest_verbose_flag_rejected() -> Result<()> {
+    let temp = tempdir()?;
+    cmd()?
+        .arg("ingest")
+        .arg("-v")
+        .arg("--dry-run")
+        .arg(temp.path())
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument"));
     Ok(())
 }
 
