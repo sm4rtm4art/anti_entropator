@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Aggregated statistics for a group of files
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GroupStats {
     pub count: u64,
     pub total_bytes: u64,
@@ -78,6 +78,12 @@ impl GroupStats {
         if self.count == 0 {
             self.min_bytes = 0;
         }
+    }
+}
+
+impl Default for GroupStats {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -197,5 +203,33 @@ impl ProfileResult {
         self.largest_files
             .sort_by_key(|entry| std::cmp::Reverse(entry.0));
         self.largest_files.truncate(15);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn group_stats_default_has_max_min_bytes() {
+        assert_eq!(GroupStats::default().min_bytes, u64::MAX);
+    }
+
+    #[test]
+    fn group_stats_after_one_add() {
+        let mut stats = GroupStats::default();
+        stats.add(1024, "/test/file.txt");
+        assert_eq!(stats.min_bytes, 1024);
+        assert_eq!(stats.max_bytes, 1024);
+        assert_eq!(stats.count, 1);
+        assert_eq!(stats.total_bytes, 1024);
+        assert_eq!(stats.largest_path, "/test/file.txt");
+    }
+
+    #[test]
+    fn group_stats_finalize_empty_resets_min() {
+        let mut stats = GroupStats::default();
+        stats.finalize();
+        assert_eq!(stats.min_bytes, 0);
     }
 }
