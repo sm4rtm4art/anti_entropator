@@ -194,6 +194,11 @@ pub async fn run(args: ScanArgs) -> Result<()> {
         println!();
     }
 
+    if !errors.is_empty() {
+        println!();
+        anyhow::bail!("scan incomplete: {} files failed", errors.len());
+    }
+
     if args.dry_run {
         println!(
             "{}",

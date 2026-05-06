@@ -1,0 +1,89 @@
+name: Stabilization Block
+description: Track a v0.3 stabilization block, sub-block, or handoff
+title: "[stabilization] "
+labels:
+  - stabilization
+body:
+  - type: input
+    id: block
+    attributes:
+      label: Block
+      description: Stabilization block or sub-block identifier.
+      placeholder: "S4, S4-A, S5, S5-A..."
+    validations:
+      required: true
+
+  - type: input
+    id: plan-source
+    attributes:
+      label: Plan Source
+      description: Link or path to the source plan section.
+      placeholder: ".local/v0.3-stabilization-plan.md#block-s4"
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What is this block supposed to stabilize?
+      placeholder: |
+        - User-facing contract:
+        - Technical debt removed:
+        - Deferred scope:
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Keep the block bounded and reviewable.
+      placeholder: |
+        In scope:
+        - ...
+
+        Out of scope:
+        - ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: sub-blocks
+    attributes:
+      label: Sub-block Checklist
+      description: For parent tracking issues, list sub-blocks and their target PRs.
+      placeholder: |
+        - [ ] <sub-block> — <theme> — PR #
+        - [ ] <sub-block> — <theme> — PR #
+        - [ ] <sub-block> — <theme> — PR #
+
+  - type: textarea
+    id: prs
+    attributes:
+      label: Linked PRs
+      description: Add PR links as they are opened.
+      placeholder: |
+        - #
+        - #
+        - #
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation Evidence
+      description: Record commands, CI links, or reasons validation was deferred.
+      placeholder: |
+        - fmt:
+        - clippy:
+        - tests:
+        - audit:
+        - coverage, if applicable:
+
+  - type: textarea
+    id: deferred
+    attributes:
+      label: Deferred Follow-ups
+      description: Record explicit follow-ups instead of leaving open-ended debt.
+      placeholder: |
+        - Item:
+          Reason:
+          Target block:

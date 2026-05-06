@@ -49,19 +49,16 @@ async fn main() -> Result<()> {
             ingest::run(args).await?;
         }
         Commands::Sql => {
-            query::repl().await?;
+            anyhow::bail!("sql command is not yet implemented");
         }
         Commands::Query { sql } => {
             query::run(sql).await?;
         }
-        Commands::Duplicates(args) => {
-            println!(
-                "Duplicates command not yet implemented, dump: {:?}",
-                args.dump
-            );
+        Commands::Duplicates => {
+            anyhow::bail!("duplicates command is not yet implemented");
         }
-        Commands::Merge { branch } => {
-            println!("Merge command not yet implemented for branch: {}", branch);
+        Commands::Merge => {
+            anyhow::bail!("merge command is not yet implemented");
         }
     }
 

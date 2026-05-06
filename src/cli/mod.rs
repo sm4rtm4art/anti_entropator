@@ -12,14 +12,6 @@ use std::path::PathBuf;
 #[command(name = "anti_entropator")]
 #[command(author, version, about, long_about = None)]
 pub struct Cli {
-    /// Enable verbose output
-    #[arg(short, long, global = true)]
-    pub verbose: bool,
-
-    /// Configuration file path
-    #[arg(short, long, global = true, env = "ANTI_ENTROPATOR_CONFIG")]
-    pub config: Option<PathBuf>,
-
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -44,7 +36,7 @@ pub enum Commands {
     /// Ingest files into the lakehouse (upload to RustFS + commit to Iceberg via Lakekeeper)
     Ingest(IngestArgs),
 
-    /// Open an interactive SQL REPL (DataFusion)
+    /// Interactive SQL REPL (planned, not yet implemented)
     Sql,
 
     /// Execute a one-shot SQL query
@@ -53,14 +45,11 @@ pub enum Commands {
         sql: String,
     },
 
-    /// Find and report duplicate files
-    Duplicates(DuplicatesArgs),
+    /// Find and report duplicate files (planned, not yet implemented)
+    Duplicates,
 
-    /// Merge an ingest branch into main
-    Merge {
-        /// The branch name to merge (e.g., ingest/2024-01-15T10-30-00)
-        branch: String,
-    },
+    /// Merge an ingest branch into main (planned, not yet implemented)
+    Merge,
 }
 
 #[derive(Parser, Debug)]
@@ -125,10 +114,6 @@ pub struct IngestArgs {
     #[arg(long)]
     pub exclude: Vec<String>,
 
-    /// Only ingest files modified since this duration (e.g., "7d", "24h")
-    #[arg(long)]
-    pub since: Option<String>,
-
     /// Only ingest files of these types (e.g., "pdf,image,video")
     #[arg(long, value_delimiter = ',')]
     pub types: Vec<String>,
@@ -141,28 +126,9 @@ pub struct IngestArgs {
     #[arg(long)]
     pub limit: Option<usize>,
 
-    /// Auto-merge to main after successful ingest (skip branch review)
-    #[arg(long)]
-    pub auto_merge: bool,
-
     /// Dry run - show what would be done without uploading
     #[arg(long)]
     pub dry_run: bool,
-
-    /// Show each file being processed
-    #[arg(short, long)]
-    pub verbose: bool,
-}
-
-#[derive(Parser, Debug)]
-pub struct DuplicatesArgs {
-    /// Move duplicates to this directory
-    #[arg(long)]
-    pub dump: Option<PathBuf>,
-
-    /// Actually perform the move (required with --dump)
-    #[arg(long)]
-    pub apply: bool,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug, Default)]
