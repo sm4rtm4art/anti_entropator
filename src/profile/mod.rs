@@ -7,10 +7,8 @@ mod output;
 mod scanner;
 
 use crate::cli::{OutputFormat, ProfileArgs};
-use crate::domain::stats::ProfileResult;
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
-use std::path::Path;
 
 use output::{
     generate_markdown_report, print_json_report, print_markdown_report, print_table_report,
@@ -19,7 +17,13 @@ use scanner::scan;
 
 /// Run the profile command
 pub async fn run(args: ProfileArgs) -> Result<()> {
-    let path = args.path.canonicalize().unwrap_or(args.path.clone());
+    let path = match args.path.canonicalize() {
+        Ok(p) => p,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => args.path.clone(),
+        Err(e) => {
+            anyhow::bail!("Cannot resolve path '{}': {}", args.path.display(), e);
+        }
+    };
 
     if !path.exists() {
         anyhow::bail!("Path does not exist: {}", path.display());
@@ -45,7 +49,7 @@ pub async fn run(args: ProfileArgs) -> Result<()> {
         use_decimal: args.decimal,
     };
 
-    let result = scan_directory(&path, &options, Some(&pb)).await?;
+    let result = scan(&path, &options, Some(&pb)).await?;
 
     pb.finish_and_clear();
 
@@ -64,17 +68,17 @@ pub async fn run(args: ProfileArgs) -> Result<()> {
 
     // Optionally write to files
     if let Some(ref out_dir) = args.out {
-        std::fs::create_dir_all(out_dir)?;
+        tokio::fs::create_dir_all(out_dir).await?;
 
         let json_path = out_dir.join("profile.json");
         let md_path = out_dir.join("profile.md");
 
-        std::fs::write(&json_path, serde_json::to_string_pretty(&result)?)?;
-        println!("\n📄 JSON report written to: {}", json_path.display());
+        tokio::fs::write(&json_path, serde_json::to_string_pretty(&result)?).await?;
+        println!("\n  JSON report written to: {}", json_path.display());
 
         let md_content = generate_markdown_report(&result, args.decimal)?;
-        std::fs::write(&md_path, md_content)?;
-        println!("📄 Markdown report written to: {}", md_path.display());
+        tokio::fs::write(&md_path, md_content).await?;
+        println!("  Markdown report written to: {}", md_path.display());
     }
 
     Ok(())
@@ -108,11 +112,33 @@ impl Default for ScanOptions {
     }
 }
 
-/// Scan a directory and return profile results
-pub async fn scan_directory(
-    path: &Path,
-    options: &ScanOptions,
-    progress: Option<&ProgressBar>,
-) -> Result<ProfileResult> {
-    scan(path, options, progress).await
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn run_fails_on_symlink_loop_with_resolution_error() {
+        use std::os::unix::fs::symlink;
+
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let a = dir.path().join("a");
+        let b = dir.path().join("b");
+
+        symlink(&b, &a).expect("create symlink a -> b");
+        symlink(&a, &b).expect("create symlink b -> a");
+
+        let args = ProfileArgs {
+            path: a,
+            out: None,
+            decimal: false,
+            no_mime: true,
+            no_duplicates: true,
+            max_hash_files: 5000,
+            format: OutputFormat::Table,
+        };
+
+        let error = run(args).await.expect_err("symlink loop should fail");
+        assert!(error.to_string().contains("Cannot resolve path"));
+    }
 }

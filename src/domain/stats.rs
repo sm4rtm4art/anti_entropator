@@ -145,6 +145,10 @@ pub struct DuplicateEstimate {
     /// Files that were quick-hashed
     pub files_hashed: u64,
 
+    /// Files where quick-hash failed (I/O error, permissions)
+    #[serde(default)]
+    pub hash_errors: u64,
+
     /// Estimated bytes reclaimable
     pub reclaimable_bytes: u64,
 
@@ -231,5 +235,40 @@ mod tests {
         let mut stats = GroupStats::default();
         stats.finalize();
         assert_eq!(stats.min_bytes, 0);
+    }
+
+    #[test]
+    fn duplicate_estimate_serde_roundtrip_preserves_hash_errors() {
+        let estimate = DuplicateEstimate {
+            size_candidate_groups: 4,
+            quickhash_confirmed_groups: 2,
+            files_hashed: 9,
+            hash_errors: 2,
+            reclaimable_bytes: 1024,
+            top_groups: vec![],
+        };
+
+        let json = serde_json::to_string(&estimate).expect("serialize duplicate estimate");
+        let parsed: DuplicateEstimate =
+            serde_json::from_str(&json).expect("deserialize duplicate estimate");
+
+        assert_eq!(parsed.hash_errors, 2);
+        assert_eq!(parsed.files_hashed, 9);
+        assert_eq!(parsed.reclaimable_bytes, 1024);
+    }
+
+    #[test]
+    fn duplicate_estimate_missing_hash_errors_defaults_to_zero() {
+        let json = r#"{
+            "size_candidate_groups": 3,
+            "quickhash_confirmed_groups": 1,
+            "files_hashed": 2,
+            "reclaimable_bytes": 4096,
+            "top_groups": []
+        }"#;
+
+        let parsed: DuplicateEstimate =
+            serde_json::from_str(json).expect("deserialize without hash_errors");
+        assert_eq!(parsed.hash_errors, 0);
     }
 }

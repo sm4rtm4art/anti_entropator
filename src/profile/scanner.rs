@@ -282,7 +282,7 @@ pub async fn scan(
         // Quick-hash candidates to confirm
         let mut quickhash_groups: HashMap<(u64, String), Vec<String>> = HashMap::new();
         let mut files_hashed = 0;
-        let mut _hash_errors = 0;
+        let mut hash_errors = 0;
 
         for (size, paths) in size_candidates.iter() {
             for path in paths {
@@ -299,7 +299,7 @@ pub async fn scan(
                         files_hashed += 1;
                     }
                     Err(_) => {
-                        _hash_errors += 1;
+                        hash_errors += 1;
                     }
                 }
             }
@@ -310,6 +310,7 @@ pub async fn scan(
         }
 
         estimate.files_hashed = files_hashed as u64;
+        estimate.hash_errors = hash_errors;
 
         // Confirmed duplicate groups
         let mut confirmed: Vec<((u64, String), Vec<String>)> = quickhash_groups
@@ -440,5 +441,58 @@ mod tests {
             result.is_empty(),
             "meaningful name should not match any pattern"
         );
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn scan_tracks_hash_errors_for_unreadable_duplicate_candidate() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::path::PathBuf;
+
+        struct PermissionRestore {
+            path: PathBuf,
+            mode: u32,
+        }
+
+        impl Drop for PermissionRestore {
+            fn drop(&mut self) {
+                let _ = std::fs::set_permissions(
+                    &self.path,
+                    std::fs::Permissions::from_mode(self.mode),
+                );
+            }
+        }
+
+        let dir = tempfile::tempdir().unwrap();
+        let readable = dir.path().join("readable.bin");
+        let unreadable = dir.path().join("unreadable.bin");
+        let payload = b"same-size-content";
+
+        std::fs::write(&readable, payload).unwrap();
+        std::fs::write(&unreadable, payload).unwrap();
+
+        let original_mode = std::fs::metadata(&unreadable).unwrap().permissions().mode();
+        let _restore = PermissionRestore {
+            path: unreadable.clone(),
+            mode: original_mode,
+        };
+        std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::File::open(&unreadable).is_ok() {
+            return;
+        }
+
+        let options = ScanOptions {
+            detect_mime: false,
+            detect_duplicates: true,
+            max_hash_files: 10,
+            use_decimal: false,
+        };
+
+        let result = scan(dir.path(), &options, None).await.unwrap();
+        assert!(
+            result.duplicate_estimate.hash_errors >= 1,
+            "expected at least one hash error for unreadable file"
+        );
+        assert_eq!(result.duplicate_estimate.files_hashed, 1);
     }
 }
