@@ -221,11 +221,8 @@ fn print_duplicate_estimate(result: &ProfileResult, decimal: bool) -> Result<()>
         est.quickhash_confirmed_groups
     );
     println!("  Files hashed: {}", est.files_hashed);
-    if est.hash_errors > 0 {
-        println!(
-            "  Hash errors (estimate may be incomplete): {}",
-            est.hash_errors
-        );
+    if let Some(message) = hash_error_message(est.hash_errors) {
+        println!("  {message}");
     }
     println!(
         "  Estimated reclaimable: {}",
@@ -354,11 +351,8 @@ pub fn generate_markdown_report(result: &ProfileResult, decimal: bool) -> Result
         est.quickhash_confirmed_groups,
         format_bytes(est.reclaimable_bytes, decimal)
     ));
-    if est.hash_errors > 0 {
-        md.push_str(&format!(
-            "- **Hash errors (estimate may be incomplete):** {}\n\n",
-            est.hash_errors
-        ));
+    if let Some(message) = hash_error_message(est.hash_errors) {
+        md.push_str(&format!("- **{message}**\n\n"));
     }
 
     // Largest files
@@ -373,6 +367,10 @@ pub fn generate_markdown_report(result: &ProfileResult, decimal: bool) -> Result
     md.push('\n');
 
     Ok(md)
+}
+
+fn hash_error_message(hash_errors: u64) -> Option<String> {
+    (hash_errors > 0).then(|| format!("Hash errors (estimate may be incomplete): {hash_errors}"))
 }
 
 #[cfg(test)]
@@ -444,5 +442,18 @@ mod tests {
 
         assert!(report.contains("Hash errors"));
         assert!(report.contains("3"));
+    }
+
+    #[test]
+    fn hash_error_message_is_hidden_when_zero() {
+        assert!(hash_error_message(0).is_none());
+    }
+
+    #[test]
+    fn hash_error_message_includes_count_when_present() {
+        assert_eq!(
+            hash_error_message(3).as_deref(),
+            Some("Hash errors (estimate may be incomplete): 3")
+        );
     }
 }

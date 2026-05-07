@@ -477,6 +477,9 @@ mod tests {
             mode: original_mode,
         };
         std::fs::set_permissions(&unreadable, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::File::open(&unreadable).is_ok() {
+            return;
+        }
 
         let options = ScanOptions {
             detect_mime: false,
