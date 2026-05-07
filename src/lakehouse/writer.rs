@@ -4,7 +4,7 @@
 
 use crate::domain::FileInfo;
 use crate::lakehouse::schema::{build_file_catalog_schema, FILE_CATALOG_TABLE, NAMESPACE};
-use crate::lakehouse::{get_warehouse_prefix, s3_storage_factory, LakehouseConfig};
+use crate::lakehouse::{build_rest_catalog, s3_storage_factory, LakehouseConfig};
 use anyhow::{Context, Result};
 use arrow::array::{
     ArrayRef, BooleanArray, FixedSizeBinaryBuilder, Int64Array, StringArray,
@@ -19,10 +19,9 @@ use iceberg::writer::file_writer::location_generator::{
     DefaultLocationGenerator, LocationGenerator,
 };
 use iceberg::writer::file_writer::{FileWriter, FileWriterBuilder, ParquetWriterBuilder};
-use iceberg::{Catalog, CatalogBuilder, TableIdent};
-use iceberg_catalog_rest::{RestCatalog, RestCatalogBuilder};
+use iceberg::{Catalog, TableIdent};
+use iceberg_catalog_rest::RestCatalog;
 use parquet::file::properties::WriterProperties;
-use std::collections::HashMap;
 use std::sync::Arc;
 use uuid::Uuid;
 
@@ -62,39 +61,12 @@ pub async fn commit_files(files: Vec<FileInfo>, config: &LakehouseConfig) -> Res
 /// Note: Lakekeeper stores internal Docker endpoints in table configs,
 /// so we must override S3 settings to use the host-accessible endpoint.
 async fn init_catalog(config: &LakehouseConfig) -> Result<RestCatalog> {
-    let catalog_config = get_warehouse_prefix(config).await?;
-
-    let mut props = HashMap::new();
-    props.insert("uri".to_string(), catalog_config.uri.clone());
-    props.insert("prefix".to_string(), catalog_config.prefix.clone());
-    props.insert("warehouse".to_string(), config.warehouse.clone());
-
-    // Lakekeeper >= 0.11 requires X-Project-Id on all catalog requests
-    props.insert("header.X-Project-Id".to_string(), catalog_config.project_id);
-
-    // Override S3 configuration to use host-accessible endpoint
-    // (Lakekeeper stores internal Docker endpoint which is unreachable from host)
-    props.insert("s3.endpoint".to_string(), config.s3_endpoint.clone());
-    props.insert("s3.access-key-id".to_string(), config.s3_access_key.clone());
-    props.insert(
-        "s3.secret-access-key".to_string(),
-        config.s3_secret_key.clone(),
-    );
-    props.insert("s3.region".to_string(), "us-east-1".to_string());
-    props.insert("s3.path-style-access".to_string(), "true".to_string());
-    props.insert("s3.allow-http".to_string(), "true".to_string());
-    props.insert("s3.remote-signing-enabled".to_string(), "false".to_string());
-
     println!(
         "  Connecting to catalog at {} with warehouse {}",
         config.catalog_endpoint, config.warehouse
     );
 
-    RestCatalogBuilder::default()
-        .with_storage_factory(s3_storage_factory())
-        .load("anti_entropator", props)
-        .await
-        .context("Failed to build RestCatalog")
+    build_rest_catalog(config).await
 }
 
 /// Load the target table from the catalog

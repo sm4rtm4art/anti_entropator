@@ -10,6 +10,7 @@ mod cli;
 mod config;
 mod doctor;
 mod domain;
+mod file_hash;
 mod ingest;
 mod lakehouse;
 mod profile;

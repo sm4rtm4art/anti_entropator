@@ -2,15 +2,14 @@
 
 use crate::domain::stats::{DuplicateEstimate, DuplicateGroup, ProfileError, ProfileResult};
 use crate::domain::FileCategory;
+use crate::file_hash;
 use crate::profile::ScanOptions;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use indicatif::ProgressBar;
 use regex::Regex;
-use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::fs::{self, File};
-use std::io::Read;
+use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -101,20 +100,6 @@ fn get_extension(filename: &str) -> String {
         .extension()
         .map(|e| format!(".{}", e.to_string_lossy().to_lowercase()))
         .unwrap_or_else(|| "(none)".to_string())
-}
-
-/// Quick hash the first N bytes of a file
-fn quick_hash(path: &Path, block_size: usize) -> Result<String> {
-    let mut file = File::open(path)?;
-    let mut buffer = vec![0u8; block_size];
-    let bytes_read = file.read(&mut buffer)?;
-    buffer.truncate(bytes_read);
-
-    let mut hasher = Sha256::new();
-    hasher.update(&buffer);
-    let result = hasher.finalize();
-
-    Ok(format!("{:x}", result))
 }
 
 /// Detect MIME type from file content
@@ -290,7 +275,7 @@ pub async fn scan(
                     break;
                 }
 
-                match quick_hash(Path::new(path), 64 * 1024) {
+                match file_hash::quick_sha256(Path::new(path), 64 * 1024) {
                     Ok(hash) => {
                         quickhash_groups
                             .entry((*size, hash))
@@ -375,39 +360,6 @@ mod tests {
     #[test]
     fn ext_case_insensitive() {
         assert_eq!(get_extension("FILE.PDF"), ".pdf");
-    }
-
-    // ── quick_hash ──
-
-    #[test]
-    fn quick_hash_deterministic() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("test.bin");
-        std::fs::write(&path, b"hello world, this is test content").unwrap();
-
-        let h1 = quick_hash(&path, 1024).unwrap();
-        let h2 = quick_hash(&path, 1024).unwrap();
-        assert_eq!(h1, h2);
-    }
-
-    #[test]
-    fn quick_hash_block_limits_read() {
-        use sha2::Digest;
-
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("large.bin");
-        let content = vec![0xABu8; 2048];
-        std::fs::write(&path, &content).unwrap();
-
-        let block_size = 512;
-        let hash_result = quick_hash(&path, block_size).unwrap();
-
-        // Independently compute SHA-256 of exactly the first block_size bytes
-        let mut hasher = Sha256::new();
-        hasher.update(&content[..block_size]);
-        let expected = format!("{:x}", hasher.finalize());
-
-        assert_eq!(hash_result, expected);
     }
 
     // ── NamePatterns::check ──

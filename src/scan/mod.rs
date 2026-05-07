@@ -9,13 +9,11 @@ mod enrichers;
 
 use crate::cli::ScanArgs;
 use crate::domain::{ContentHash, FileCategory, FileInfo, PartialHash};
+use crate::file_hash;
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
-use sha2::{Digest, Sha256};
-use std::fs::File;
-use std::io::Read;
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -256,13 +254,13 @@ pub async fn scan_file(path: &Path) -> Result<FileInfo> {
             .map(|m| m.mime_type().to_string());
 
         let partial = if size_bytes > 0 && size_bytes < 100 * 1024 * 1024 {
-            compute_partial_hash(&io_path, 64 * 1024).ok()
+            file_hash::quick_sha256(&io_path, 64 * 1024).ok()
         } else {
             None
         };
 
         let full = if size_bytes > 0 && size_bytes < 10 * 1024 * 1024 {
-            compute_full_hash(&io_path).ok()
+            file_hash::full_sha256(&io_path).ok()
         } else {
             None
         };
@@ -288,38 +286,6 @@ pub async fn scan_file(path: &Path) -> Result<FileInfo> {
     }
 
     Ok(info)
-}
-
-/// Compute partial hash (first N bytes)
-fn compute_partial_hash(path: &Path, block_size: usize) -> Result<String> {
-    let mut file = File::open(path)?;
-    let mut buffer = vec![0u8; block_size];
-    let bytes_read = file.read(&mut buffer)?;
-    buffer.truncate(bytes_read);
-
-    let mut hasher = Sha256::new();
-    hasher.update(&buffer);
-    let result = hasher.finalize();
-
-    Ok(format!("{:x}", result))
-}
-
-/// Compute full SHA-256 hash
-fn compute_full_hash(path: &Path) -> Result<String> {
-    let mut file = File::open(path)?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 8192];
-
-    loop {
-        let bytes_read = file.read(&mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..bytes_read]);
-    }
-
-    let result = hasher.finalize();
-    Ok(format!("{:x}", result))
 }
 
 /// Get suggested name from external tools or metadata
@@ -541,69 +507,6 @@ mod tests {
     #[test]
     fn hex_hash_normal_filename() {
         assert!(!is_hex_hash("readme.md"));
-    }
-
-    // ── compute_partial_hash ──
-
-    #[test]
-    fn partial_hash_small_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("small.txt");
-        std::fs::write(&path, b"hello world").unwrap();
-
-        let hash = compute_partial_hash(&path, 64 * 1024).unwrap();
-        assert_eq!(hash.len(), 64); // SHA-256 hex = 64 chars
-    }
-
-    #[test]
-    fn partial_hash_deterministic() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("det.txt");
-        std::fs::write(&path, b"deterministic content").unwrap();
-
-        let h1 = compute_partial_hash(&path, 64 * 1024).unwrap();
-        let h2 = compute_partial_hash(&path, 64 * 1024).unwrap();
-        assert_eq!(h1, h2);
-    }
-
-    #[test]
-    fn partial_hash_block_size_limits_read() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("big.txt");
-        std::fs::write(&path, vec![b'A'; 1024]).unwrap();
-
-        let hash_small_block = compute_partial_hash(&path, 16).unwrap();
-        let hash_full = compute_partial_hash(&path, 2048).unwrap();
-        // Different block sizes should yield different hashes for this file
-        assert_ne!(hash_small_block, hash_full);
-    }
-
-    // ── compute_full_hash ──
-
-    #[test]
-    fn full_hash_known_content() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("known.txt");
-        std::fs::write(&path, b"hello world").unwrap();
-
-        let hash = compute_full_hash(&path).unwrap();
-        assert_eq!(
-            hash,
-            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
-        );
-    }
-
-    #[test]
-    fn full_hash_empty_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("empty.txt");
-        std::fs::write(&path, b"").unwrap();
-
-        let hash = compute_full_hash(&path).unwrap();
-        assert_eq!(
-            hash,
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        );
     }
 
     // ── scan_file integration (filesystem only, no external tools) ──

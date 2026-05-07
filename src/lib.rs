@@ -6,6 +6,7 @@ pub mod cli;
 pub mod config;
 pub mod doctor;
 pub mod domain;
+pub(crate) mod file_hash;
 pub mod ingest;
 pub mod lakehouse;
 pub mod profile;
