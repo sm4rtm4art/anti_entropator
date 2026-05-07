@@ -34,6 +34,9 @@ is the block objective.
   object-store, subprocess, or crypto paths.
 - `.unwrap()` and `.expect()` are acceptable in `#[cfg(test)]` code when they
   keep tests clear.
+- Static invariant `.expect()` inside `LazyLock::new` (or equivalent static
+  initializers) is acceptable with a clear message, since it runs once and
+  fails only on programmer error, not runtime input.
 - `anyhow::Result` is acceptable in `main.rs`, `cli/`, and top-level command
   orchestration functions such as `ingest::run`, `scan::run`, `profile::run`,
   and `query::run`.

@@ -33,23 +33,15 @@ Do not describe planned, placeholder, or partially verified behavior as shipped.
 | Enrichment | exiftool, pdfinfo, ffprobe | External executables for metadata; planned Rust replacement |
 | Containers | Docker Compose | Local stack orchestration |
 
-## Pre-G0 / V0 Baseline Checklist
+## V0 Baseline
 
-Before implementation starts for a stabilization block:
+The G0/V0 baseline was established in S1 and is recorded in
+`.local/2026-05-04-s1-baseline.md`. Each sub-block inherits this baseline and
+runs V0 checks (fmt, clippy, test) via pre-commit/pre-push hooks.
 
-- Start from current `origin/main` on a dedicated branch.
-- Ensure git status is clean except deliberate guardrail activation changes.
-- Record the G0/V0 snapshot in `.local/v0.3-stabilization-plan.md` unless a
-  block-specific note says otherwise.
-- Record baseline commit SHA, branch, current backlog priorities, and known
-  exceptions.
-- Record current coverage percentage and whether it is allowed to regress.
-- Record CI links for lint, test, coverage, and security/audit workflows.
-- Run V0 checks, or document why they were deferred with specific blockers:
-  - `cargo fmt --all -- --check`
-  - `cargo clippy --all-targets --all-features -- -D warnings`
-  - `cargo test --all-features --no-fail-fast`
-- Keep release-grade CI/CD hardening in S5 unless intentionally pulled forward.
+Before starting a new block: branch from current `origin/main`, confirm hooks
+pass, and note any V0 checks not covered by hooks (e.g., `cargo audit`,
+coverage) in the PR description.
 
 ## Reproducibility Notes
 
@@ -66,6 +58,7 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 cargo llvm-cov --all-features --workspace --summary-only
 cargo audit
+cargo machete              # optional: unused direct dependency check if installed
 
 # No Docker required
 cargo run -- profile <path>
@@ -128,6 +121,16 @@ scripts/
 - Keep PRs small, single-purpose, and testable.
 - Keep CLI help, runtime behavior, tests, and docs aligned.
 - Preserve local-first defaults unless a deployment profile says otherwise.
+- Honesty over polish: prefer accurate "not implemented" over nice-looking
+  placeholders. Tests, docs, and CLI behavior must agree with reality.
+- Small scope, explicit deferrals: if something starts growing into a feature,
+  stop and defer with documented rationale instead of sneaking it in.
+- Tests must prove the actual risk, not just pass. Correct tests that pass for
+  the wrong reason (e.g., connectivity failure instead of argument rejection).
+- One block at a time. Work in sub-blocks with clear PR boundaries. Do not
+  treat a stabilization stage as one giant change.
+- "Done" means behavior, tests, docs, and PR workflow all agree. That is the
+  real quality gate, not just green CI.
 - Rust-specific coding rules live in `.cursor/rules/rust-standards`.
 - Docker, Compose, CI, and release delivery rules live in
   `.cursor/rules/docker-ci-standards`.
@@ -163,25 +166,62 @@ unverified behavior clearly.
 
 ## AI-Assisted Workflow
 
-Use read-only mode for review and planning, agent mode for scoped edits, then
-read-only again for reflection. Work in small increments and update evidence
-after each block. If a change spans multiple subsystems, summarize scope before
-editing.
+### Execution Cadence
+
+The standard loop for stabilization blocks:
+
+1. **Ask mode (pre-planning):** discuss scope, risks, blind spots, grouping.
+2. **Plan mode:** draft a concrete plan with slices, tests, and done criteria.
+3. **Review (human + optional second AI):** findings-first review of the plan.
+4. **Agent mode (implementation):** execute the plan slice by slice.
+5. **Ask mode (review):** code review of the implementation against the plan.
+6. **Agent mode (polish):** fix review findings.
+7. **Commit and PR.**
+
+This loop emerged from practice. Skip steps only when scope is trivially small.
+
+### Collaboration Model
+
+- **Human decides product boundaries; AI pressure-tests them.** When a
+  decision affects scope (e.g., timezone handling, parser depth), the human
+  sets direction after the AI raises risks and alternatives.
+- **Findings first.** When /review is invoked, prioritize bugs, regressions,
+  security issues, and missing tests. Summaries come after findings.
+- **Flag process drift, keep momentum.** If a process shortcut happens (e.g.,
+  adding templates in an implementation PR), document it and move on rather
+  than blocking progress.
+- **Pushback is mutual.** Either party can challenge a decision with evidence.
+  Disagreements are resolved by reasoning, not deference.
+- **Cross-model review is normal.** A second AI opinion is welcome input, but
+  findings are accepted only when grounded in code, tests, docs, or agreed
+  product boundaries.
+
+### Working Principles
+
+- Work in small increments and update evidence after each block.
+- If a change spans multiple subsystems, summarize scope before editing.
+- Use conventional commit prefixes (`feat`, `fix`, `chore`, `docs`).
+- Pre-commit and pre-push hooks count as local V0 evidence only for the checks
+  they actually run. Record any V0 checks not covered by hooks (e.g., `cargo
+  audit`, coverage).
+- Squash merge is the default for stabilization PRs.
 
 ### Stabilization PR Workflow
 
 For v0.3 stabilization blocks, prefer one standalone PR per sub-block targeting
-`main` directly.
+`main` directly. Branch from current `origin/main`; avoid pre-created stale
+branches. Rebase before push if main has advanced.
+
 Use a GitHub tracking issue for the parent block, created from
 `.github/ISSUE_TEMPLATE/stabilization_block.yml`.
 
 Each sub-block PR should use `.github/PULL_REQUEST_TEMPLATE.md` and link:
 
 - the parent stabilization issue,
-- relevant findings when applicable (i.e `.local/s4-0-inventory.md`),
+- relevant findings when applicable (e.g., `.local/s4-0-inventory.md`),
 - validation evidence,
 - deferred follow-ups.
 
-Do not use umbrella or integration PRs for Blocks (i.e. S4) unless explicitly approved.
-Do not mix workflow/template changes into implementation PRs unless explicitly
-approved.
+Do not use umbrella or integration PRs for blocks (e.g., S4) unless explicitly
+approved. Do not mix workflow/template changes into implementation PRs unless
+explicitly approved.
