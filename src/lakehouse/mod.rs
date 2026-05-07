@@ -9,6 +9,8 @@ pub use crate::config::LakehouseConfig;
 
 use anyhow::{bail, Context, Result};
 use console::{style, Emoji};
+use iceberg::CatalogBuilder;
+use iceberg_catalog_rest::{RestCatalog, RestCatalogBuilder};
 use iceberg_storage_opendal::OpenDalStorageFactory;
 use schema::{build_file_catalog_schema, FILE_CATALOG_TABLE, NAMESPACE};
 use serde::{Deserialize, Serialize};
@@ -23,6 +25,39 @@ pub(crate) fn s3_storage_factory() -> Arc<dyn iceberg::io::StorageFactory> {
         configured_scheme: "s3".to_string(),
         customized_credential_load: None,
     })
+}
+
+/// Build a RestCatalog configured for host-accessible S3 and project-scoped
+/// Lakekeeper access. Caller is responsible for user-facing logging.
+pub(crate) async fn build_rest_catalog(config: &LakehouseConfig) -> Result<RestCatalog> {
+    let catalog_config = get_warehouse_prefix(config).await?;
+
+    let mut props = HashMap::new();
+    props.insert("uri".to_string(), catalog_config.uri.clone());
+    props.insert("prefix".to_string(), catalog_config.prefix.clone());
+    props.insert("warehouse".to_string(), config.warehouse.clone());
+
+    // Lakekeeper >= 0.11 requires X-Project-Id on all catalog requests.
+    props.insert("header.X-Project-Id".to_string(), catalog_config.project_id);
+
+    // Override S3 configuration to use host-accessible endpoint
+    // (Lakekeeper stores internal Docker endpoint which is unreachable from host).
+    props.insert("s3.endpoint".to_string(), config.s3_endpoint.clone());
+    props.insert("s3.access-key-id".to_string(), config.s3_access_key.clone());
+    props.insert(
+        "s3.secret-access-key".to_string(),
+        config.s3_secret_key.clone(),
+    );
+    props.insert("s3.region".to_string(), "us-east-1".to_string());
+    props.insert("s3.path-style-access".to_string(), "true".to_string());
+    props.insert("s3.allow-http".to_string(), "true".to_string());
+    props.insert("s3.remote-signing-enabled".to_string(), "false".to_string());
+
+    RestCatalogBuilder::default()
+        .with_storage_factory(s3_storage_factory())
+        .load("anti_entropator", props)
+        .await
+        .context("Failed to build RestCatalog")
 }
 
 static CHECK: Emoji<'_, '_> = Emoji("✅ ", "[OK] ");

@@ -4,6 +4,7 @@
 
 use crate::cli::IngestArgs;
 use crate::domain::{ContentHash, FileCategory, FileInfo};
+use crate::file_hash;
 use crate::lakehouse::{writer, LakehouseConfig};
 use crate::scan::scan_file;
 use crate::storage;
@@ -356,7 +357,10 @@ async fn process_file(
     let hash = if let Some(ref h) = info.content_hash {
         h.0.clone()
     } else {
-        let h = compute_hash(path)?;
+        let hash_path = path.to_path_buf();
+        let h = tokio::task::spawn_blocking(move || file_hash::full_sha256(&hash_path))
+            .await
+            .context("Blocking hash task panicked")??;
         info.content_hash = Some(ContentHash::new(h.clone()));
         h
     };
@@ -394,25 +398,6 @@ async fn process_file(
     info.ingested_at = Some(Utc::now());
 
     Ok(IngestOutcome::Uploaded(Box::new(info)))
-}
-
-/// Compute SHA-256 hash of a file (fallback if scan didn't do it)
-fn compute_hash(path: &Path) -> Result<String> {
-    use sha2::Digest;
-    let mut file = std::fs::File::open(path)?;
-    let mut hasher = sha2::Sha256::new();
-    let mut buffer = [0u8; 8192];
-
-    loop {
-        let bytes_read = std::io::Read::read(&mut file, &mut buffer)?;
-        if bytes_read == 0 {
-            break;
-        }
-        hasher.update(&buffer[..bytes_read]);
-    }
-
-    let result = hasher.finalize();
-    Ok(format!("{:x}", result))
 }
 
 /// Parse size string like "100MB", "1GB"
@@ -683,47 +668,6 @@ mod tests {
 
         let result = collect_files(dir.path(), &args);
         assert!(result.is_err());
-    }
-
-    // ── compute_hash ──
-
-    #[test]
-    fn compute_hash_known_content() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("test.bin");
-        std::fs::write(&path, b"hello world").unwrap();
-
-        let hash = compute_hash(&path).unwrap();
-        // SHA-256 of "hello world"
-        assert_eq!(
-            hash,
-            "b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"
-        );
-    }
-
-    #[test]
-    fn compute_hash_empty_file() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("empty.bin");
-        std::fs::write(&path, b"").unwrap();
-
-        let hash = compute_hash(&path).unwrap();
-        // SHA-256 of empty input
-        assert_eq!(
-            hash,
-            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        );
-    }
-
-    #[test]
-    fn compute_hash_deterministic() {
-        let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("det.bin");
-        std::fs::write(&path, b"reproducible content").unwrap();
-
-        let hash1 = compute_hash(&path).unwrap();
-        let hash2 = compute_hash(&path).unwrap();
-        assert_eq!(hash1, hash2);
     }
 
     // ── IngestOutcome tally tests ──

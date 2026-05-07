@@ -4,16 +4,14 @@
 //! Storage access is routed through OpenDAL via `object_store_opendal`.
 
 use crate::lakehouse::schema::{FILE_CATALOG_TABLE, NAMESPACE};
-use crate::lakehouse::{s3_storage_factory, LakehouseConfig};
+use crate::lakehouse::{build_rest_catalog, LakehouseConfig};
 use crate::storage;
 use anyhow::{Context, Result};
 use datafusion::prelude::*;
-use iceberg::CatalogBuilder;
-use iceberg_catalog_rest::{RestCatalog, RestCatalogBuilder};
+use iceberg_catalog_rest::RestCatalog;
 use iceberg_datafusion::IcebergCatalogProvider;
 use object_store::ObjectStore;
 use object_store_opendal::OpendalStore;
-use std::collections::HashMap;
 use std::sync::{Arc, LazyLock};
 use url::Url;
 
@@ -27,32 +25,7 @@ pub async fn run(sql: String) -> Result<()> {
     let config = LakehouseConfig::default();
 
     // 1. Initialize Catalog
-    let catalog_config = crate::lakehouse::get_warehouse_prefix(&config).await?;
-
-    let mut props = HashMap::new();
-    props.insert("uri".to_string(), catalog_config.uri.clone());
-    props.insert("prefix".to_string(), catalog_config.prefix.clone());
-    props.insert("warehouse".to_string(), config.warehouse.clone());
-    props.insert("header.X-Project-Id".to_string(), catalog_config.project_id);
-
-    // Override S3 config to use host-accessible endpoint with direct credentials
-    // (Lakekeeper stores internal Docker endpoints which are unreachable from host)
-    props.insert("s3.endpoint".to_string(), config.s3_endpoint.clone());
-    props.insert("s3.access-key-id".to_string(), config.s3_access_key.clone());
-    props.insert(
-        "s3.secret-access-key".to_string(),
-        config.s3_secret_key.clone(),
-    );
-    props.insert("s3.region".to_string(), "us-east-1".to_string());
-    props.insert("s3.path-style-access".to_string(), "true".to_string());
-    props.insert("s3.allow-http".to_string(), "true".to_string());
-    props.insert("s3.remote-signing-enabled".to_string(), "false".to_string());
-
-    let catalog: RestCatalog = RestCatalogBuilder::default()
-        .with_storage_factory(s3_storage_factory())
-        .load("anti_entropator", props)
-        .await
-        .context("Failed to build RestCatalog")?;
+    let catalog: RestCatalog = build_rest_catalog(&config).await?;
 
     // 2. Setup DataFusion with OpenDAL-backed ObjectStore
     let ctx = SessionContext::new();
