@@ -221,6 +221,12 @@ fn print_duplicate_estimate(result: &ProfileResult, decimal: bool) -> Result<()>
         est.quickhash_confirmed_groups
     );
     println!("  Files hashed: {}", est.files_hashed);
+    if est.hash_errors > 0 {
+        println!(
+            "  Hash errors (estimate may be incomplete): {}",
+            est.hash_errors
+        );
+    }
     println!(
         "  Estimated reclaimable: {}",
         format_bytes(est.reclaimable_bytes, decimal)
@@ -348,6 +354,12 @@ pub fn generate_markdown_report(result: &ProfileResult, decimal: bool) -> Result
         est.quickhash_confirmed_groups,
         format_bytes(est.reclaimable_bytes, decimal)
     ));
+    if est.hash_errors > 0 {
+        md.push_str(&format!(
+            "- **Hash errors (estimate may be incomplete):** {}\n\n",
+            est.hash_errors
+        ));
+    }
 
     // Largest files
     md.push_str("## Largest Files\n\n");
@@ -422,5 +434,15 @@ mod tests {
         let result = make_test_profile_result();
         let report = generate_markdown_report(&result, false).unwrap();
         insta::assert_snapshot!(report);
+    }
+
+    #[test]
+    fn markdown_report_includes_hash_errors_when_present() {
+        let mut result = make_test_profile_result();
+        result.duplicate_estimate.hash_errors = 3;
+        let report = generate_markdown_report(&result, false).unwrap();
+
+        assert!(report.contains("Hash errors"));
+        assert!(report.contains("3"));
     }
 }
