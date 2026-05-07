@@ -11,7 +11,7 @@ flowchart LR
     subgraph UL["🖥️  User Layer"]
         direction TB
         CLI["⌨️  CLI (clap)"]
-        REPL["💬  SQL REPL (rustyline)"]
+        REPL["💬  SQL REPL (planned)"]
     end
 
     subgraph OR["🔀  Orchestration"]
@@ -64,7 +64,7 @@ flowchart LR
 ### CLI Layer
 
 - **clap**: Command parsing and help generation
-- **rustyline**: Planned for a full interactive SQL REPL (current `sql` command is a placeholder)
+- **SQL REPL**: Planned for a future release. No implementation dependency chosen yet; `rustyline` was removed as a speculative dependency (S4-C1).
 
 ### Core Commands
 

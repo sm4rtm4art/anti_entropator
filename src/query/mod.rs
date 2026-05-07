@@ -14,8 +14,13 @@ use iceberg_datafusion::IcebergCatalogProvider;
 use object_store::ObjectStore;
 use object_store_opendal::OpendalStore;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, LazyLock};
 use url::Url;
+
+static FILES_TABLE_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"(?i)((?:FROM|JOIN)\s+)files\b")
+        .expect("FILES_TABLE_RE is a valid static regex")
+});
 
 /// Run a one-shot SQL query
 pub async fn run(sql: String) -> Result<()> {
@@ -79,9 +84,9 @@ pub async fn run(sql: String) -> Result<()> {
 /// Rewrite the `files` shorthand to the fully qualified Iceberg table name,
 /// but only in table-reference positions (after FROM or JOIN keywords).
 fn rewrite_table_reference(sql: &str) -> String {
-    let re = regex::Regex::new(r"(?i)((?:FROM|JOIN)\s+)files\b").unwrap();
     let qualified = format!("iceberg.{}.{}", NAMESPACE, FILE_CATALOG_TABLE);
-    re.replace_all(sql, format!("${{1}}{}", qualified))
+    FILES_TABLE_RE
+        .replace_all(sql, format!("${{1}}{}", qualified))
         .into_owned()
 }
 
