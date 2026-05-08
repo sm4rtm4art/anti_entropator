@@ -69,6 +69,7 @@ impl GroupStats {
         self.percentile(90)
     }
 
+    #[allow(dead_code)] // Retained for future percentile reporting.
     pub fn p99(&self) -> u64 {
         self.percentile(99)
     }

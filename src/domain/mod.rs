@@ -2,11 +2,6 @@
 //!
 //! These types ensure compile-time guarantees about data validity.
 
-#![allow(dead_code)] // Domain types scaffolding - will be fully used in later phases
-
-use std::path::PathBuf;
-use thiserror::Error;
-
 pub mod file_info;
 pub mod stats;
 
@@ -14,50 +9,6 @@ pub mod stats;
 mod tests;
 
 pub use file_info::FileInfo;
-
-/// Errors that can occur in domain operations
-#[derive(Error, Debug)]
-pub enum DomainError {
-    #[error("Invalid path: {0}")]
-    InvalidPath(String),
-
-    #[error("Path does not exist: {0}")]
-    PathNotFound(PathBuf),
-
-    #[error("Permission denied: {0}")]
-    PermissionDenied(PathBuf),
-
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
-}
-
-/// A validated raw path that exists on the filesystem
-#[derive(Debug, Clone)]
-pub struct RawPath(PathBuf);
-
-impl RawPath {
-    /// Create a new RawPath, validating that it exists
-    pub fn new(path: PathBuf) -> Result<Self, DomainError> {
-        if !path.exists() {
-            return Err(DomainError::PathNotFound(path));
-        }
-        Ok(Self(path))
-    }
-
-    pub fn as_path(&self) -> &std::path::Path {
-        &self.0
-    }
-
-    pub fn into_inner(self) -> PathBuf {
-        self.0
-    }
-}
-
-impl AsRef<std::path::Path> for RawPath {
-    fn as_ref(&self) -> &std::path::Path {
-        &self.0
-    }
-}
 
 /// A content hash (SHA-256)
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -68,6 +19,7 @@ impl ContentHash {
         Self(hash)
     }
 
+    #[allow(dead_code)] // Kept for future domain API consumers (post-v0.3).
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -99,6 +51,7 @@ impl PartialHash {
         Self(hash)
     }
 
+    #[allow(dead_code)] // Kept for future domain API consumers (post-v0.3).
     pub fn as_str(&self) -> &str {
         &self.0
     }

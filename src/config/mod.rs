@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Application configuration
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Config {
     /// Lakehouse configuration
@@ -123,7 +123,7 @@ impl Default for LakehouseConfig {
 }
 
 /// Profile command configuration
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProfileConfig {
     /// Maximum files to hash for duplicate detection
@@ -143,22 +143,22 @@ pub struct ProfileConfig {
     pub max_largest_files: usize,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 fn default_max_hash_files() -> usize {
     5000
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 fn default_hash_block_size() -> usize {
     65536 // 64KB
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 fn default_max_no_ext() -> usize {
     20
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 fn default_max_largest() -> usize {
     15
 }
@@ -175,7 +175,7 @@ impl Default for ProfileConfig {
 }
 
 /// Ignore configuration
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IgnoreConfig {
     /// Patterns to ignore (glob)
@@ -191,7 +191,7 @@ pub struct IgnoreConfig {
     pub system: bool,
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 fn default_ignore_patterns() -> Vec<String> {
     vec![
         "node_modules".to_string(),
@@ -203,7 +203,7 @@ fn default_ignore_patterns() -> Vec<String> {
     ]
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 fn default_true() -> bool {
     true
 }
@@ -219,7 +219,7 @@ impl Default for IgnoreConfig {
 }
 
 /// External tools configuration
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalToolsConfig {
     /// Enable external tool usage
@@ -250,9 +250,13 @@ impl Default for ExternalToolsConfig {
     }
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 impl Config {
-    /// Load configuration from file or use defaults
+    /// Load configuration from file or use defaults.
+    ///
+    /// This remains synchronous while config-file loading is deferred post-v0.3.
+    /// If called from async runtime paths in the future, wrap it in
+    /// `tokio::task::spawn_blocking` to avoid blocking the executor.
     pub fn load(path: Option<&PathBuf>) -> anyhow::Result<Self> {
         if let Some(config_path) = path {
             if config_path.exists() {
@@ -283,7 +287,7 @@ impl Config {
     }
 }
 
-#[allow(dead_code)]
+#[allow(dead_code)] // Deferred config-file loading scaffold (post-v0.3).
 mod dirs {
     use std::path::PathBuf;
 
@@ -300,8 +304,8 @@ mod tests {
 
     const FULL_TOML: &str = r#"
 [lakehouse]
-s3_endpoint = "http://minio:9000"
-s3_endpoint_internal = "http://minio-internal:9000"
+s3_endpoint = "http://rustfs:9000"
+s3_endpoint_internal = "http://rustfs-internal:9000"
 s3_access_key = "testkey"
 s3_secret_key = "testsecret"
 bucket = "my-bucket"
@@ -401,10 +405,10 @@ s3_endpoint = "http://custom:9000"
 
         let cfg = Config::load(Some(&path)).unwrap();
 
-        assert_eq!(cfg.lakehouse.s3_endpoint, "http://minio:9000");
+        assert_eq!(cfg.lakehouse.s3_endpoint, "http://rustfs:9000");
         assert_eq!(
             cfg.lakehouse.s3_endpoint_internal,
-            "http://minio-internal:9000"
+            "http://rustfs-internal:9000"
         );
         assert_eq!(cfg.lakehouse.s3_access_key, "testkey");
         assert_eq!(cfg.lakehouse.s3_secret_key, "testsecret");

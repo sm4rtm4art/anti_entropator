@@ -120,6 +120,7 @@ impl FileInfo {
     }
 
     /// Set group id
+    #[allow(dead_code)] // Kept for planned duplicate-group workflows (post-v0.3).
     pub fn with_group_id(mut self, id: Uuid) -> Self {
         self.group_id = Some(id);
         self
@@ -138,6 +139,7 @@ impl FileInfo {
     }
 
     /// Mark as duplicate of another file
+    #[allow(dead_code)] // Kept for planned duplicate-group workflows (post-v0.3).
     pub fn mark_as_duplicate(mut self, original_id: Uuid) -> Self {
         self.is_duplicate = true;
         self.duplicate_of = Some(original_id);
@@ -153,6 +155,7 @@ impl FileInfo {
 }
 
 /// Lightweight file entry for profiling (minimal memory)
+#[allow(dead_code)] // Kept as lightweight profile DTO scaffold (post-v0.3).
 #[derive(Debug, Clone)]
 pub struct FileEntry {
     pub path: PathBuf,
@@ -164,6 +167,7 @@ pub struct FileEntry {
 }
 
 impl FileEntry {
+    #[allow(dead_code)] // Used by planned profile output extensions.
     pub fn category(&self) -> FileCategory {
         if let Some(ref mime) = self.mime_type {
             FileCategory::from_mime(mime)

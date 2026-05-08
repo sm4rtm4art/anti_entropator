@@ -30,15 +30,15 @@ services:
       - ./data/rustfs:/data
       - ./logs/rustfs:/logs
     environment:
-      # RustFS uses ACCESS_KEY/SECRET_KEY (not MinIO's MINIO_ROOT_*).
+      # RustFS uses ACCESS_KEY/SECRET_KEY variable names.
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?set_in_.env}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?set_in_.env}
     healthcheck:
-      # RustFS returns 403 for this endpoint without auth; treat 200/403 as healthy.
+      # RustFS exposes /health for readiness checks.
       test:
         [
           "CMD-SHELL",
-          'CODE=$$(curl -s -o /dev/null -w ''%{http_code}'' http://localhost:9000/minio/health/live); [ "$$CODE" = "200" ] || [ "$$CODE" = "403" ]',
+          'CODE=$$(curl -s -o /dev/null -w ''%{http_code}'' http://localhost:9000/health); [ "$$CODE" = "200" ]',
         ]
       interval: 30s
       timeout: 10s
