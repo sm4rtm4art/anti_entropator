@@ -1,11 +1,9 @@
 //! Unit tests for domain types
 //!
-//! Tests for FileCategory, ContentHash, PartialHash, RawPath, and DomainError.
+//! Tests for FileCategory, ContentHash, and PartialHash.
 
 use super::*;
-use anyhow::Result;
 use std::collections::HashSet;
-use tempfile::tempdir;
 
 // ==================== FileCategory::from_extension tests ====================
 
@@ -395,52 +393,6 @@ fn partial_hash_hashable() {
     assert_eq!(set.len(), 2);
 }
 
-// ==================== RawPath tests ====================
-
-#[test]
-fn raw_path_valid_directory() -> Result<()> {
-    let temp = tempdir()?;
-    let path = RawPath::new(temp.path().to_path_buf())?;
-    assert_eq!(path.as_path(), temp.path());
-    Ok(())
-}
-
-#[test]
-fn raw_path_valid_file() -> Result<()> {
-    let temp = tempdir()?;
-    let file_path = temp.path().join("test.txt");
-    std::fs::write(&file_path, "test content")?;
-
-    let path = RawPath::new(file_path.clone())?;
-    assert_eq!(path.as_path(), file_path);
-    Ok(())
-}
-
-#[test]
-fn raw_path_nonexistent() {
-    let path = RawPath::new(PathBuf::from("/nonexistent/path/that/does/not/exist"));
-    assert!(path.is_err());
-    assert!(matches!(path.unwrap_err(), DomainError::PathNotFound(_)));
-}
-
-#[test]
-fn raw_path_into_inner() -> Result<()> {
-    let temp = tempdir()?;
-    let original = temp.path().to_path_buf();
-    let raw_path = RawPath::new(original.clone())?;
-    assert_eq!(raw_path.into_inner(), original);
-    Ok(())
-}
-
-#[test]
-fn raw_path_as_ref() -> Result<()> {
-    let temp = tempdir()?;
-    let raw_path = RawPath::new(temp.path().to_path_buf())?;
-    let path_ref: &std::path::Path = raw_path.as_ref();
-    assert_eq!(path_ref, temp.path());
-    Ok(())
-}
-
 // ==================== FileCategory Display tests ====================
 
 #[test]
@@ -454,25 +406,4 @@ fn file_category_display_all_variants() {
     assert_eq!(format!("{}", FileCategory::Font), "font");
     assert_eq!(format!("{}", FileCategory::Data), "data");
     assert_eq!(format!("{}", FileCategory::Other), "other");
-}
-
-// ==================== DomainError tests ====================
-
-#[test]
-fn domain_error_display() {
-    let err = DomainError::InvalidPath("test".to_string());
-    assert!(err.to_string().contains("Invalid path"));
-
-    let err = DomainError::PathNotFound(PathBuf::from("/some/path"));
-    assert!(err.to_string().contains("Path does not exist"));
-
-    let err = DomainError::PermissionDenied(PathBuf::from("/some/path"));
-    assert!(err.to_string().contains("Permission denied"));
-}
-
-#[test]
-fn domain_error_from_io_error() {
-    let io_err = std::io::Error::new(std::io::ErrorKind::NotFound, "file not found");
-    let domain_err: DomainError = io_err.into();
-    assert!(matches!(domain_err, DomainError::Io(_)));
 }

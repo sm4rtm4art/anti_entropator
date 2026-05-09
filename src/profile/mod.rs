@@ -46,7 +46,6 @@ pub async fn run(args: ProfileArgs) -> Result<()> {
         detect_mime: !args.no_mime,
         detect_duplicates: !args.no_duplicates,
         max_hash_files: args.max_hash_files,
-        use_decimal: args.decimal,
     };
 
     let result = scan(&path, &options, Some(&pb)).await?;
@@ -86,8 +85,7 @@ pub async fn run(args: ProfileArgs) -> Result<()> {
 
 /// Scan options
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // use_decimal planned for future use
-pub struct ScanOptions {
+pub(crate) struct ScanOptions {
     /// Detect MIME types by reading file headers
     pub detect_mime: bool,
 
@@ -96,9 +94,6 @@ pub struct ScanOptions {
 
     /// Maximum files to hash for duplicate detection
     pub max_hash_files: usize,
-
-    /// Use decimal units (GB) instead of binary (GiB)
-    pub use_decimal: bool,
 }
 
 impl Default for ScanOptions {
@@ -107,7 +102,6 @@ impl Default for ScanOptions {
             detect_mime: true,
             detect_duplicates: true,
             max_hash_files: 5000,
-            use_decimal: false,
         }
     }
 }

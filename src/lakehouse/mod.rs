@@ -180,8 +180,6 @@ struct S3StorageCredential {
 
 #[derive(Debug, Deserialize)]
 struct WarehouseInfo {
-    #[allow(dead_code)]
-    id: String,
     name: String,
 }
 

@@ -5,11 +5,9 @@ use crate::domain::FileCategory;
 use crate::file_hash;
 use crate::profile::ScanOptions;
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use indicatif::ProgressBar;
 use regex::Regex;
 use std::collections::HashMap;
-use std::fs;
 use std::path::Path;
 use walkdir::WalkDir;
 
@@ -108,14 +106,6 @@ fn detect_mime(path: &Path) -> Option<String> {
         .ok()
         .flatten()
         .map(|t| t.mime_type().to_string())
-}
-
-/// Get file timestamps
-#[allow(dead_code)] // Will be used when we add timestamp columns to output
-fn get_timestamps(metadata: &fs::Metadata) -> (Option<DateTime<Utc>>, Option<DateTime<Utc>>) {
-    let modified = metadata.modified().ok().map(DateTime::<Utc>::from);
-    let created = metadata.created().ok().map(DateTime::<Utc>::from);
-    (modified, created)
 }
 
 /// Main scan function
@@ -437,7 +427,6 @@ mod tests {
             detect_mime: false,
             detect_duplicates: true,
             max_hash_files: 10,
-            use_decimal: false,
         };
 
         let result = scan(dir.path(), &options, None).await.unwrap();
