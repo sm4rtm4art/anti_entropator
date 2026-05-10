@@ -49,7 +49,9 @@ Use it in order, and treat each section as a small, testable milestone.
 
 - [ ] Run container vulnerability scan in CI (S5-A configured in
   `.github/workflows/security.yml`: `trivy fs` on PR, image scan on
-  main/schedule, report mode). Mark complete after CI evidence is captured.
+  main/schedule/manual, report mode). Vulnerability findings are logged without
+  failing the job; scan infrastructure failures remain blocking. Mark complete
+  after CI evidence is captured.
 - [ ] Fix Docker image runtime compatibility before public-showcase S5 closeout:
   local `docker run --rm anti_entropator:s5-a-scan --help` currently fails with
   `GLIBC_2.39` missing. Tracked as S5-B image pinning/base compatibility work.
@@ -119,7 +121,7 @@ When you are ready to make the repository public:
 - [x] Confirm hardening exceptions and follow-ups are tracked in
   [Docker and CI Hardening Review](docker-hardening-review.md).
   Exceptions documented: floating tags, disabled SBOM/provenance, Trivy
-  report-mode (blocking policy deferred to S5-C).
+  report-mode (vulnerability findings non-blocking until S5-C).
 
 ## Notes
 

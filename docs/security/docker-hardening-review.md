@@ -26,7 +26,7 @@ Scope:
 | RustFS image tag | `rustfs/rustfs:latest` | Uncontrolled runtime changes | Pin stable version tag once validated |
 | Lakekeeper image tag | `quay.io/lakekeeper/catalog:latest-main` | Main-branch image drift | Pin release tag for predictable setup |
 | Provenance and SBOM | Disabled in CI and release workflows | Reduced supply-chain attestability | Re-enable once GHCR compatibility issue is resolved |
-| Image vulnerability scan | Present in `security.yml` (report mode): PR uses `trivy fs`; main/schedule use image scan | Findings are visible but not yet blocking | Promote to blocking policy in S5-C after scan baseline review |
+| Image vulnerability scan | Present in `security.yml` (report mode): PR uses `trivy fs`; main/schedule/manual use image scan | Findings are visible but not yet blocking; scan infrastructure failures remain blocking | Promote vulnerability findings to blocking policy in S5-C after scan baseline review |
 | Rust toolchain workflow alignment | Workflows use `dtolnay/rust-toolchain@stable`; `rust-toolchain.toml` is `stable` + `rustfmt` + `clippy` | Low drift risk with current equivalent configuration | Keep current workflow setup in S5-A and document equivalence; revisit only if divergence appears |
 | Runtime container smoke test | Local image builds, but `docker run --help` fails with `GLIBC_2.39` missing | Built image is not runtime-proven | Fix builder/runtime base compatibility in S5-B before public-showcase S5 closeout |
 
@@ -34,7 +34,8 @@ Scope:
 
 - Provenance and SBOM are disabled to avoid known GHCR push failures in current workflow.
 - Floating Lakekeeper tag is temporarily retained to avoid schema mismatch seen with prior fixed images.
-- Trivy runs in report mode in S5-A; blocking HIGH/CRITICAL policy is deferred to S5-C.
+- Trivy runs in report mode in S5-A: vulnerability findings are logged without
+  failing the job, while checkout/build/action failures remain blocking.
 - The Docker image runtime smoke test fails locally with a GLIBC version mismatch;
   this is an S5-B blocker for image pinning/base compatibility.
 
@@ -51,7 +52,7 @@ These exceptions should remain explicit until resolved.
 
 - [ ] Dockerfile base images pinned.
 - [ ] Compose service images pinned where practical.
-- [x] Vulnerability scan workflow configured (`trivy fs` on PR, image scan on main/schedule, report mode).
+- [x] Vulnerability scan workflow configured (`trivy fs` on PR, image scan on main/schedule/manual, report mode).
 - [ ] CI evidence captured for PR filesystem scan and main/scheduled image scan.
 - [ ] SBOM/provenance status documented and justified.
 - [ ] Release notes mention any remaining hardening exceptions.

@@ -36,25 +36,22 @@ jobs:
     name: Trivy Filesystem Scan (PR)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    # S5-A is visibility-first: keep findings visible without blocking PRs.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v6
 
       - name: Trivy filesystem scan (report mode)
+        # S5-A report mode: vulnerability findings are logged; scan failures still fail.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
           severity: HIGH,CRITICAL
-          exit-code: "1"
+          exit-code: "0"
 
   trivy-image-main-schedule:
     name: Trivy Image Scan (main/schedule/manual)
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    # S5-A is visibility-first: keep findings visible without failing runs.
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v6
 
@@ -62,9 +59,10 @@ jobs:
         run: docker build -t anti_entropator:s5a-scan .
 
       - name: Trivy image scan (report mode)
+        # S5-A report mode: vulnerability findings are logged; scan failures still fail.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: anti_entropator:s5a-scan
           severity: HIGH,CRITICAL
-          exit-code: "1"
+          exit-code: "0"
