@@ -56,13 +56,13 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Build local image for scan
-        run: docker build -t anti_entropator:s5a-scan .
+        run: docker build -t anti_entropator:local-scan .
 
       - name: Trivy image scan (report mode)
         # S5-A report mode: vulnerability findings are logged; scan failures still fail.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
-          image-ref: anti_entropator:s5a-scan
+          image-ref: anti_entropator:local-scan
           severity: HIGH,CRITICAL
           exit-code: "0"

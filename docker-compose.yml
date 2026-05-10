@@ -21,7 +21,7 @@
 services:
   # S3-compatible object storage
   rustfs:
-    image: rustfs/rustfs:latest
+    image: rustfs/rustfs:1.0.0-beta.2
     container_name: anti_entropator_rustfs
     ports:
       - "127.0.0.1:8200:9000" # S3 API (Organized port)
@@ -70,7 +70,7 @@ services:
 
   # Lakekeeper catalog (Apache Iceberg REST Catalog)
   lakekeeper-migrate:
-    image: quay.io/lakekeeper/catalog:latest-main
+    image: quay.io/lakekeeper/catalog:v0.11.6
     container_name: anti_entropator_lakekeeper_migrate
     environment:
       LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:?set_in_.env}
@@ -84,7 +84,7 @@ services:
         condition: service_healthy
 
   lakekeeper:
-    image: quay.io/lakekeeper/catalog:latest-main
+    image: quay.io/lakekeeper/catalog:v0.11.6
     container_name: anti_entropator_lakekeeper
     ports:
       - "127.0.0.1:8100:8181" # REST API + UI (Organized port)
