@@ -47,12 +47,20 @@ Use it in order, and treat each section as a small, testable milestone.
 
 ## 3) Dependency and Supply Chain
 
-- [ ] Run container vulnerability scan in CI (deferred to S5, Trivy).
+- [ ] Run container vulnerability scan in CI (S5-A configured in
+  `.github/workflows/security.yml`: `trivy fs` on PR, image scan on
+  main/schedule, report mode). Mark complete after CI evidence is captured.
+- [ ] Fix Docker image runtime compatibility before public-showcase S5 closeout:
+  local `docker run --rm anti_entropator:s5-a-scan --help` currently fails with
+  `GLIBC_2.39` missing. Tracked as S5-B image pinning/base compatibility work.
 - [ ] Pin container base images to fixed versions/digests (deferred to S5).
 - [ ] Re-enable build provenance/SBOM in CI (deferred to S5, GHCR constraints).
 - [x] Lockfile review step: Dependabot PRs + grouped security updates provide
   visibility into `Cargo.lock` changes. Verified 2026-05-05.
 - [ ] Consider adding `cargo deny` policy checks for licenses/advisories (post-v0.3).
+- [x] Workflow toolchain setup remains aligned with repository contract:
+  workflows use `dtolnay/rust-toolchain@stable`; `rust-toolchain.toml` also
+  declares stable with `rustfmt` and `clippy` (verified 2026-05-10).
 
 ## 4) Runtime Safety
 
@@ -110,7 +118,8 @@ When you are ready to make the repository public:
   Deferred to S5 (container delivery path).
 - [x] Confirm hardening exceptions and follow-ups are tracked in
   [Docker and CI Hardening Review](docker-hardening-review.md).
-  Exceptions documented: floating tags, disabled SBOM/provenance, no Trivy yet.
+  Exceptions documented: floating tags, disabled SBOM/provenance, Trivy
+  report-mode (blocking policy deferred to S5-C).
 
 ## Notes
 

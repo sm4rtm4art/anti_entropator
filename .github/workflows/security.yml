@@ -30,3 +30,40 @@ jobs:
 
       - name: Audit dependencies
         run: cargo audit
+
+  trivy-fs-pr:
+    name: Trivy Filesystem Scan (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    # S5-A is visibility-first: keep findings visible without blocking PRs.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Trivy filesystem scan (report mode)
+        uses: aquasecurity/trivy-action@v0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  trivy-image-main-schedule:
+    name: Trivy Image Scan (main/schedule)
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    # S5-A is visibility-first: keep findings visible without failing runs.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build local image for scan
+        run: docker build -t anti_entropator:s5a-scan .
+
+      - name: Trivy image scan (report mode)
+        uses: aquasecurity/trivy-action@v0.28.0
+        with:
+          scan-type: image
+          image-ref: anti_entropator:s5a-scan
+          severity: HIGH,CRITICAL
+          exit-code: "1"
