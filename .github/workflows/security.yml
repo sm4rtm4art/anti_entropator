@@ -7,6 +7,7 @@ on:
     branches: [main]
   schedule:
     - cron: "0 6 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -49,8 +50,8 @@ jobs:
           exit-code: "1"
 
   trivy-image-main-schedule:
-    name: Trivy Image Scan (main/schedule)
-    if: github.event_name == 'push' || github.event_name == 'schedule'
+    name: Trivy Image Scan (main/schedule/manual)
+    if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     # S5-A is visibility-first: keep findings visible without failing runs.
     continue-on-error: true
