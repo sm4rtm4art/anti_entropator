@@ -5,8 +5,16 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org)
 
-> _Fighting entropy, one file at a time_
+## **🚧 Early Public Preview / Work in Progress 🚧**
 
+> Anti-Entropator is public early so evaluation and collaboration can happen
+> while v0.3 stabilization is still in progress. Core local workflows are
+> available, while some commands and release-hardening tasks are still being
+> finalized. See the roadmap and security notes for current status.
+----
+
+## The Anti-Entropator <br> _Fighting entropy, one file at a time_
+>
 A **local data lakehouse** for file organization, built in Rust. Transform your chaotic downloads folder into a queryable, organized data store using modern data engineering patterns.
 
 ## Why?
