@@ -50,19 +50,21 @@ jobs:
 
   trivy-image-main-schedule:
     name: Trivy Image Scan (main/schedule/manual)
+    # PRs run the filesystem scan above. Use workflow_dispatch on a PR branch
+    # when image-scan evidence is needed before merging.
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
       - name: Build local image for scan
-        run: docker build -t anti_entropator:s5a-scan .
+        run: docker build -t anti_entropator:local-scan .
 
       - name: Trivy image scan (report mode)
         # S5-A report mode: vulnerability findings are logged; scan failures still fail.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
-          image-ref: anti_entropator:s5a-scan
+          image-ref: anti_entropator:local-scan
           severity: HIGH,CRITICAL
           exit-code: "0"

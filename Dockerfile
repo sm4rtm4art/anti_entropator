@@ -1,8 +1,9 @@
 # Anti-Entropator Container Image
 # Single-arch build by default (multi-arch planned in S5).
 
-# Build stage
-FROM rust:latest AS builder
+# Build stage: keep explicit Rust tag on Bookworm to match runtime glibc.
+# Bump alongside Rust dependency/MSRV needs, then rerun S5-B image validation.
+FROM rust:1.92-bookworm AS builder
 
 WORKDIR /app
 
