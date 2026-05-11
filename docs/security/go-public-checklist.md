@@ -47,11 +47,13 @@ Use it in order, and treat each section as a small, testable milestone.
 
 ## 3) Dependency and Supply Chain
 
-- [ ] Run container vulnerability scan in CI (S5-A configured in
+- [x] Run container vulnerability scan in CI (S5-A configured in
   `.github/workflows/security.yml`: `trivy fs` on PR, image scan on
   main/schedule/manual, report mode). Vulnerability findings are logged without
-  failing the job; scan infrastructure failures remain blocking. Mark complete
-  after CI evidence is captured.
+  failing the job; scan infrastructure failures remain blocking.
+  Evidence captured for S5-B: manual Security run `25642878701` passed the
+  image scan on `s5-b-image-hardening`; PR Security run `25656184341` passed the
+  filesystem scan and skipped the image scan by design.
 - [x] Fix Docker image runtime compatibility before public-showcase S5 closeout:
   `Dockerfile` now uses `rust:1.92-bookworm` builder with `debian:bookworm-slim`
   runtime; local `docker run --rm anti_entropator:s5-b-image --help` passes
@@ -60,7 +62,7 @@ Use it in order, and treat each section as a small, testable milestone.
   Dockerfile, RustFS, Postgres, and Lakekeeper are pinned to release tags.
   Digest pinning remains deferred to S5-C release-grade publishing.
   Local Trivy image scan found 15 HIGH/CRITICAL Debian findings; CI scan
-  evidence remains required before closing the scan checklist item above.
+  evidence is captured above, with blocking policy deferred to S5-C.
 - [ ] Re-enable build provenance/SBOM in CI (deferred to S5, GHCR constraints).
 - [x] Lockfile review step: Dependabot PRs + grouped security updates provide
   visibility into `Cargo.lock` changes. Verified 2026-05-05.

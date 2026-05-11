@@ -50,6 +50,8 @@ jobs:
 
   trivy-image-main-schedule:
     name: Trivy Image Scan (main/schedule/manual)
+    # PRs run the filesystem scan above. Use workflow_dispatch on a PR branch
+    # when image-scan evidence is needed before merging.
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:

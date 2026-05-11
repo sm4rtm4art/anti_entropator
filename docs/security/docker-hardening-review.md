@@ -26,7 +26,7 @@ Scope:
 | RustFS image tag | `rustfs/rustfs:1.0.0-beta.2` | Beta release may change quickly | Re-evaluate stable tag availability each S5 cycle |
 | Lakekeeper image tag | `quay.io/lakekeeper/catalog:v0.11.6` | Release-tag drift over time | Consider digest pinning in S5-C release path |
 | Provenance and SBOM | Disabled in CI and release workflows | Reduced supply-chain attestability | Re-enable once GHCR compatibility issue is resolved |
-| Image vulnerability scan | Present in `security.yml` (report mode): PR uses `trivy fs`; main/schedule/manual use image scan. Local S5-B image scan found 15 HIGH/CRITICAL Debian findings. | Findings are visible but not yet blocking; CI scan evidence still pending | Capture CI evidence, then promote vulnerability findings to blocking policy in S5-C after baseline review |
+| Image vulnerability scan | Present in `security.yml` (report mode): PR uses `trivy fs`; main/schedule/manual use image scan. Local S5-B image scan found 15 HIGH/CRITICAL Debian findings. CI evidence was captured through manual Security run `25642878701`. | Findings are visible but not yet blocking | Promote vulnerability findings to blocking policy in S5-C after baseline review |
 | Rust toolchain workflow alignment | Workflows use `dtolnay/rust-toolchain@stable`; `rust-toolchain.toml` is `stable` + `rustfmt` + `clippy` | Low drift risk with current equivalent configuration | Keep current workflow setup in S5-A and document equivalence; revisit only if divergence appears |
 | Runtime container smoke test | Local image build + `docker run --help` succeed with Bookworm-aligned builder/runtime | Low | Keep smoke test in S5-B/S5-C validation gates |
 
@@ -38,7 +38,11 @@ Scope:
 - Local Trivy image scan is available and ran on `anti_entropator:s5-b-image`
   (2026-05-11): 15 findings total (`13` HIGH, `2` CRITICAL) on Debian 12.13.
   The scan output listed no fixed versions; `zlib1g` was `will_not_fix`.
-  CI Security workflow output remains the authoritative scan evidence source.
+- CI Security workflow output remains the authoritative scan evidence source.
+  Manual run `25642878701` on `s5-b-image-hardening` completed successfully:
+  `Cargo Audit` passed and `Trivy Image Scan (main/schedule/manual)` passed.
+  The later PR Security run `25656184341` passed the PR filesystem scan and
+  skipped the image scan by design.
 
 Resolved digest baselines captured during S5-B:
 
@@ -50,17 +54,16 @@ These exceptions and digest baselines should remain explicit until resolved.
 
 ## Priority Order
 
-1. Capture CI evidence for Security workflow scans after S5-B branch push.
-2. Review local/CI Trivy baseline and decide whether Debian runtime remains an
+1. Review local/CI Trivy baseline and decide whether Debian runtime remains an
    accepted S5-C exception or needs a distroless/Alpine follow-up experiment.
-3. Re-enable provenance and SBOM generation in build workflows.
-4. Promote vulnerability scans from report mode to blocking policy in S5-C.
+2. Re-enable provenance and SBOM generation in build workflows.
+3. Promote vulnerability scans from report mode to blocking policy in S5-C.
 
 ## Verification Checklist
 
 - [x] Dockerfile base images pinned to Bookworm-compatible release tags.
 - [x] Compose service images pinned where practical (`rustfs`, `postgres`, and `lakekeeper` pinned to release tags).
 - [x] Vulnerability scan workflow configured (`trivy fs` on PR, image scan on main/schedule/manual, report mode).
-- [ ] CI evidence captured for PR filesystem scan and main/scheduled image scan.
+- [x] CI evidence captured for PR filesystem scan and manual image scan.
 - [ ] SBOM/provenance status documented and justified.
 - [ ] Release notes mention any remaining hardening exceptions.
