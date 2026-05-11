@@ -6,6 +6,7 @@
 [![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org)
 
 ## **🚧 Early Public Preview / Work in Progress 🚧**
+(State: 11.05.2026)
 
 > Anti-Entropator is public early so evaluation and collaboration can happen
 > while v0.3 stabilization is still in progress. Core local workflows are
