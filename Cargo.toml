@@ -11,7 +11,7 @@ categories = ["command-line-utilities", "filesystem"]
 
 [dependencies]
 # Core async runtime
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.52.3", features = ["full"] }
 
 # Error handling
 anyhow = "^1.0.102"
@@ -25,13 +25,13 @@ object_store_opendal = "0.55"
 object_store = { version = "0.12", default-features = false }
 
 # Lakehouse
-iceberg = "0.9"
-iceberg-catalog-rest = "0.9"
-iceberg-storage-opendal = { version = "0.9", features = ["opendal-s3"] }
+iceberg = "0.9.1"
+iceberg-catalog-rest = "0.9.1"
+iceberg-storage-opendal = { version = "0.9.1", features = ["opendal-s3"] }
 datafusion = "52"
 iceberg-datafusion = "0.9"
-arrow = { version = "57", features = ["prettyprint"] }
-parquet = { version = "57", features = ["zstd"] }
+arrow = { version = "57.3.1", features = ["prettyprint"] }
+parquet = { version = "57.3.1", features = ["zstd"] }
 
 # File Processing & Crypto
 sha2 = "0.10"
