@@ -1,0 +1,18 @@
+# Keep Docker build context reproducible and free of local state.
+.git
+.cursor
+.local
+
+# Local secrets and machine-specific configuration.
+.env
+.env.*
+
+# Build outputs and local service state.
+target
+data
+logs
+
+# Editor, OS, and transient files.
+.DS_Store
+*.swp
+*.tmp

@@ -87,6 +87,27 @@ Typical secret stores:
 - Inject at runtime only.
 - Never put in Dockerfile `ENV`, `ARG`, image labels, or source code.
 
+## GitHub Actions Secret Model
+
+The current CI and release workflows do not require repository-level deployment
+secrets because there is no persistent deployment target yet.
+GHCR publishing uses GitHub's built-in `GITHUB_TOKEN` with workflow-scoped
+`packages: write` permission.
+
+This is acceptable for the current local-first and simulated-CD scope when:
+
+- workflows do not upload `.env`, local data directories, or generated stack
+  state as artifacts;
+- CI-only lakehouse smoke tests use generated ephemeral values instead of
+  copied local secrets;
+- no workflow claims to deploy to a persistent external host.
+
+Add GitHub repository or environment secrets only when a real shared/public
+deployment target exists.
+At that point, use GitHub Environments or an external secret manager, require
+review gates for protected deployments, and keep credentials scoped to the
+target environment.
+
 ### Build-time secrets (private dependency token)
 
 - Use ephemeral build secrets only.

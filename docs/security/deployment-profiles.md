@@ -13,6 +13,8 @@ Required controls:
 - Use `.env` only as local convenience and keep it git-ignored.
 - Replace all `CHANGE_ME` values before startup.
 - Keep `LAKEKEEPER_AUTHZ_BACKEND=allowall` only in local mode.
+- Do not copy local `.env` values into GitHub repository secrets for local-only
+  simulation.
 
 Accepted limitations:
 - No SSO or centralized identity.
@@ -27,6 +29,8 @@ Purpose:
 Required controls:
 - Replace local auth defaults with a non-`allowall` Lakekeeper authorization backend.
 - Inject secrets at runtime from a secret manager or secured runner environment.
+- Use GitHub Environments or equivalent deployment scopes if GitHub Actions
+  starts a persistent shared target.
 - Restrict network exposure to the minimal required entry points.
 - Enforce CI checks (`fmt`, `clippy`, `test`, `audit`) before deployment.
 - Enable dependency scanning (`cargo audit` in CI) and GitHub secret
@@ -46,6 +50,8 @@ Purpose:
 Required controls:
 - Keep this repository's local-first defaults clearly labeled as non-production.
 - Use managed secret injection, never committed `.env` secrets.
+- Use generated ephemeral values for GitHub-runner smoke simulations; use
+  protected deployment secrets only for real external targets.
 - Require non-default credentials and rotation policy for all shared services.
 - Add deployment health checks and rollback procedure documentation.
 - Gate release and deployment jobs on successful security checks.
@@ -62,6 +68,17 @@ Showcase constraints:
 | `allowall` authorization | Allowed | Not allowed | Not allowed |
 | `.env` local file | Allowed (git-ignored) | Avoid | Avoid |
 | Managed secret injection | Optional | Required | Required |
+| GitHub deployment secrets | Not required for local simulation | Required if GitHub deploys to shared target | Required for real target, not for ephemeral smoke simulation |
 | CI security gates | Required before release | Required | Required |
 | Image vulnerability scanning | Recommended | Recommended | Required |
 | Rollback plan | Recommended | Required | Required |
+
+## CI/CD Secret Boundary
+
+Current GitHub Actions publish containers to GHCR with the built-in
+`GITHUB_TOKEN` and do not deploy to a persistent host.
+That means repository-level deployment secrets are not required yet.
+
+When a real target is introduced, do not reuse local `.env` values.
+Create target-scoped secrets through GitHub Environments or a secret manager,
+and keep deployment approval separate from normal CI execution.
