@@ -44,6 +44,14 @@ Use it in order, and treat each section as a small, testable milestone.
   - strong `POSTGRES_PASSWORD`
   - strong `LAKEKEEPER_PG_ENCRYPTION_KEY`
   - non-`allowall` Lakekeeper authorization backend
+- [x] Confirm current GitHub Actions do not require repository-level deployment
+  secrets.
+  Current release/container publishing uses `GITHUB_TOKEN` for GHCR.
+  No persistent external deployment target exists yet, so no deployment secrets
+  have been added to GitHub.
+- [ ] Before adding a real deployment target, create GitHub Environment or
+  secret-manager-backed credentials for that target and require review gates for
+  protected deployments.
 
 ## 3) Dependency and Supply Chain
 
@@ -64,6 +72,10 @@ Use it in order, and treat each section as a small, testable milestone.
   Local Trivy image scan found 15 HIGH/CRITICAL Debian findings; CI scan
   evidence is captured above, with blocking policy deferred to S5-C.
 - [ ] Re-enable build provenance/SBOM in CI (deferred to S5, GHCR constraints).
+- [ ] Persist image scan evidence outside logs where possible, such as Trivy
+  JSON/SARIF artifacts, before treating scan output as release evidence.
+- [ ] Separate scan policy for fixable HIGH/CRITICAL findings from unfixed or
+  `will_not_fix` distribution findings before enabling blocking release gates.
 - [x] Lockfile review step: Dependabot PRs + grouped security updates provide
   visibility into `Cargo.lock` changes. Verified 2026-05-05.
 - [ ] Consider adding `cargo deny` policy checks for licenses/advisories (post-v0.3).
@@ -119,12 +131,16 @@ When you are ready to make the repository public:
 
 - [x] Confirm target profile in [Deployment Security Profiles](deployment-profiles.md).
   Current profile: local demo. All docs aligned with local-first defaults.
-- [ ] If demonstrating deployments publicly, document the reference flow in
-  [Blue-Green Showcase Deployment](../ci-cd/blue-green-showcase.md).
-  Status: blue-green remains a reference simulation. No real infrastructure.
+- [ ] If demonstrating deployments publicly, document the delivery model in
+  [Blue-Green Delivery Model](../ci-cd/blue-green-delivery.md).
+  Status: blue-green remains a local/GitHub-runner simulation. No persistent
+  external deployment target exists yet.
   Deferred until S5 or post-v0.3.
 - [ ] Confirm rollback steps are documented and tested at least once in a local simulation.
   Deferred to S5 (container delivery path).
+- [ ] Confirm GitHub-runner deployment simulation is limited to ephemeral smoke
+  checks with generated non-secret values and small fixtures, not persistent
+  deployment credentials or local data dumps.
 - [x] Confirm hardening exceptions and follow-ups are tracked in
   [Docker and CI Hardening Review](docker-hardening-review.md).
   Exceptions documented: floating tags, disabled SBOM/provenance, Trivy

@@ -1,6 +1,6 @@
 ---
 description: Docker, Compose, and CI delivery guardrails for v0.3 stabilization.
-globs: ["Dockerfile", "Dockerfile.*", "docker-compose*.yml", "compose.yaml", ".dockerignore", ".github/workflows/*.yml", ".github/workflows/*.yaml", "docs/security/docker-hardening-review.md", "docs/security/deployment-profiles.md", "docs/security/go-public-checklist.md", "docs/ci-cd/blue-green-showcase.md"]
+globs: ["Dockerfile", "Dockerfile.*", "docker-compose*.yml", "compose.yaml", ".dockerignore", ".github/workflows/*.yml", ".github/workflows/*.yaml", "docs/security/docker-hardening-review.md", "docs/security/deployment-profiles.md", "docs/security/go-public-checklist.md", "docs/ci-cd/blue-green-delivery.md"]
 alwaysApply: false
 ---
 
