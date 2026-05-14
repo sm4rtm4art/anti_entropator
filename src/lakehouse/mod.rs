@@ -31,7 +31,19 @@ pub(crate) fn s3_storage_factory() -> Arc<dyn iceberg::io::StorageFactory> {
 /// Lakekeeper access. Caller is responsible for user-facing logging.
 pub(crate) async fn build_rest_catalog(config: &LakehouseConfig) -> Result<RestCatalog> {
     let catalog_config = get_warehouse_prefix(config).await?;
+    let props = build_rest_catalog_props(config, catalog_config);
 
+    RestCatalogBuilder::default()
+        .with_storage_factory(s3_storage_factory())
+        .load("anti_entropator", props)
+        .await
+        .context("Failed to build RestCatalog")
+}
+
+fn build_rest_catalog_props(
+    config: &LakehouseConfig,
+    catalog_config: CatalogConfigResult,
+) -> HashMap<String, String> {
     let mut props = HashMap::new();
     props.insert("uri".to_string(), catalog_config.uri.clone());
     props.insert("prefix".to_string(), catalog_config.prefix.clone());
@@ -48,16 +60,12 @@ pub(crate) async fn build_rest_catalog(config: &LakehouseConfig) -> Result<RestC
         "s3.secret-access-key".to_string(),
         config.s3_secret_key.clone(),
     );
-    props.insert("s3.region".to_string(), "us-east-1".to_string());
+    props.insert("s3.region".to_string(), config.s3_region.clone());
     props.insert("s3.path-style-access".to_string(), "true".to_string());
     props.insert("s3.allow-http".to_string(), "true".to_string());
     props.insert("s3.remote-signing-enabled".to_string(), "false".to_string());
 
-    RestCatalogBuilder::default()
-        .with_storage_factory(s3_storage_factory())
-        .load("anti_entropator", props)
-        .await
-        .context("Failed to build RestCatalog")
+    props
 }
 
 static CHECK: Emoji<'_, '_> = Emoji("✅ ", "[OK] ");
@@ -596,7 +604,7 @@ async fn send_signed_s3(
     let now = chrono::Utc::now();
     let date_stamp = now.format("%Y%m%d").to_string();
     let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
-    let region = "us-east-1";
+    let region = &config.s3_region;
     let service = "s3";
     let empty_hash = format!("{:x}", Sha256::digest(b""));
 
@@ -606,7 +614,7 @@ async fn send_signed_s3(
         "{method}\n{canonical_uri}\n\nhost:{host}\nx-amz-content-sha256:{empty_hash}\nx-amz-date:{amz_date}\n\n{signed_headers}\n{empty_hash}"
     );
 
-    let credential_scope = format!("{date_stamp}/{region}/{service}/aws4_request");
+    let credential_scope = s3_credential_scope(&date_stamp, region, service);
     let string_to_sign = format!(
         "AWS4-HMAC-SHA256\n{amz_date}\n{credential_scope}\n{:x}",
         Sha256::digest(canonical_request.as_bytes())
@@ -659,6 +667,10 @@ async fn send_signed_s3(
         .map_err(Into::into)
 }
 
+fn s3_credential_scope(date_stamp: &str, region: &str, service: &str) -> String {
+    format!("{date_stamp}/{region}/{service}/aws4_request")
+}
+
 fn s3_host_from_endpoint(endpoint: &str) -> String {
     endpoint
         .trim_start_matches("http://")
@@ -702,24 +714,7 @@ async fn ensure_warehouse(config: &LakehouseConfig, project_id: &str) -> Result<
     tracing::debug!(warehouse = %WAREHOUSE_NAME, "Creating warehouse");
 
     // Create the warehouse
-    let create_req = CreateWarehouseRequest {
-        warehouse_name: WAREHOUSE_NAME.to_string(),
-        storage_profile: S3StorageProfile {
-            profile_type: "s3".to_string(),
-            bucket: config.bucket.clone(),
-            region: "us-east-1".to_string(),
-            endpoint: config.s3_endpoint_internal.clone(),
-            path_style_access: true,
-            key_prefix: "warehouse".to_string(),
-            sts_enabled: false,
-        },
-        storage_credential: S3StorageCredential {
-            cred_type: "s3".to_string(),
-            credential_type: "access-key".to_string(),
-            aws_access_key_id: config.s3_access_key.clone(),
-            aws_secret_access_key: config.s3_secret_key.clone(),
-        },
-    };
+    let create_req = build_create_warehouse_request(config);
 
     let resp = client
         .post(&warehouses_url)
@@ -744,6 +739,27 @@ async fn ensure_warehouse(config: &LakehouseConfig, project_id: &str) -> Result<
             tracing::error!(warehouse = %WAREHOUSE_NAME, status = %status, body = %body, "Failed to create warehouse");
             bail!("Failed to create warehouse: {} - {}", status, body);
         }
+    }
+}
+
+fn build_create_warehouse_request(config: &LakehouseConfig) -> CreateWarehouseRequest {
+    CreateWarehouseRequest {
+        warehouse_name: WAREHOUSE_NAME.to_string(),
+        storage_profile: S3StorageProfile {
+            profile_type: "s3".to_string(),
+            bucket: config.bucket.clone(),
+            region: config.s3_region.clone(),
+            endpoint: config.s3_endpoint_internal.clone(),
+            path_style_access: true,
+            key_prefix: "warehouse".to_string(),
+            sts_enabled: false,
+        },
+        storage_credential: S3StorageCredential {
+            cred_type: "s3".to_string(),
+            credential_type: "access-key".to_string(),
+            aws_access_key_id: config.s3_access_key.clone(),
+            aws_secret_access_key: config.s3_secret_key.clone(),
+        },
     }
 }
 
@@ -968,6 +984,71 @@ async fn create_file_catalog_table(config: &LakehouseConfig) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    async fn read_http_request(socket: &mut tokio::net::TcpStream) -> String {
+        let mut request = Vec::new();
+        let mut buffer = [0; 1024];
+        let mut expected_len = None;
+        loop {
+            let bytes_read = socket.read(&mut buffer).await.unwrap();
+            if bytes_read == 0 {
+                break;
+            }
+            request.extend_from_slice(&buffer[..bytes_read]);
+
+            if expected_len.is_none() {
+                if let Some(header_end) =
+                    request.windows(4).position(|window| window == b"\r\n\r\n")
+                {
+                    let headers = String::from_utf8_lossy(&request[..header_end]);
+                    let content_len = headers
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().ok())
+                                .flatten()
+                        })
+                        .unwrap_or(0);
+                    expected_len = Some(header_end + 4 + content_len);
+                }
+            }
+
+            if expected_len.is_some_and(|len| request.len() >= len) {
+                break;
+            }
+        }
+
+        String::from_utf8_lossy(&request).to_string()
+    }
+
+    async fn write_json_response(socket: &mut tokio::net::TcpStream, status: &str, body: &str) {
+        socket
+            .write_all(
+                format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                )
+                .as_bytes(),
+            )
+            .await
+            .unwrap();
+    }
+
+    fn custom_region_config(region: &str) -> LakehouseConfig {
+        LakehouseConfig {
+            s3_endpoint: "http://127.0.0.1:9000".to_string(),
+            s3_endpoint_internal: "http://rustfs:9000".to_string(),
+            s3_access_key: "test-access".to_string(),
+            s3_secret_key: "test-secret".to_string(),
+            s3_region: region.to_string(),
+            bucket: "test-bucket".to_string(),
+            catalog_endpoint: "http://127.0.0.1:8181".to_string(),
+            warehouse: "test-warehouse".to_string(),
+            project_id: Some("test-project".to_string()),
+        }
+    }
 
     #[test]
     fn state_file_path_is_absolute() {
@@ -1022,5 +1103,144 @@ mod tests {
 
         let loaded = load_state(&new_path, &legacy_path);
         assert_eq!(loaded, Some("legacy-id-456".to_string()));
+    }
+
+    #[test]
+    fn rest_catalog_props_include_configured_s3_region() {
+        let config = custom_region_config("eu-central-1");
+        let catalog_config = CatalogConfigResult {
+            prefix: "warehouse-prefix".to_string(),
+            uri: "http://catalog.example/catalog".to_string(),
+            project_id: "project-id".to_string(),
+        };
+
+        let props = build_rest_catalog_props(&config, catalog_config);
+
+        assert_eq!(
+            props.get("s3.region").map(String::as_str),
+            Some("eu-central-1")
+        );
+        assert_eq!(
+            props.get("header.X-Project-Id").map(String::as_str),
+            Some("project-id")
+        );
+    }
+
+    #[tokio::test]
+    async fn build_rest_catalog_loads_with_project_catalog_config() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let request = read_http_request(&mut socket).await;
+            assert!(request.starts_with("GET /catalog/v1/config?warehouse=test-warehouse "));
+            write_json_response(
+                &mut socket,
+                "200 OK",
+                &format!(
+                    r#"{{"defaults":{{"prefix":"warehouse-prefix"}},"overrides":{{"uri":"http://{addr}/catalog"}}}}"#
+                ),
+            )
+            .await;
+        });
+
+        let mut config = custom_region_config("eu-central-1");
+        config.catalog_endpoint = format!("http://{addr}");
+
+        let catalog = build_rest_catalog(&config).await;
+
+        assert!(catalog.is_ok());
+        server.await.unwrap();
+    }
+
+    #[test]
+    fn warehouse_request_uses_configured_s3_region() {
+        let config = custom_region_config("eu-central-1");
+
+        let request = build_create_warehouse_request(&config);
+
+        assert_eq!(request.storage_profile.region, "eu-central-1");
+        assert_eq!(request.storage_profile.endpoint, "http://rustfs:9000");
+        assert_eq!(request.storage_profile.bucket, "test-bucket");
+    }
+
+    #[tokio::test]
+    async fn ensure_warehouse_posts_configured_s3_region() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (post_request_tx, post_request_rx) = tokio::sync::oneshot::channel();
+
+        let server = tokio::spawn(async move {
+            let (mut list_socket, _) = listener.accept().await.unwrap();
+            let _list_request = read_http_request(&mut list_socket).await;
+            write_json_response(&mut list_socket, "200 OK", r#"{"warehouses":[]}"#).await;
+            drop(list_socket);
+
+            let (mut create_socket, _) = listener.accept().await.unwrap();
+            let create_request = read_http_request(&mut create_socket).await;
+            let _ = post_request_tx.send(create_request);
+            write_json_response(&mut create_socket, "201 Created", "{}").await;
+        });
+
+        let mut config = custom_region_config("eu-central-1");
+        config.catalog_endpoint = format!("http://{addr}");
+
+        let created = ensure_warehouse(&config, "project-id").await.unwrap();
+
+        assert!(created);
+        let post_request = post_request_rx.await.unwrap();
+        assert!(
+            post_request.contains(r#""region":"eu-central-1""#),
+            "warehouse create request should include configured region, got:\n{post_request}"
+        );
+        server.await.unwrap();
+    }
+
+    #[test]
+    fn s3_credential_scope_uses_configured_region() {
+        assert_eq!(
+            s3_credential_scope("20260514", "eu-central-1", "s3"),
+            "20260514/eu-central-1/s3/aws4_request"
+        );
+    }
+
+    #[tokio::test]
+    async fn signed_s3_request_uses_configured_region_in_authorization_scope() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (request_tx, request_rx) = tokio::sync::oneshot::channel();
+
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let request = read_http_request(&mut socket).await;
+            let _ = request_tx.send(request);
+            socket
+                .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+                .await
+                .unwrap();
+        });
+
+        let mut config = custom_region_config("eu-central-1");
+        config.s3_endpoint = format!("http://{addr}");
+        let client = reqwest::Client::new();
+
+        let response = send_signed_s3(
+            &client,
+            "HEAD",
+            &format!("http://{addr}/test-bucket"),
+            &addr.to_string(),
+            "/test-bucket",
+            &config,
+        )
+        .await
+        .unwrap();
+
+        assert!(response.status().is_success());
+        let request = request_rx.await.unwrap();
+        assert!(
+            request.contains("/eu-central-1/s3/aws4_request"),
+            "authorization header should include configured region, got:\n{request}"
+        );
+        server.await.unwrap();
     }
 }

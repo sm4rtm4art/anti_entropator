@@ -139,6 +139,7 @@ anti_entropator merge
 | ---------------------------------- | ------------------------ | ------------------------ |
 | `ANTI_ENTROPATOR_S3_ENDPOINT`      | `http://localhost:8200`  | RustFS endpoint          |
 | `ANTI_ENTROPATOR_CATALOG_ENDPOINT` | `http://localhost:8100`  | Lakekeeper API           |
+| `ANTI_ENTROPATOR_S3_REGION`        | `eu-central-1`           | S3 signing/storage region |
 | `ANTI_ENTROPATOR_BUCKET`           | `anti-entropator`        | S3 bucket name           |
 | `ANTI_ENTROPATOR_WAREHOUSE`        | `anti-entropator`        | Lakekeeper warehouse name|
 | `ANTI_ENTROPATOR_PROJECT_ID`       | _(auto-generated)_       | Lakekeeper project UUID (override auto-detection) |

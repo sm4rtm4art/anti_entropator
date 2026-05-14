@@ -25,8 +25,10 @@ Deploy a new container version with:
 - Service routing is represented by an active-slot variable, selected endpoint,
   or future reverse proxy target.
 - The default `docker-compose.yml` is optimized for a single local stack.
-  True parallel slots require parameterized project names, ports, container
-  names, and data directories or a dedicated deployment override.
+  It parameterizes bind host and published ports while defaulting to
+  `ANTI_BIND_HOST=127.0.0.1`.
+  True parallel slots also require isolated project names, container names, and
+  data directories or a dedicated deployment override.
 
 ## Slots
 
@@ -48,8 +50,11 @@ Only one slot is active for user traffic at a time.
 
 The same pattern should be executed locally with isolated Docker Compose project
 names and slot-specific configuration.
-The current default compose file uses fixed container names, ports, and local
-data directories, so two slots cannot be started safely by only changing
+Published ports can vary by slot through `RUSTFS_API_PORT`,
+`RUSTFS_CONSOLE_PORT`, `POSTGRES_PORT`, and `LAKEKEEPER_PORT`, but they should
+remain bound to `ANTI_BIND_HOST=127.0.0.1` for local simulation.
+The current default compose file still uses fixed container names and local data
+directories, so two slots cannot be started safely by only changing
 `docker compose -p`.
 
 Target local shape for S5-C:
@@ -78,6 +83,9 @@ GitHub Actions can validate the delivery path, but it should stay ephemeral:
 Do not use GitHub repository secrets for local-only simulation.
 Add protected environment secrets only when a persistent external deployment
 target exists.
+
+Run `scripts/check-compose-local-bindings.sh` after Compose changes to confirm
+the default rendered config does not publish service ports beyond localhost.
 
 ## Health Check Gates
 

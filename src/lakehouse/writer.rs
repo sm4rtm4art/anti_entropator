@@ -83,7 +83,7 @@ fn create_file_io(config: &LakehouseConfig) -> FileIO {
     FileIOBuilder::new(s3_storage_factory())
         .with_props(vec![
             ("s3.endpoint", config.s3_endpoint.clone()),
-            ("s3.region", "us-east-1".to_string()),
+            ("s3.region", config.s3_region.clone()),
             ("s3.access-key-id", config.s3_access_key.clone()),
             ("s3.secret-access-key", config.s3_secret_key.clone()),
             ("s3.allow-http", "true".to_string()),
@@ -379,5 +379,19 @@ mod tests {
         // Just verify it doesn't panic and has the right initial state
         assert_eq!(builder.source_paths.capacity(), 100);
         assert_eq!(builder.filenames.capacity(), 100);
+    }
+
+    #[test]
+    fn create_file_io_accepts_configured_s3_region() {
+        let config = LakehouseConfig {
+            s3_endpoint: "http://127.0.0.1:9000".to_string(),
+            s3_region: "eu-central-1".to_string(),
+            s3_access_key: "test-access".to_string(),
+            s3_secret_key: "test-secret".to_string(),
+            bucket: "test-bucket".to_string(),
+            ..LakehouseConfig::default()
+        };
+
+        let _file_io = create_file_io(&config);
     }
 }

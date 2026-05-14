@@ -11,7 +11,8 @@
 #   docker compose down
 #
 # Security note:
-#   - Ports are bound to 127.0.0.1 by default (local-only).
+#   - Ports are bound to ${ANTI_BIND_HOST:-127.0.0.1} by default (local-only).
+#   - Do not set ANTI_BIND_HOST=0.0.0.0 without a reviewed deployment profile.
 #
 # Note: RustFS runs as non-root user (UID 10001).
 # Volume directories must have correct permissions:
@@ -24,8 +25,8 @@ services:
     image: rustfs/rustfs:1.0.0-beta.2
     container_name: anti_entropator_rustfs
     ports:
-      - "127.0.0.1:8200:9000" # S3 API (Organized port)
-      - "127.0.0.1:8210:9001" # Web Console (Organized port)
+      - "${ANTI_BIND_HOST:-127.0.0.1}:${RUSTFS_API_PORT:-8200}:9000" # S3 API (Organized port)
+      - "${ANTI_BIND_HOST:-127.0.0.1}:${RUSTFS_CONSOLE_PORT:-8210}:9001" # Web Console (Organized port)
     volumes:
       - ./data/rustfs:/data
       - ./logs/rustfs:/logs
@@ -50,7 +51,7 @@ services:
     image: postgres:16.11-alpine3.23
     container_name: anti_entropator_postgres
     ports:
-      - "127.0.0.1:8300:5432" # Postgres (Organized port)
+      - "${ANTI_BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-8300}:5432" # Postgres (Organized port)
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     environment:
@@ -87,7 +88,7 @@ services:
     image: quay.io/lakekeeper/catalog:v0.11.6
     container_name: anti_entropator_lakekeeper
     ports:
-      - "127.0.0.1:8100:8181" # REST API + UI (Organized port)
+      - "${ANTI_BIND_HOST:-127.0.0.1}:${LAKEKEEPER_PORT:-8100}:8181" # REST API + UI (Organized port)
     environment:
       LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:?set_in_.env}
       LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}

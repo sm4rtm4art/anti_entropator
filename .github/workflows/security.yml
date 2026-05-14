@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [main]
   schedule:
-    - cron: "0 6 * * 1"
+    - cron: "0 2 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -32,12 +32,19 @@ jobs:
       - name: Audit dependencies
         run: cargo audit
 
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
   trivy-fs-pr:
     name: Trivy Filesystem Scan (PR)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Prepare scan output directory
+        run: mkdir -p trivy-results
 
       - name: Trivy filesystem scan (report mode)
         # S5-A report mode: vulnerability findings are logged; scan failures still fail.
@@ -48,6 +55,38 @@ jobs:
           severity: HIGH,CRITICAL
           exit-code: "0"
 
+      - name: Trivy filesystem scan (JSON artifact)
+        # Persist machine-readable evidence while keeping table output above.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          format: json
+          output: trivy-results/trivy-fs-high-critical.json
+          exit-code: "0"
+
+      - name: Summarize filesystem scan
+        run: |
+          total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results/trivy-fs-high-critical.json)
+          {
+            echo "### Trivy Filesystem Scan (PR)"
+            echo "- Severity scope: HIGH,CRITICAL"
+            echo "- Vulnerabilities found: ${total}"
+            echo "- Artifact: trivy-fs-high-critical.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload filesystem scan artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-fs-pr-${{ github.run_id }}-${{ github.run_attempt }}
+          path: trivy-results/trivy-fs-high-critical.json
+          if-no-files-found: error
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
   trivy-image-main-schedule:
     name: Trivy Image Scan (main/schedule/manual)
     # PRs run the filesystem scan above. Use workflow_dispatch on a PR branch
@@ -56,6 +95,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - name: Prepare scan output directory
+        run: mkdir -p trivy-results
 
       - name: Build local image for scan
         run: docker build -t anti_entropator:local-scan .
@@ -68,3 +110,51 @@ jobs:
           image-ref: anti_entropator:local-scan
           severity: HIGH,CRITICAL
           exit-code: "0"
+
+      - name: Trivy image scan (JSON artifact)
+        # Persist machine-readable evidence while keeping table output above.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: anti_entropator:local-scan
+          severity: HIGH,CRITICAL
+          format: json
+          output: trivy-results/trivy-image-high-critical.json
+          exit-code: "0"
+
+      - name: Trivy image scan (fixable-only evaluation)
+        # Evaluation only: keeps non-fixable distro findings visible in baseline report mode.
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: anti_entropator:local-scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: json
+          output: trivy-results/trivy-image-fixable-high-critical.json
+          exit-code: "0"
+
+      - name: Summarize image scans
+        run: |
+          baseline_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results/trivy-image-high-critical.json)
+          fixable_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results/trivy-image-fixable-high-critical.json)
+          {
+            echo "### Trivy Image Scan (main/schedule/manual)"
+            echo "- Baseline scope: HIGH,CRITICAL (report mode)"
+            echo "- Baseline vulnerabilities: ${baseline_total}"
+            echo "- Fixable-only vulnerabilities: ${fixable_total}"
+            echo "- Artifacts: trivy-image-high-critical.json, trivy-image-fixable-high-critical.json"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload image scan artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: trivy-image-main-schedule-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            trivy-results/trivy-image-high-critical.json
+            trivy-results/trivy-image-fixable-high-critical.json
+          if-no-files-found: error
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh

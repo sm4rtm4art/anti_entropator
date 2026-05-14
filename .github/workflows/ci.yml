@@ -44,6 +44,10 @@ jobs:
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
   # Build and test
   build:
     name: Build & Test
@@ -74,6 +78,10 @@ jobs:
 
       - name: Run tests
         run: cargo test --all-features
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
 
   # Code coverage via cargo-llvm-cov + Codecov
   coverage:
@@ -116,6 +124,10 @@ jobs:
         with:
           files: lcov.info
           fail_ci_if_error: false
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
 
   # Build and push container on main branch
   container:
@@ -160,3 +172,7 @@ jobs:
           # Disable attestation to avoid GHCR 403 errors
           provenance: false
           sbom: false
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
