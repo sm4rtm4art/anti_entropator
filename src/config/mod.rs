@@ -429,6 +429,7 @@ s3_endpoint = "http://custom:9000"
         );
         assert_eq!(cfg.lakehouse.s3_access_key, "testkey");
         assert_eq!(cfg.lakehouse.s3_secret_key, "testsecret");
+        assert_eq!(cfg.lakehouse.s3_region, "eu-central-1");
         assert_eq!(cfg.lakehouse.bucket, "my-bucket");
         assert_eq!(cfg.lakehouse.catalog_endpoint, "http://lakekeeper:8181");
         assert_eq!(cfg.lakehouse.warehouse, "s3://my-bucket/wh");
@@ -544,6 +545,7 @@ s3_endpoint = "http://custom:9000"
         assert_eq!(cfg.s3_endpoint_internal, default_s3_endpoint_internal());
         assert_eq!(cfg.s3_access_key, default_s3_access_key());
         assert_eq!(cfg.s3_secret_key, default_s3_secret_key());
+        assert_eq!(cfg.s3_region, default_s3_region());
         assert_eq!(cfg.bucket, default_bucket());
         assert_eq!(cfg.catalog_endpoint, default_catalog_endpoint());
         assert_eq!(cfg.warehouse, default_warehouse());

@@ -380,4 +380,18 @@ mod tests {
         assert_eq!(builder.source_paths.capacity(), 100);
         assert_eq!(builder.filenames.capacity(), 100);
     }
+
+    #[test]
+    fn create_file_io_accepts_configured_s3_region() {
+        let config = LakehouseConfig {
+            s3_endpoint: "http://127.0.0.1:9000".to_string(),
+            s3_region: "eu-central-1".to_string(),
+            s3_access_key: "test-access".to_string(),
+            s3_secret_key: "test-secret".to_string(),
+            bucket: "test-bucket".to_string(),
+            ..LakehouseConfig::default()
+        };
+
+        let _file_io = create_file_io(&config);
+    }
 }
