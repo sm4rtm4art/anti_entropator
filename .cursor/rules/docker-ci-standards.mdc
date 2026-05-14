@@ -42,8 +42,11 @@ documentation changes. Keep v0.3 stability ahead of release expansion.
 
 ## Docker Compose
 
-- Local service ports bind to `127.0.0.1` by default.
+- Local service ports bind to `127.0.0.1` by default, either directly or through
+  an explicit safe default such as `${ANTI_BIND_HOST:-127.0.0.1}`.
 - Do not switch to `0.0.0.0` without a reviewed deployment profile.
+- After Compose port-binding changes, run or document
+  `scripts/check-compose-local-bindings.sh`.
 - Required local secrets should use `${VAR:?}` where practical.
 - `allowall` authorization is local-demo only.
 - Do not add runtime services that are absent from the architecture docs and

@@ -55,6 +55,10 @@ pub struct LakehouseConfig {
     #[serde(default = "default_s3_secret_key")]
     pub s3_secret_key: String,
 
+    /// S3 signing/storage region
+    #[serde(default = "default_s3_region")]
+    pub s3_region: String,
+
     /// Bucket name for data
     #[serde(default = "default_bucket")]
     pub bucket: String,
@@ -94,6 +98,12 @@ fn default_s3_secret_key() -> String {
         .unwrap_or_default()
 }
 
+fn default_s3_region() -> String {
+    std::env::var("ANTI_ENTROPATOR_S3_REGION")
+        .or_else(|_| std::env::var("AWS_REGION"))
+        .unwrap_or_else(|_| "eu-central-1".to_string())
+}
+
 fn default_bucket() -> String {
     std::env::var("ANTI_ENTROPATOR_BUCKET").unwrap_or_else(|_| "anti-entropator".to_string())
 }
@@ -114,6 +124,7 @@ impl Default for LakehouseConfig {
             s3_endpoint_internal: default_s3_endpoint_internal(),
             s3_access_key: default_s3_access_key(),
             s3_secret_key: default_s3_secret_key(),
+            s3_region: default_s3_region(),
             bucket: default_bucket(),
             catalog_endpoint: default_catalog_endpoint(),
             warehouse: default_warehouse(),
@@ -308,6 +319,7 @@ s3_endpoint = "http://rustfs:9000"
 s3_endpoint_internal = "http://rustfs-internal:9000"
 s3_access_key = "testkey"
 s3_secret_key = "testsecret"
+s3_region = "eu-central-1"
 bucket = "my-bucket"
 catalog_endpoint = "http://lakekeeper:8181"
 warehouse = "s3://my-bucket/wh"
@@ -355,6 +367,11 @@ s3_endpoint = "http://custom:9000"
         }
         if std::env::var("ANTI_ENTROPATOR_S3_ENDPOINT_INTERNAL").is_err() {
             assert_eq!(cfg.lakehouse.s3_endpoint_internal, "http://rustfs:9000");
+        }
+        if std::env::var("ANTI_ENTROPATOR_S3_REGION").is_err()
+            && std::env::var("AWS_REGION").is_err()
+        {
+            assert_eq!(cfg.lakehouse.s3_region, "eu-central-1");
         }
         assert!(
             cfg.lakehouse.project_id.is_none()

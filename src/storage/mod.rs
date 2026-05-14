@@ -16,7 +16,7 @@ pub fn create_operator(config: &LakehouseConfig) -> Result<Operator> {
     let builder = S3::default()
         .endpoint(&config.s3_endpoint)
         .bucket(&config.bucket)
-        .region("us-east-1")
+        .region(&config.s3_region)
         .access_key_id(&config.s3_access_key)
         .secret_access_key(&config.s3_secret_key);
 

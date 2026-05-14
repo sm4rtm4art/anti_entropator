@@ -83,7 +83,7 @@ fn create_file_io(config: &LakehouseConfig) -> FileIO {
     FileIOBuilder::new(s3_storage_factory())
         .with_props(vec![
             ("s3.endpoint", config.s3_endpoint.clone()),
-            ("s3.region", "us-east-1".to_string()),
+            ("s3.region", config.s3_region.clone()),
             ("s3.access-key-id", config.s3_access_key.clone()),
             ("s3.secret-access-key", config.s3_secret_key.clone()),
             ("s3.allow-http", "true".to_string()),

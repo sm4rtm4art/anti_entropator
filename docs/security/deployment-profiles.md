@@ -10,6 +10,7 @@ Purpose:
 
 Required controls:
 - Keep service ports bound to `127.0.0.1`.
+  The default compose binding uses `ANTI_BIND_HOST=127.0.0.1`.
 - Use `.env` only as local convenience and keep it git-ignored.
 - Replace all `CHANGE_ME` values before startup.
 - Keep `LAKEKEEPER_AUTHZ_BACKEND=allowall` only in local mode.
@@ -32,6 +33,8 @@ Required controls:
 - Use GitHub Environments or equivalent deployment scopes if GitHub Actions
   starts a persistent shared target.
 - Restrict network exposure to the minimal required entry points.
+  Do not set `ANTI_BIND_HOST=0.0.0.0` unless host firewall rules and service
+  authentication have been reviewed.
 - Enforce CI checks (`fmt`, `clippy`, `test`, `audit`) before deployment.
 - Enable dependency scanning (`cargo audit` in CI) and GitHub secret
   scanning/push protection when available (requires public repo or Advanced
@@ -55,6 +58,8 @@ Required controls:
 - Require non-default credentials and rotation policy for all shared services.
 - Add deployment health checks and rollback procedure documentation.
 - Gate release and deployment jobs on successful security checks.
+  Public exposure must use explicit network controls rather than relying on the
+  local compose defaults.
 
 Showcase constraints:
 - The blue/green flow documented in this repository is a reference pattern, not a managed production platform.
@@ -72,6 +77,17 @@ Showcase constraints:
 | CI security gates | Required before release | Required | Required |
 | Image vulnerability scanning | Recommended | Recommended | Required |
 | Rollback plan | Recommended | Required | Required |
+
+## Compose Port Binding Guardrail
+
+`docker-compose.yml` parameterizes published ports for local delivery
+simulation, but defaults the bind host to `127.0.0.1`.
+This allows blue/green-style local slots to use different ports without
+accidentally publishing services on all interfaces.
+
+Run `scripts/check-compose-local-bindings.sh` after compose changes.
+The check renders the default Compose config and fails if any published service
+port is not bound to `127.0.0.1`.
 
 ## CI/CD Secret Boundary
 

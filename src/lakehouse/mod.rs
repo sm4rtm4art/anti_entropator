@@ -48,7 +48,7 @@ pub(crate) async fn build_rest_catalog(config: &LakehouseConfig) -> Result<RestC
         "s3.secret-access-key".to_string(),
         config.s3_secret_key.clone(),
     );
-    props.insert("s3.region".to_string(), "us-east-1".to_string());
+    props.insert("s3.region".to_string(), config.s3_region.clone());
     props.insert("s3.path-style-access".to_string(), "true".to_string());
     props.insert("s3.allow-http".to_string(), "true".to_string());
     props.insert("s3.remote-signing-enabled".to_string(), "false".to_string());
@@ -596,7 +596,7 @@ async fn send_signed_s3(
     let now = chrono::Utc::now();
     let date_stamp = now.format("%Y%m%d").to_string();
     let amz_date = now.format("%Y%m%dT%H%M%SZ").to_string();
-    let region = "us-east-1";
+    let region = &config.s3_region;
     let service = "s3";
     let empty_hash = format!("{:x}", Sha256::digest(b""));
 
@@ -707,7 +707,7 @@ async fn ensure_warehouse(config: &LakehouseConfig, project_id: &str) -> Result<
         storage_profile: S3StorageProfile {
             profile_type: "s3".to_string(),
             bucket: config.bucket.clone(),
-            region: "us-east-1".to_string(),
+            region: config.s3_region.clone(),
             endpoint: config.s3_endpoint_internal.clone(),
             path_style_access: true,
             key_prefix: "warehouse".to_string(),

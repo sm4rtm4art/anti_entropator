@@ -32,11 +32,22 @@ Use it in order, and treat each section as a small, testable milestone.
   - post-job cleanup logs do not expose token values,
   - cache keys/paths do not include secrets,
   - uploaded artifacts/release assets do not contain `.env` or local state.
+- [x] Add final best-effort runner cleanup to CI, release, and security jobs.
+  The cleanup runs after intentional evidence upload/release publication and
+  removes local scan output, release staging files, Docker auth leftovers, and
+  accidental `.env` files from the runner workspace.
 
 ## 2) Configuration Hardening
 
 - [x] Replace insecure compose fallbacks with required env vars for secrets.
 - [x] Keep service ports bound to `127.0.0.1` by default.
+  Compose now uses `ANTI_BIND_HOST=127.0.0.1` as the safe default and supports
+  port overrides for local delivery simulation.
+- [x] Run `scripts/check-compose-local-bindings.sh` after compose changes to
+  verify the rendered default config does not publish service ports beyond
+  localhost.
+  Verified 2026-05-13: default config passed and `ANTI_BIND_HOST=0.0.0.0`
+  was rejected.
 - [x] Keep `allowall` auth backend marked as local-dev-only.
 - [ ] Before any shared deployment, set (documented requirement, not current
   deployment state — repo remains local-demo):
@@ -72,10 +83,17 @@ Use it in order, and treat each section as a small, testable milestone.
   Local Trivy image scan found 15 HIGH/CRITICAL Debian findings; CI scan
   evidence is captured above, with blocking policy deferred to S5-C.
 - [ ] Re-enable build provenance/SBOM in CI (deferred to S5, GHCR constraints).
-- [ ] Persist image scan evidence outside logs where possible, such as Trivy
-  JSON/SARIF artifacts, before treating scan output as release evidence.
-- [ ] Separate scan policy for fixable HIGH/CRITICAL findings from unfixed or
-  `will_not_fix` distribution findings before enabling blocking release gates.
+- [x] Persist image scan evidence outside logs where possible. `security.yml`
+  now uploads Trivy JSON artifacts for PR filesystem scans and
+  main/schedule/manual image scans.
+- [x] Add a separate fixable-only scan policy view for HIGH/CRITICAL findings.
+  `security.yml` now records an image-scan `ignore-unfixed` JSON artifact as a
+  non-blocking policy-evaluation path while baseline report-mode visibility
+  stays intact.
+- [ ] Add Docker-related PR runtime-image scanning in a later S5-C slice, or
+  close the deferral with explicit evidence. Deferred from S5-C iteration 1 to
+  keep the first slice limited to build-context validation, persisted scan
+  evidence, and fixable-only policy evaluation.
 - [x] Lockfile review step: Dependabot PRs + grouped security updates provide
   visibility into `Cargo.lock` changes. Verified 2026-05-05.
 - [ ] Consider adding `cargo deny` policy checks for licenses/advisories (post-v0.3).

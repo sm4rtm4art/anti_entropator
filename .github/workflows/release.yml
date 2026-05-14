@@ -59,6 +59,10 @@ jobs:
           name: anti_entropator-${{ matrix.target }}
           path: anti_entropator-${{ matrix.target }}.tar.gz
 
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
   build-container:
     name: Build Container Image
     runs-on: ubuntu-latest
@@ -100,6 +104,10 @@ jobs:
           provenance: false
           sbom: false
 
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
   create-release:
     name: Create GitHub Release
     needs: [build-binaries, build-container]
@@ -119,3 +127,7 @@ jobs:
         with:
           files: artifacts/**/*.tar.gz
           generate_release_notes: true
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
