@@ -75,3 +75,28 @@ updates:
           - "docker/login-action"
           - "docker/metadata-action"
           - "docker/build-push-action"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    open-pull-requests-limit: 5
+    groups:
+      container-base-images:
+        patterns:
+          - "rust"
+          - "debian"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    open-pull-requests-limit: 5
+    groups:
+      compose-service-images:
+        patterns:
+          - "rustfs/rustfs"
+          - "postgres"
+          - "quay.io/lakekeeper/catalog"

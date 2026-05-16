@@ -35,8 +35,8 @@ Include:
 - Use non-default credentials and strong encryption keys in `.env`.
 - Do not commit secrets (`.env`, tokens, credentials, private keys).
 - Do not expose secrets through workflow logs, artifacts, or release assets.
-- Enable dependency checks in CI and secret scanning/push protection before
-  making the repository public.
+- Keep dependency checks, CodeQL code scanning, and secret scanning enabled for
+  the public repository.
 
 ## Current Security Controls
 
@@ -46,6 +46,11 @@ Enforced today:
 - Local compose ports bind to `127.0.0.1`.
 - Compose requires critical secret variables (`${VAR:?}`).
 - Dependency vulnerability checks run via `cargo audit` in CI.
+- CodeQL code scanning and GitHub secret scanning are enabled in repository
+  settings.
+- Security-sensitive repository surfaces are covered by `.github/CODEOWNERS`;
+  branch or ruleset configuration should require CODEOWNER review for those
+  paths.
 
 Implemented (pending test coverage):
 
@@ -57,7 +62,8 @@ Before public/shared deployment:
 - Run current-tree and full-history secret scanning (gitleaks or equivalent).
 - Review failed CI logs, post-job cleanup output, caches, artifacts, and
   release assets for accidental disclosure.
-- Enable GitHub secret scanning and push protection when available.
+- Keep GitHub secret scanning enabled and verify push protection/ruleset
+  behavior before accepting external contributions or adding deployment secrets.
 - Use a non-`allowall` Lakekeeper authorization backend.
 - Use managed/runtime secret injection instead of local `.env`.
 
