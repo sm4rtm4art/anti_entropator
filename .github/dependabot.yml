@@ -69,6 +69,7 @@ updates:
           - "dtolnay/rust-toolchain"
           - "taiki-e/install-action"
           - "softprops/action-gh-release"
+          - "zizmorcore/zizmor-action"
       ci-docker-actions:
         patterns:
           - "docker/setup-buildx-action"
@@ -81,6 +82,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday"
+    cooldown:
+      default-days: 3
     open-pull-requests-limit: 5
     groups:
       container-base-images:
@@ -93,6 +96,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday"
+    cooldown:
+      default-days: 3
     open-pull-requests-limit: 5
     groups:
       compose-service-images:
