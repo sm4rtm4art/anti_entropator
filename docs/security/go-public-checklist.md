@@ -1,6 +1,7 @@
 # Go-Public Security Checklist
 
-This checklist is designed for Anti-Entropator before changing repository visibility from private to public.
+This checklist is designed for Anti-Entropator before and after changing
+repository visibility from private to public.
 
 Use it in order, and treat each section as a small, testable milestone.
 
@@ -22,11 +23,19 @@ Use it in order, and treat each section as a small, testable milestone.
 - [x] Dependabot alerts: enabled (2026-05-05).
 - [x] Dependabot security updates: enabled (2026-05-05).
 - [x] Grouped security updates: enabled (2026-05-05).
-- [ ] Enable GitHub Advanced Security features when available:
-  - Secret scanning: requires public repo or Advanced Security license. Deferred until go-public.
-  - Push protection: enable immediately before switching to public.
-  - Private vulnerability reporting: available after go-public.
-  - Codecov integration: available on public repos (free tier). Deferred until go-public.
+- [x] Enable GitHub code/security features when available:
+  - CodeQL code scanning: enabled in GitHub repository settings (2026-05-16).
+  - Secret scanning: enabled in GitHub repository settings (2026-05-16).
+  - Codecov integration: active on public PRs.
+  - Private vulnerability reporting: available after go-public; verify setting
+    before announcing a public vulnerability intake process.
+  - Push protection: keep enabled or verify before accepting external
+    contributions and before adding any deployment secrets.
+- [x] Add CODEOWNER coverage for security-sensitive surfaces:
+  `.github/workflows/**`, `.github/dependabot.yml`, `.github/CODEOWNERS`,
+  dependency manifests, container files, scripts, and security/deployment docs.
+- [ ] Require CODEOWNER review for those paths through GitHub branch protection
+  or repository rulesets.
 - [ ] Review GitHub Actions failed-run behavior before going public:
   - failed job logs do not print secrets or `.env` contents,
   - post-job cleanup logs do not expose token values,
@@ -96,6 +105,8 @@ Use it in order, and treat each section as a small, testable milestone.
   evidence, and fixable-only policy evaluation.
 - [x] Lockfile review step: Dependabot PRs + grouped security updates provide
   visibility into `Cargo.lock` changes. Verified 2026-05-05.
+- [x] Dependabot tracks GitHub Actions, Cargo dependencies, Dockerfile base
+  images, and Docker Compose service images.
 - [ ] Consider adding `cargo deny` policy checks for licenses/advisories (post-v0.3).
 - [x] Workflow toolchain setup remains aligned with repository contract:
   workflows use `dtolnay/rust-toolchain@stable`; `rust-toolchain.toml` also

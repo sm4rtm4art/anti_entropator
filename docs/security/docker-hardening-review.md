@@ -1,6 +1,6 @@
 # Docker and CI Hardening Review
 
-Review date: 2026-05-13.
+Review date: 2026-05-16.
 
 Scope:
 - `Dockerfile`
@@ -19,6 +19,12 @@ Scope:
 - CI, release, and security workflows run best-effort post-job cleanup steps to
   remove local scan outputs, release staging files, Docker auth leftovers, and
   accidental `.env` files from the runner workspace after evidence is uploaded.
+- CodeQL code scanning and GitHub secret scanning are enabled in repository
+  settings, while repo-tracked workflow security analysis now runs with
+  `zizmor` in `security.yml`.
+- `.github/CODEOWNERS` covers workflow, dependency, container, script, and
+  security documentation changes so branch/ruleset settings can require focused
+  review for high-risk surfaces.
 
 ## Findings and Follow-ups
 
@@ -34,9 +40,13 @@ Scope:
 | Runtime container smoke test | Prior S5-B local image build + `docker run --help` succeeded with Bookworm-aligned builder/runtime. S5-C re-validation attempt on 2026-05-13 was blocked locally because Docker daemon was unavailable on the workstation (`docker.sock` missing). | Medium until repeated validation is captured for this iteration | Re-run local smoke check with Docker daemon available and capture CI/manual workflow evidence |
 | Docker build context | Conservative `.dockerignore` restored in S5-C to exclude local state, secrets, build outputs, and generated service data | Validation still required because build-context exclusions can break CI/release builds if too broad | Validate local and GitHub runner builds still have required inputs; local validation was blocked on 2026-05-13 due to missing Docker daemon |
 | Compose port binding | Compose published ports are parameterized for local delivery slots and default to `ANTI_BIND_HOST=127.0.0.1`. `scripts/check-compose-local-bindings.sh` passed for defaults and rejected `ANTI_BIND_HOST=0.0.0.0` on 2026-05-13. | Setting `ANTI_BIND_HOST=0.0.0.0` can expose RustFS, Postgres, or Lakekeeper beyond localhost | Keep default localhost binding; require reviewed deployment profile before non-local exposure |
-| Workflow linting (`actionlint`, `zizmor`) | `actionlint` 1.7.12 passes on `.github/workflows/security.yml` in this iteration. `zizmor` is not installed on the current workstation. | Partial workflow static-analysis coverage | Add `zizmor` to local tooling or run it in CI before S5-C closeout |
+| Workflow linting (`actionlint`, `zizmor`) | `actionlint` is used for local workflow syntax validation. `security.yml` now includes a `zizmor` job for GitHub Actions security analysis and code-scanning upload on push/same-repo PRs. | Fork PRs skip the code-scanning upload path because `security-events: write` is unavailable there | Keep `zizmor` visible in CI, and use branch/ruleset requirements for workflow changes |
 | GitHub deployment secrets | No repository-level deployment secrets are configured | Acceptable for current GHCR/local-simulation scope, but not sufficient for real external deployment | Keep current path secretless except `GITHUB_TOKEN`; require environment secrets or secret-manager integration before persistent deployment |
 | Runner cleanup | `ci.yml`, `release.yml`, and `security.yml` call `scripts/ci-cleanup.sh` with `if: always()` at the end of each job. | GitHub-hosted runners should be ephemeral, but future self-hosted runners and failed jobs can retain local workspace or Docker auth leftovers if cleanup is omitted | Keep cleanup best-effort, do not print token values, and upload intentional evidence artifacts before cleanup runs |
+| CodeQL and secret scanning | CodeQL code scanning and GitHub secret scanning are enabled in repository settings. | These controls are configured outside repo files, so reviewers cannot verify them from workflow YAML alone | Keep the setting documented here and in the go-public checklist; do not treat CodeQL as a replacement for audit, Trivy, or review |
+| Workflow token persistence | `actions/checkout` uses `persist-credentials: false` in CI, security, and release jobs. | A malicious step has less opportunity to reuse the checked-out repository's persisted Git credentials, but explicit job tokens still exist for actions that need them | Keep job permissions least-privilege and avoid broad write permissions outside publish/release jobs |
+| CODEOWNER review | `.github/CODEOWNERS` covers workflow, dependency, container, script, and security documentation changes. | CODEOWNERS only helps if GitHub branch protection or rulesets require review from code owners | Enable or verify CODEOWNER-required review in branch/ruleset settings |
+| Dependabot container coverage | Dependabot tracks `cargo`, `github-actions`, `docker`, and `docker-compose` ecosystems. | Automated updates can still be risky if grouped blindly or if upstream tags regress | Keep PR review focused on changelog, digest/scan evidence, and local/CI validation |
 
 ## Accepted Exceptions (Temporary)
 
@@ -95,8 +105,16 @@ These exceptions and digest baselines should remain explicit until resolved.
 - [x] Fixable-vulnerability policy evaluation added separately from unfixed
   distribution findings (image scan `ignore-unfixed` JSON artifact, non-blocking).
 - [x] Workflow lint check executed with `actionlint` for `security.yml`.
-- [x] `zizmor` local unavailability documented for this iteration.
+- [x] `zizmor` added to `security.yml` for repo-tracked GitHub Actions
+  security analysis.
 - [x] CI, release, and security workflows include final best-effort runner
   cleanup steps after evidence upload/release publication.
+- [x] `actions/checkout` uses `persist-credentials: false` in CI, security, and
+  release jobs.
+- [x] CodeQL code scanning and GitHub secret scanning are enabled in repository
+  settings and documented as external GitHub controls.
+- [x] CODEOWNER coverage added for security-sensitive repo surfaces.
+- [ ] Require CODEOWNER review through GitHub branch protection or repository
+  rulesets.
 - [ ] SBOM/provenance status documented, tested against GHCR, and justified.
 - [ ] Release notes mention any remaining hardening exceptions.

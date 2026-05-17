@@ -5,6 +5,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       opendal-stack:
@@ -57,6 +59,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday"
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     groups:
       ci-core-actions:
@@ -69,9 +73,39 @@ updates:
           - "dtolnay/rust-toolchain"
           - "taiki-e/install-action"
           - "softprops/action-gh-release"
+          - "zizmorcore/zizmor-action"
       ci-docker-actions:
         patterns:
           - "docker/setup-buildx-action"
           - "docker/login-action"
           - "docker/metadata-action"
           - "docker/build-push-action"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      container-base-images:
+        patterns:
+          - "rust"
+          - "debian"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      compose-service-images:
+        patterns:
+          - "rustfs/rustfs"
+          - "postgres"
+          - "quay.io/lakekeeper/catalog"

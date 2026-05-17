@@ -1,0 +1,18 @@
+# Security-sensitive project surfaces.
+#
+# GitHub branch/ruleset settings should require CODEOWNER review before these
+# files can be merged into protected branches.
+
+/.github/workflows/ @sm4rtm4art
+/.github/dependabot.yml @sm4rtm4art
+/.github/CODEOWNERS @sm4rtm4art
+
+/Cargo.toml @sm4rtm4art
+/Cargo.lock @sm4rtm4art
+/Dockerfile @sm4rtm4art
+/docker-compose.yml @sm4rtm4art
+/scripts/ @sm4rtm4art
+
+/SECURITY.md @sm4rtm4art
+/docs/security/ @sm4rtm4art
+/docs/ci-cd/ @sm4rtm4art
