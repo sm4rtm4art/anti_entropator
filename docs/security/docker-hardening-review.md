@@ -19,6 +19,8 @@ Scope:
 - CI, release, and security workflows run best-effort post-job cleanup steps to
   remove local scan outputs, release staging files, Docker auth leftovers, and
   accidental `.env` files from the runner workspace after evidence is uploaded.
+- GitHub Actions in CI, release, and security workflows are pinned to full
+  commit SHAs with tag/branch comments for reviewability.
 - CodeQL code scanning and GitHub secret scanning are enabled in repository
   settings, while repo-tracked workflow security analysis now runs with
   `zizmor` in `security.yml`.
@@ -107,6 +109,8 @@ These exceptions and digest baselines should remain explicit until resolved.
 - [x] Workflow lint check executed with `actionlint` for `security.yml`.
 - [x] `zizmor` added to `security.yml` for repo-tracked GitHub Actions
   security analysis.
+- [x] GitHub Actions references in CI, release, and security workflows are
+  pinned to full commit SHAs; local `actionlint` passed after pinning.
 - [x] CI, release, and security workflows include final best-effort runner
   cleanup steps after evidence upload/release publication.
 - [x] `actions/checkout` uses `persist-credentials: false` in CI, security, and

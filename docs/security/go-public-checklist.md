@@ -41,6 +41,13 @@ Use it in order, and treat each section as a small, testable milestone.
   - post-job cleanup logs do not expose token values,
   - cache keys/paths do not include secrets,
   - uploaded artifacts/release assets do not contain `.env` or local state.
+- [ ] Complete the S5-0 trust-gap reconciliation before S5 public-showcase
+  closeout:
+  - classify remaining checklist items as S5-closeout, release-blocking, or
+    post-v0.3 debt,
+  - confirm S1/S4 gate wording still matches current code behavior,
+  - keep the `println!` policy explicit: existing calls are deferred, new calls
+    are disallowed during stabilization work.
 - [x] Add final best-effort runner cleanup to CI, release, and security jobs.
   The cleanup runs after intentional evidence upload/release publication and
   removes local scan output, release staging files, Docker auth leftovers, and

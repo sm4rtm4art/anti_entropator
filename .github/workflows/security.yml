@@ -42,15 +42,15 @@ jobs:
     name: Cargo Audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
 
       - name: Install cargo-audit
-        uses: taiki-e/install-action@cargo-audit
+        uses: taiki-e/install-action@167d16dd73fb65198608a26338c29317dbe87fa6 # cargo-audit
 
       - name: Audit dependencies
         run: cargo audit
@@ -64,7 +64,7 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
 
@@ -73,7 +73,7 @@ jobs:
 
       - name: Trivy filesystem scan (report mode)
         # S5-A report mode: vulnerability findings are logged; scan failures still fail.
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -82,7 +82,7 @@ jobs:
 
       - name: Trivy filesystem scan (JSON artifact)
         # Persist machine-readable evidence while keeping table output above.
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -102,7 +102,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload filesystem scan artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: trivy-fs-pr-${{ github.run_id }}-${{ github.run_attempt }}
           path: trivy-results/trivy-fs-high-critical.json
@@ -119,7 +119,7 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
 
@@ -131,7 +131,7 @@ jobs:
 
       - name: Trivy image scan (report mode)
         # S5-A report mode: vulnerability findings are logged; scan failures still fail.
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: image
           image-ref: anti_entropator:local-scan
@@ -140,7 +140,7 @@ jobs:
 
       - name: Trivy image scan (JSON artifact)
         # Persist machine-readable evidence while keeping table output above.
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: image
           image-ref: anti_entropator:local-scan
@@ -151,7 +151,7 @@ jobs:
 
       - name: Trivy image scan (fixable-only evaluation)
         # Evaluation only: keeps non-fixable distro findings visible in baseline report mode.
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         with:
           scan-type: image
           image-ref: anti_entropator:local-scan
@@ -174,7 +174,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload image scan artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: trivy-image-main-schedule-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
