@@ -120,7 +120,9 @@ jobs:
             ${{ runner.os }}-cargo-cov-
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@1af28e82b8acfe451db73552a27a2019a19b9ab6 # cargo-llvm-cov
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2
+        with:
+          tool: cargo-llvm-cov
 
       - name: Generate coverage
         run: cargo llvm-cov --all-features --workspace --lcov --output-path lcov.info
