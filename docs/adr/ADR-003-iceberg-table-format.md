@@ -40,7 +40,7 @@ We will use **Apache Iceberg** as the table format for the file catalog.
 
 ## Table Schema
 
-```
+```text
 file_catalog (Iceberg Table)
 ├── file_id: UUID
 ├── source_path: STRING

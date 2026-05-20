@@ -132,7 +132,7 @@ sequenceDiagram
 
 Files are stored with keys derived from their content hash:
 
-```
+```text
 s3://anti-entropator/warehouse/
 └── sha256/
     ├── ab/

@@ -24,6 +24,7 @@ Scope:
 - CodeQL code scanning and GitHub secret scanning are enabled in repository
   settings, while repo-tracked workflow security analysis now runs with
   `zizmor` in `security.yml`.
+- A dedicated `docs-shell.yml` workflow performs automated quality checks on non-Rust files, including typos/spelling (`typos`), Markdown formatting (`markdownlint-cli2`), Shell script syntax (`shellcheck`), and formatting (`shfmt`). This workflow uses pinned GitHub Actions and narrow path triggers to optimize CI resources.
 - `.github/CODEOWNERS` covers workflow, dependency, container, script, and
   security documentation changes so branch/ruleset settings can require focused
   review for high-risk surfaces.
@@ -43,6 +44,7 @@ Scope:
 | Docker build context | Conservative `.dockerignore` restored in S5-C to exclude local state, secrets, build outputs, and generated service data | Validation still required because build-context exclusions can break CI/release builds if too broad | Validate local and GitHub runner builds still have required inputs; local validation was blocked on 2026-05-13 due to missing Docker daemon |
 | Compose port binding | Compose published ports are parameterized for local delivery slots and default to `ANTI_BIND_HOST=127.0.0.1`. `scripts/check-compose-local-bindings.sh` passed for defaults and rejected `ANTI_BIND_HOST=0.0.0.0` on 2026-05-13. | Setting `ANTI_BIND_HOST=0.0.0.0` can expose RustFS, Postgres, or Lakekeeper beyond localhost | Keep default localhost binding; require reviewed deployment profile before non-local exposure |
 | Workflow linting (`actionlint`, `zizmor`) | `actionlint` is used for local workflow syntax validation. `security.yml` now includes a `zizmor` job for GitHub Actions security analysis and code-scanning upload on push/same-repo PRs. | Fork PRs skip the code-scanning upload path because `security-events: write` is unavailable there | Keep `zizmor` visible in CI, and use branch/ruleset requirements for workflow changes |
+| Non-Rust file quality (Markdown, Shell) | No automated CI linting for shell scripts or Markdown documentation was previously active. | Typos, broken shell script syntax, or non-standard formatting can introduce noise or execution bugs. | Created `.github/workflows/docs-shell.yml` to run `typos`, `markdownlint-cli2`, `shellcheck`, and `shfmt -d` on narrow path triggers. All actions are fully pinned. |
 | GitHub deployment secrets | No repository-level deployment secrets are configured | Acceptable for current GHCR/local-simulation scope, but not sufficient for real external deployment | Keep current path secretless except `GITHUB_TOKEN`; require environment secrets or secret-manager integration before persistent deployment |
 | Runner cleanup | `ci.yml`, `release.yml`, and `security.yml` call `scripts/ci-cleanup.sh` with `if: always()` at the end of each job. | GitHub-hosted runners should be ephemeral, but future self-hosted runners and failed jobs can retain local workspace or Docker auth leftovers if cleanup is omitted | Keep cleanup best-effort, do not print token values, and upload intentional evidence artifacts before cleanup runs |
 | CodeQL and secret scanning | CodeQL code scanning and GitHub secret scanning are enabled in repository settings. | These controls are configured outside repo files, so reviewers cannot verify them from workflow YAML alone | Keep the setting documented here and in the go-public checklist; do not treat CodeQL as a replacement for audit, Trivy, or review |
@@ -111,6 +113,10 @@ These exceptions and digest baselines should remain explicit until resolved.
   security analysis.
 - [x] GitHub Actions references in CI, release, and security workflows are
   pinned to full commit SHAs; local `actionlint` passed after pinning.
+- [x] Dedicated `docs-shell.yml` workflow created and verified with `actionlint` and `zizmor`.
+- [x] Automated spelling check with `typos` configured with repository allowlist in `_typos.toml`.
+- [x] Automated Markdown linting with `markdownlint-cli2` configured in `.markdownlint-cli2.yaml`.
+- [x] Automated shell script linting with `shellcheck` and formatting validation with `shfmt -i 4 -d` active for all repo scripts.
 - [x] CI, release, and security workflows include final best-effort runner
   cleanup steps after evidence upload/release publication.
 - [x] `actions/checkout` uses `persist-credentials: false` in CI, security, and

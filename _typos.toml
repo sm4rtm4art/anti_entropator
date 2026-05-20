@@ -1,0 +1,4 @@
+[default.extend-words]
+ratatui = "ratatui"
+hashicorp = "hashicorp"
+hashi = "hashi"
