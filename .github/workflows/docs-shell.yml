@@ -1,0 +1,58 @@
+name: Docs & Shell Quality
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'docs/**'
+      - 'scripts/**'
+      - '.github/workflows/docs-shell.yml'
+      - '.cursor/rules/**'
+      - '_typos.toml'
+      - '.markdownlint-cli2.yaml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'README.md'
+      - 'AGENTS.md'
+      - 'docs/**'
+      - 'scripts/**'
+      - '.github/workflows/docs-shell.yml'
+      - '.cursor/rules/**'
+      - '_typos.toml'
+      - '.markdownlint-cli2.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint Docs & Shell Scripts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Install markdownlint-cli2
+        run: npm install -g markdownlint-cli2@0.22.1
+
+      - name: Install typos, shellcheck, shfmt
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2
+        with:
+          tool: typos,shellcheck,shfmt
+
+      - name: Run typos check
+        run: typos
+
+      - name: Run markdownlint-cli2
+        run: markdownlint-cli2 "README.md" "AGENTS.md" "docs/**/*.md" ".cursor/rules/**/*.mdc"
+
+      - name: Run shellcheck
+        run: shellcheck scripts/*.sh scripts/hooks/*
+
+      - name: Run shfmt check
+        run: shfmt -i 4 -d scripts/ scripts/hooks/

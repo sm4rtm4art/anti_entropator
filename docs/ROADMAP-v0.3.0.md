@@ -43,7 +43,6 @@
 - S5 (CI/CD and multi-arch hardening) runs after feature gates and before release tagging.
 - `v0.3.0` completion still requires maintenance primitives, orchestration gate, and numeric coverage floor from the success criteria section below.
 
-
 ### Completed (M1 -- Unified Storage, 2026-03-14)
 
 - Replaced `aws-sdk-s3` + `aws-config` with OpenDAL for all S3 I/O
