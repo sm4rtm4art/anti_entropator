@@ -7,9 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Maintenance Note
+
+- The changelog is intentionally being kept high-level during v0.3
+  stabilization. Detailed release notes will be reconciled at v0.3 closeout
+  from the roadmap, stabilization plan, merged PRs, and validation evidence.
+
+### Added
+
+- Thin `Makefile` wrappers for common local setup, stack, CLI, and quality-check
+  commands.
+- Docs/shell quality workflow configuration under `.config/lint/`.
+
 ### Changed
 
 - Documentation and command-status synchronization for public showcase stabilization.
+- README landing-page narrative updated to reflect the current local-first
+  scope, planned work, DBOS-inspired framing, and Makefile quick start.
 
 ### Planned
 

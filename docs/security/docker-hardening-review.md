@@ -114,8 +114,10 @@ These exceptions and digest baselines should remain explicit until resolved.
 - [x] GitHub Actions references in CI, release, and security workflows are
   pinned to full commit SHAs; local `actionlint` passed after pinning.
 - [x] Dedicated `docs-shell.yml` workflow created and verified with `actionlint` and `zizmor`.
-- [x] Automated spelling check with `typos` configured with repository allowlist in `_typos.toml`.
-- [x] Automated Markdown linting with `markdownlint-cli2` configured in `.markdownlint-cli2.yaml`.
+- [x] Automated spelling check with `typos` configured with repository allowlist
+  in `.config/lint/typos.toml`.
+- [x] Automated Markdown linting with `markdownlint-cli2` configured in
+  `.config/lint/markdownlint-cli2.yaml`.
 - [x] Automated shell script linting with `shellcheck` and formatting validation with `shfmt -i 4 -d` active for all repo scripts.
 - [x] CI, release, and security workflows include final best-effort runner
   cleanup steps after evidence upload/release publication.

@@ -7,43 +7,72 @@
 
 ## **🚧 Early Public Preview / Work in Progress 🚧**
 
-(State (updated): 20.05.2026)
+(State: v0.3 stabilization, updated 2026-05-21)
 
 > Anti-Entropator is public early so evaluation and collaboration can happen
-> while v0.3 stabilization is still in progress. Core local workflows are
-> available, while some commands and release-hardening tasks are still being
-> finalized. See the roadmap and security notes for current status.
+> while v0.3 stabilization is still in progress. The local profiling, scanning,
+> ingest, and one-shot query workflows are usable today. Some commands are still
+> placeholders, and release/security hardening is being finished in small,
+> reviewable slices.
 ----
 
 ## The Anti-Entropator <br> _Fighting entropy, one file at a time_
->
-A **local data lakehouse** for file organization, built in Rust. Transform your chaotic downloads folder into a queryable, organized data store using modern data engineering patterns.
 
-## Why?
+A **local-first Rust CLI** for turning a messy folder into a queryable,
+Iceberg-backed data lakehouse.
 
-Your downloads folder is a data swamp. This project turns it into a lakehouse by:
+The test environment is intentionally ordinary: the notorious cluttered
+`~/Downloads` folder. It is a small, familiar version of a problem many teams
+recognize at a larger scale: terabytes or petabytes of files, exports, reports,
+media, and intermediate artifacts with no reliable structure around them.
 
-- **Cataloging** every file with rich metadata (type, size, hash, MIME)
-- **Detecting duplicates** via content hashing
-- **Organizing** files by category through metadata-driven workflows
-- **Querying** your catalog with SQL
+The personal origin story is even smaller. My first Python project tried to
+organize my downloads folder with a script, `glob`, and a lot of optimism. This
+project revisits the same problem with more experience and, deliberately, a
+much more serious toolchain. It is overbuilt on purpose: a showcase for Rust,
+lakehouse patterns, local-first operations, and open-source documentation, while
+still returning something practical to anyone with a messy file dump.
+
+The CI/CD and blue/green delivery notes point toward a larger operational shape,
+but the current default remains local. RustFS, Iceberg, Lakekeeper, OpenDAL, and
+DataFusion are used because they make the local workflow look like a small
+version of systems that could grow toward hybrid on-prem/cloud data management.
+That scalability story is an architectural direction, not a production claim.
+
+### Anti-Entropator treats that dump like data
+
+- profile it without Docker or writes;
+- scan and enrich file metadata;
+- ingest selected files into RustFS-backed object storage;
+- commit catalog metadata through Lakekeeper/Iceberg;
+- query the catalog with DataFusion SQL.
+
+It is a showcase project, but the showcase is meant to stay honest: local-first
+lakehouse patterns, Rust systems engineering, and careful stabilization before
+claiming production readiness.
 
 ## Architecture
+
+This diagram is intentionally split between **current** behavior and planned
+expansion points. Solid lines are implemented today. Dashed lines are planned.
 
 ```mermaid
 flowchart LR
     subgraph UL["🖥️  User Layer"]
         direction TB
         CLI["⌨️  CLI"]
-        REPL["💬  SQL REPL"]
+        REPL["💬  SQL REPL (planned)"]
+    end
+
+    subgraph LZ["📂  Local Landing Zone"]
+        direction TB
+        DL["~/Downloads or another messy folder"]
     end
 
     subgraph OR["🔀  Orchestration"]
         direction TB
-        SWITCH{{"⚙️  --engine"}}
-        PROC["🔁  Procedural"]
-        DFRS["🌊  dataflow-rs"]
-        SWITCH --> PROC & DFRS
+        PROC["🔁  Procedural (current)"]
+        DFRS["🌊  dataflow-rs (planned)"]
     end
 
     subgraph CP["⚡  Compute"]
@@ -62,26 +91,88 @@ flowchart LR
         IO -->|S3 API| RFS
     end
 
-    CLI -->|"ingest / scan"| SWITCH
+    CLI -->|"profile / scan"| DL
+    CLI -->|"ingest"| PROC
     CLI -->|query| DF
-    REPL --> DF
+    REPL -. "planned interactive query" .-> DF
 
-    PROC & DFRS -->|"raw bytes"| IO
-    PROC & DFRS -->|"commit snapshot"| ICE
+    PROC -->|"raw bytes"| IO
+    PROC -->|"commit snapshot"| ICE
+    DFRS -. "future raw bytes" .-> IO
+    DFRS -. "future snapshot commit" .-> ICE
 
     DF -->|"read / write"| IO
     ICE -->|manifests| IO
 ```
 
-> **Note:** The `--engine` switch and `dataflow-rs` orchestration are targeted for v0.3.
-> Current implementation uses procedural execution only. SQL REPL is a placeholder.
+> **Current truth:** OpenDAL is the I/O boundary, RustFS is the object store,
+> Lakekeeper is the Iceberg REST catalog, and DataFusion powers one-shot
+> queries. Interactive SQL and DAG orchestration remain planned work.
+
+## Current Scope
+
+This scope may still evolve while v0.3 stabilization progresses.
+
+### What works today
+
+- `profile`: read-only directory analysis, no Docker required.
+- `doctor` and `up`: local stack and preflight checks.
+- `init`: RustFS bucket, Lakekeeper project/warehouse, namespace, and Iceberg
+  table setup.
+- `scan`: metadata enrichment without uploading.
+- `ingest`: object upload plus Iceberg metadata commit.
+- `query`: one-shot DataFusion SQL over the registered catalog data.
+
+### What is intentionally not finished yet
+
+- `sql`: interactive SQL REPL placeholder.
+- `duplicates`: duplicate management workflow placeholder.
+- `merge`: ingest branch merge workflow placeholder.
+- `dataflow-rs` orchestration: planned/targeted, not the default runtime path.
+- release-grade deployment hardening: in progress as part of S5 stabilization.
+
+### Current deployment scope
+
+- The default profile is **single-developer local demo**.
+- GitHub Actions currently use `GITHUB_TOKEN` for GHCR publishing; no persistent
+  external deployment secrets are required yet.
+- Shared or public deployments need a separate threat model, non-local auth,
+  managed secrets, and reviewed network exposure.
+
+## Why the Downloads Folder Scope?
+
+Your downloads folder is a data swamp. This project turns it into something
+observable and queryable by:
+
+- **Cataloging** every file with rich metadata (type, size, hash, MIME)
+- **Detecting duplicates** via content hashing
+- **Enriching** files with optional external tools (`ffprobe`, `exiftool`, `pdfinfo`)
+- **Persisting** selected files and metadata in a lakehouse-shaped local stack
+- **Querying** the catalog with SQL
+
+## Database-Centered Systems Inspiration
+
+Projects in the DBOS space are exploring a much stronger idea: make the database
+a core execution and state substrate for an operating system or runtime. That is
+interesting because it treats durable, queryable state as an organizing
+principle rather than a passive storage detail.
+
+Anti-Entropator is a small application-level proof of concept in that spirit,
+not an operating system and not an implementation of DBOS. It asks a humbler
+question: what if a familiar mess, like a Downloads folder, was treated as
+structured operational data? In this project, the database/lakehouse layer is
+the place where file metadata, object placement, and query behavior become
+explicit instead of being scattered across filenames, folders, and memory.
 
 ## Quick Start
+
+The `Makefile` is a thin wrapper around the underlying `cargo` and
+`docker compose` commands. Use `make help` to see the full command list.
 
 ### 1. Profile your downloads (no Docker needed)
 
 ```bash
-cargo run --release -- profile ~/Downloads
+make profile
 ```
 
 Output:
@@ -106,51 +197,65 @@ Output:
 ### 2. Start the lakehouse stack
 
 ```bash
-# Create local environment file from template
-cp env.example .env
+# Create .env from env.example if missing and prepare local directories
+make setup
 
-# Edit .env and replace all CHANGE_ME values first
-
-# Create directories with correct permissions
-mkdir -p data/rustfs logs/rustfs data/postgres
-chown -R 10001:10001 data/rustfs logs/rustfs
+# Edit .env and replace all CHANGE_ME values before starting services
 
 # Start services
-docker compose up -d
+make up
 
 # Verify health
-cargo run -- doctor
+make doctor
 ```
 
-### 3. Scan and ingest files
+### 3. Initialize the lakehouse
+
+```bash
+make init
+```
+
+This creates or verifies the RustFS bucket, Lakekeeper project and warehouse,
+Iceberg namespace, and `file_catalog` table.
+
+### 4. Scan and ingest files
 
 ```bash
 # Scan & enrich metadata (read-only)
-cargo run -- scan ~/Downloads --dry-run
+make scan
 
 # Preview what will be ingested
-cargo run -- ingest ~/Downloads --dry-run
+make ingest-dry-run
 
 # Ingest files: uploads to RustFS + commits metadata to Iceberg table
-cargo run -- ingest ~/Downloads
+make ingest
 ```
+
+### 5. Query the catalog
+
+```bash
+make query QUERY="SELECT category, COUNT(*) FROM file_catalog GROUP BY category"
+```
+
+To point the workflow at another folder, pass `DOWNLOADS=/path/to/folder` to the
+Make target, for example `make profile DOWNLOADS=~/Desktop`.
 
 ## Features
 
-| Feature      | Status | Description                                  |
-| ------------ | ------ | -------------------------------------------- |
-| `profile`    | ✅      | Read-only directory analysis                 |
-| `doctor`     | ✅      | Stack health checks                          |
-| `scan`       | ✅      | Metadata enrichment with external tools      |
-| `ingest`     | ✅      | Upload files & commit metadata to Iceberg    |
-| `init`       | ✅      | Initialize lakehouse (bucket, warehouse, table) |
-| `up`         | ✅      | Verify lakehouse services are running        |
-| `query`      | ✅      | One-shot SQL queries via DataFusion (basic)  |
-| `sql`        | 🚧      | Interactive SQL REPL (currently placeholder) |
-| `duplicates` | 🚧      | Duplicate finder workflow (currently placeholder) |
-| `merge`      | 🚧      | Ingest branch merge workflow (currently placeholder) |
+| Feature      | Status | Description                                      |
+| ------------ | ------ | ------------------------------------------------ |
+| `profile`    | ✅      | Read-only directory analysis                     |
+| `doctor`     | ✅      | Stack health and preflight checks                |
+| `up`         | ✅      | Verify lakehouse services are reachable          |
+| `init`       | ✅      | Initialize bucket, warehouse, namespace, table   |
+| `scan`       | ✅      | Metadata enrichment without uploading            |
+| `ingest`     | ✅      | Upload files and commit metadata to Iceberg      |
+| `query`      | ✅      | One-shot SQL queries via DataFusion              |
+| `sql`        | 🚧      | Interactive SQL REPL placeholder                 |
+| `duplicates` | 🚧      | Duplicate finder workflow placeholder            |
+| `merge`      | 🚧      | Ingest branch merge workflow placeholder         |
 
-**Legend:** ✅ Implemented | 🚧 In Development
+**Legend:** ✅ Implemented | 🚧 Placeholder or planned
 
 ## Stack Components
 
@@ -160,6 +265,18 @@ cargo run -- ingest ~/Downloads
 - **[DataFusion](https://datafusion.apache.org/)**: SQL query engine
 - **[OpenDAL](https://opendal.apache.org/)**: Unified storage I/O boundary
 - **[dataflow-rs](https://github.com/dataflow-rs/dataflow-rs)**: Optional DAG-based orchestration engine (planned v0.3.0)
+
+## Quality and Security Posture
+
+- CI runs Rust formatting, linting, tests, coverage, and container/release
+  checks in separate workflows.
+- Security checks include dependency audit, Trivy visibility, pinned GitHub
+  Actions, `zizmor`, CodeQL/secret-scanning repository settings, and runner
+  cleanup.
+- Documentation and shell quality checks are being added as part of S5 CI
+  hygiene work.
+- Known hardening exceptions and deployment boundaries are tracked in the
+  security docs rather than hidden in the README.
 
 ## Documentation
 

@@ -49,8 +49,10 @@ Use it in order, and treat each section as a small, testable milestone.
   - keep the `println!` policy explicit: existing calls are deferred, new calls
     are disallowed during stabilization work.
 - [x] Create a dedicated `docs-shell.yml` workflow for automated non-Rust quality gates (completed in S5-adj hygiene slice):
-  - [x] Automated typos/spelling checks via `typos` with config `_typos.toml`
-  - [x] Automated Markdown linting via `markdownlint-cli2` with config `.markdownlint-cli2.yaml`
+  - [x] Automated typos/spelling checks via `typos` with config
+    `.config/lint/typos.toml`
+  - [x] Automated Markdown linting via `markdownlint-cli2` with config
+    `.config/lint/markdownlint-cli2.yaml`
   - [x] Automated Shell script checks via `shellcheck` and formatting via `shfmt -i 4 -d`
 - [x] Add final best-effort runner cleanup to CI, release, and security jobs.
   The cleanup runs after intentional evidence upload/release publication and
