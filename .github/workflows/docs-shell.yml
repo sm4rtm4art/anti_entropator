@@ -6,23 +6,23 @@ on:
     paths:
       - 'README.md'
       - 'AGENTS.md'
+      - 'CHANGELOG.md'
       - 'docs/**'
       - 'scripts/**'
       - '.github/workflows/docs-shell.yml'
       - '.cursor/rules/**'
-      - '_typos.toml'
-      - '.markdownlint-cli2.yaml'
+      - '.config/lint/**'
   pull_request:
     branches: [ main ]
     paths:
       - 'README.md'
       - 'AGENTS.md'
+      - 'CHANGELOG.md'
       - 'docs/**'
       - 'scripts/**'
       - '.github/workflows/docs-shell.yml'
       - '.cursor/rules/**'
-      - '_typos.toml'
-      - '.markdownlint-cli2.yaml'
+      - '.config/lint/**'
 
 permissions:
   contents: read
@@ -46,10 +46,10 @@ jobs:
           tool: typos,shellcheck,shfmt
 
       - name: Run typos check
-        run: typos
+        run: typos --config .config/lint/typos.toml
 
       - name: Run markdownlint-cli2
-        run: markdownlint-cli2 "README.md" "AGENTS.md" "docs/**/*.md" ".cursor/rules/**/*.mdc"
+        run: markdownlint-cli2 --config .config/lint/markdownlint-cli2.yaml "README.md" "AGENTS.md" "CHANGELOG.md" "docs/**/*.md" ".cursor/rules/**/*.mdc"
 
       - name: Run shellcheck
         run: shellcheck scripts/*.sh scripts/hooks/*
