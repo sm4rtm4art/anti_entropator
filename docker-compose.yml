@@ -48,7 +48,7 @@ services:
 
   # Postgres backend for Lakekeeper catalog
   postgres:
-    image: postgres:16.11-alpine3.23
+    image: postgres:18.4-alpine3.23
     container_name: anti_entropator_postgres
     ports:
       - "${ANTI_BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-8300}:5432" # Postgres (Organized port)
