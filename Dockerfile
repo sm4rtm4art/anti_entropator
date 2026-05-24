@@ -3,7 +3,7 @@
 
 # Build stage: keep explicit Rust tag on Bookworm to match runtime glibc.
 # Bump alongside Rust dependency/MSRV needs, then rerun S5-B image validation.
-FROM rust:1.92-bookworm AS builder
+FROM rust:1.95-bookworm AS builder
 
 WORKDIR /app
 
