@@ -71,7 +71,7 @@ services:
 
   # Lakekeeper catalog (Apache Iceberg REST Catalog)
   lakekeeper-migrate:
-    image: quay.io/lakekeeper/catalog:v0.11.6
+    image: quay.io/lakekeeper/catalog:v0.12.2
     container_name: anti_entropator_lakekeeper_migrate
     environment:
       LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:?set_in_.env}
@@ -85,7 +85,7 @@ services:
         condition: service_healthy
 
   lakekeeper:
-    image: quay.io/lakekeeper/catalog:v0.11.6
+    image: quay.io/lakekeeper/catalog:v0.12.2
     container_name: anti_entropator_lakekeeper
     ports:
       - "${ANTI_BIND_HOST:-127.0.0.1}:${LAKEKEEPER_PORT:-8100}:8181" # REST API + UI (Organized port)
