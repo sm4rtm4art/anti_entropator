@@ -88,34 +88,40 @@ Use it in order, and treat each section as a small, testable milestone.
 
 ## 3) Dependency and Supply Chain
 
-- [x] Run container vulnerability scan in CI (S5-A configured in
-  `.github/workflows/security.yml`: `trivy fs` on PR, image scan on
-  main/schedule/manual, report mode). Vulnerability findings are logged without
-  failing the job; scan infrastructure failures remain blocking.
+- [x] Run container vulnerability scan in CI (`.github/workflows/security.yml`):
+  `trivy fs` on PR and image scan on main/schedule/manual. Full image
+  HIGH/CRITICAL baseline remains report-only, while fixable-only
+  (`ignore-unfixed`) HIGH/CRITICAL image findings are enforced after artifact
+  upload.
   Evidence captured for S5-B: manual Security run `25642878701` passed the
   image scan on `s5-b-image-hardening`; PR Security run `25656184341` passed the
   filesystem scan and skipped the image scan by design.
+  Local S5-C validation on `anti_entropator:local-scan` passed on 2026-05-27:
+  build with `--pull --no-cache`, runtime `--help` smoke test, full
+  HIGH/CRITICAL Trivy image scan, and fixable-only Trivy image scan. The full
+  baseline reported 4 Debian-context findings; the fixable-only scan reported 0.
 - [x] Fix Docker image runtime compatibility before public-showcase S5 closeout:
-  `Dockerfile` now uses `rust:1.92-bookworm` builder with `debian:bookworm-slim`
-  runtime; local `docker run --rm anti_entropator:s5-b-image --help` passes
-  (verified 2026-05-10).
+  `Dockerfile` now uses `rust:1.95-bookworm` builder with `debian:bookworm-slim`
+  runtime; local `docker run --rm anti_entropator:local-scan --help` passes
+  (verified 2026-05-27).
 - [x] Pin container images to fixed release tags for S5-B:
   Dockerfile, RustFS, Postgres, and Lakekeeper are pinned to release tags.
   Digest pinning remains deferred to S5-C release-grade publishing.
-  Local Trivy image scan found 15 HIGH/CRITICAL Debian findings; CI scan
-  evidence is captured above, with blocking policy deferred to S5-C.
+  Local S5-C Trivy image scan found 4 remaining HIGH/CRITICAL Debian-context
+  findings and 0 fixable HIGH/CRITICAL findings after runtime package upgrade.
 - [ ] Re-enable build provenance/SBOM in CI (deferred to S5, GHCR constraints).
 - [x] Persist image scan evidence outside logs where possible. `security.yml`
   now uploads Trivy JSON artifacts for PR filesystem scans and
   main/schedule/manual image scans.
-- [x] Add a separate fixable-only scan policy view for HIGH/CRITICAL findings.
-  `security.yml` now records an image-scan `ignore-unfixed` JSON artifact as a
-  non-blocking policy-evaluation path while baseline report-mode visibility
-  stays intact.
+- [x] Add a separate fixable-only scan policy path for HIGH/CRITICAL findings.
+  `security.yml` records an image-scan `ignore-unfixed` JSON artifact, summarizes
+  findings from JSON in the job summary, and enforces fixable-only
+  HIGH/CRITICAL findings after evidence upload while baseline report-mode
+  visibility stays intact.
 - [ ] Add Docker-related PR runtime-image scanning in a later S5-C slice, or
   close the deferral with explicit evidence. Deferred from S5-C iteration 1 to
   keep the first slice limited to build-context validation, persisted scan
-  evidence, and fixable-only policy evaluation.
+  evidence, and fixable-only policy enforcement on main/schedule/manual.
 - [x] Lockfile review step: Dependabot PRs + grouped security updates provide
   visibility into `Cargo.lock` changes. Verified 2026-05-05.
 - [x] Dependabot tracks GitHub Actions, Cargo dependencies, Dockerfile base
@@ -124,6 +130,9 @@ Use it in order, and treat each section as a small, testable milestone.
 - [x] Workflow toolchain setup remains aligned with repository contract:
   workflows use `dtolnay/rust-toolchain@stable`; `rust-toolchain.toml` also
   declares stable with `rustfmt` and `clippy` (verified 2026-05-10).
+- [x] Workflow action pins keep full SHA references with release-ref comments
+  where available; `dtolnay/rust-toolchain` remains pinned to a stable-branch
+  commit because no version tag points at the pinned SHA.
 
 ## 4) Runtime Safety
 
@@ -186,7 +195,8 @@ When you are ready to make the repository public:
 - [x] Confirm hardening exceptions and follow-ups are tracked in
   [Docker and CI Hardening Review](docker-hardening-review.md).
   Exceptions documented: floating tags, disabled SBOM/provenance, Trivy
-  report-mode (vulnerability findings non-blocking until S5-C).
+  baseline report-mode visibility with fixable-only blocking on
+  main/schedule/manual.
 
 ## Notes
 

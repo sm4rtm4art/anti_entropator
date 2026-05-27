@@ -33,15 +33,15 @@ Scope:
 
 | Area | Current State | Risk | Follow-up |
 | ---- | ------------- | ---- | --------- |
-| Builder base image | `rust:1.92-bookworm` in `Dockerfile` | Release-tag drift over time | Consider digest pinning in S5-C release path |
+| Builder base image | `rust:1.95-bookworm` in `Dockerfile` | Release-tag drift over time | Consider digest pinning in S5-C release path |
 | Runtime base image | `debian:bookworm-slim` | Release-tag drift over time | Consider digest pinning in S5-C release path |
 | RustFS image tag | `rustfs/rustfs:1.0.0-beta.2` | Beta release may change quickly | Re-evaluate stable tag availability each S5 cycle |
 | Lakekeeper image tag | `quay.io/lakekeeper/catalog:v0.11.6` | Release-tag drift over time | Consider digest pinning in S5-C release path |
 | Provenance and SBOM | Disabled in CI and release workflows | Reduced supply-chain attestability | Re-enable once GHCR compatibility issue is resolved |
-| Image vulnerability scan | Present in `security.yml` (report mode): PR uses `trivy fs`; main/schedule/manual use image scan. JSON artifacts are now uploaded for PR filesystem and main/schedule/manual image scans. Image job also records a fixable-only (`ignore-unfixed`) JSON artifact for policy evaluation. | Findings remain non-blocking; PRs still do not always scan the final runtime image | Keep report-mode visibility, evaluate fixable-only deltas, defer Docker-related PR runtime-image scanning to a later S5-C slice, and move full blocking to S5-D runtime-baseline work |
+| Image vulnerability scan | Present in `security.yml`: PR uses `trivy fs`; main/schedule/manual use image scan. Full HIGH/CRITICAL baseline remains report-only. JSON artifacts are uploaded for baseline and fixable-only image scans, with GitHub summary details generated from JSON. | PRs still do not always scan the final runtime image | Keep baseline visibility, enforce fixable-only HIGH/CRITICAL findings for main/schedule/manual, and defer Docker-related PR runtime-image scanning to a later S5-C slice |
 | Rust toolchain workflow alignment | Workflows use `dtolnay/rust-toolchain@stable`; `rust-toolchain.toml` is `stable` + `rustfmt` + `clippy` | Low drift risk with current equivalent configuration | Keep current workflow setup in S5-A and document equivalence; revisit only if divergence appears |
-| Runtime container smoke test | Prior S5-B local image build + `docker run --help` succeeded with Bookworm-aligned builder/runtime. S5-C re-validation attempt on 2026-05-13 was blocked locally because Docker daemon was unavailable on the workstation (`docker.sock` missing). | Medium until repeated validation is captured for this iteration | Re-run local smoke check with Docker daemon available and capture CI/manual workflow evidence |
-| Docker build context | Conservative `.dockerignore` restored in S5-C to exclude local state, secrets, build outputs, and generated service data | Validation still required because build-context exclusions can break CI/release builds if too broad | Validate local and GitHub runner builds still have required inputs; local validation was blocked on 2026-05-13 due to missing Docker daemon |
+| Runtime container smoke test | S5-C local image build and `docker run --rm anti_entropator:local-scan --help` passed on 2026-05-27 with Bookworm-aligned builder/runtime. | Low for local image startup; CI/manual workflow evidence still required for runner parity | Keep smoke check before Trivy scans in `security.yml` and capture GitHub runner evidence |
+| Docker build context | Conservative `.dockerignore` restored in S5-C to exclude local state, secrets, build outputs, and generated service data. Local `docker build --pull --no-cache -t anti_entropator:local-scan .` passed on 2026-05-27. | Low locally; GitHub runner build evidence still required | Validate GitHub runner builds still have required inputs |
 | Compose port binding | Compose published ports are parameterized for local delivery slots and default to `ANTI_BIND_HOST=127.0.0.1`. `scripts/check-compose-local-bindings.sh` passed for defaults and rejected `ANTI_BIND_HOST=0.0.0.0` on 2026-05-13. | Setting `ANTI_BIND_HOST=0.0.0.0` can expose RustFS, Postgres, or Lakekeeper beyond localhost | Keep default localhost binding; require reviewed deployment profile before non-local exposure |
 | Workflow linting (`actionlint`, `zizmor`) | `actionlint` is used for local workflow syntax validation. `security.yml` now includes a `zizmor` job for GitHub Actions security analysis and code-scanning upload on push/same-repo PRs. | Fork PRs skip the code-scanning upload path because `security-events: write` is unavailable there | Keep `zizmor` visible in CI, and use branch/ruleset requirements for workflow changes |
 | Non-Rust file quality (Markdown, Shell) | No automated CI linting for shell scripts or Markdown documentation was previously active. | Typos, broken shell script syntax, or non-standard formatting can introduce noise or execution bugs. | Created `.github/workflows/docs-shell.yml` to run `typos`, `markdownlint-cli2`, `shellcheck`, and `shfmt -d` on narrow path triggers. All actions are fully pinned. |
@@ -57,12 +57,16 @@ Scope:
 - Provenance and SBOM are disabled to avoid known GHCR push failures in current workflow.
 - Trivy runs in report mode in S5-A: vulnerability findings are logged without
   failing the job, while checkout/build/action failures remain blocking.
-- S5-C now persists Trivy JSON artifacts for PR filesystem and image-scan jobs,
-  plus a non-blocking fixable-only image-scan artifact for policy evaluation.
+- S5-C now persists Trivy JSON artifacts for PR filesystem and image-scan jobs.
+- Main/schedule/manual image scans keep full HIGH/CRITICAL baseline visibility in
+  report mode while enforcing fixable-only HIGH/CRITICAL findings from the
+  `ignore-unfixed` JSON artifact after evidence upload.
+- Image scan jobs include a runtime smoke test (`docker run --rm
+  anti_entropator:local-scan --help`) before Trivy execution.
 - S5-C should keep full HIGH/CRITICAL findings visible while separating
-  fixable, unfixed, `will_not_fix`, and accepted-risk findings. Full blocking is
-  deferred until S5-D identifies a runtime baseline that can support it without
-  hiding known unresolved distribution findings.
+  fixable, unfixed, `will_not_fix`, and accepted-risk findings. Full baseline
+  blocking remains deferred until S5-D identifies a runtime baseline that can
+  support it without hiding known unresolved distribution findings.
 - Trivy severity selection should remain explicit in policy. The default `auto`
   behavior uses vendor advisory severity where available; any move to a custom
   `--vuln-severity-source` order should be recorded with the resulting report
@@ -70,6 +74,12 @@ Scope:
 - Local Trivy image scan is available and ran on `anti_entropator:s5-b-image`
   (2026-05-11): 15 findings total (`13` HIGH, `2` CRITICAL) on Debian 12.13.
   The scan output listed no fixed versions; `zlib1g` was `will_not_fix`.
+- Local S5-C image validation ran on `anti_entropator:local-scan` (2026-05-27):
+  `docker build --pull --no-cache`, `docker run --rm ... --help`, full
+  HIGH/CRITICAL Trivy image scan, and fixable-only Trivy image scan completed.
+  Debian 12.14 baseline reported 4 remaining non-fixable/contextual findings
+  (`libtinfo6`, `ncurses-base`, `ncurses-bin`, and `zlib1g`), while the
+  fixable-only scan reported 0 findings.
 - CI Security workflow output remains the authoritative scan evidence source.
   Manual run `25642878701` on `s5-b-image-hardening` completed successfully:
   `Cargo Audit` passed and `Trivy Image Scan (main/schedule/manual)` passed.
@@ -101,13 +111,19 @@ These exceptions and digest baselines should remain explicit until resolved.
 - [x] Compose service images pinned where practical (`rustfs`, `postgres`, and `lakekeeper` pinned to release tags).
 - [x] Vulnerability scan workflow configured (`trivy fs` on PR, image scan on main/schedule/manual, report mode).
 - [x] CI evidence captured for PR filesystem scan and manual image scan.
-- [ ] `.dockerignore` restored and pending validation in local plus CI/release builds (local S5-C attempt blocked on 2026-05-13: Docker daemon unavailable).
+- [x] `.dockerignore` restored and validated locally with
+  `docker build --pull --no-cache -t anti_entropator:local-scan .`
+  (2026-05-27). GitHub runner build evidence remains the authoritative PR/CI
+  validation.
 - [x] Compose local-binding guard added and validated:
   `scripts/check-compose-local-bindings.sh` passed for defaults and rejected
   `ANTI_BIND_HOST=0.0.0.0`.
 - [x] Trivy JSON artifact evidence persisted for review (filesystem + image scan jobs).
-- [x] Fixable-vulnerability policy evaluation added separately from unfixed
-  distribution findings (image scan `ignore-unfixed` JSON artifact, non-blocking).
+- [x] Fixable-vulnerability policy is enforced separately from unfixed
+  distribution findings (image scan `ignore-unfixed` JSON artifact, blocking on
+  main/schedule/manual after artifact upload).
+- [x] S5-C local image scan confirmed no fixable HIGH/CRITICAL findings remained
+  after runtime package upgrade (2026-05-27).
 - [x] Workflow lint check executed with `actionlint` for `security.yml`.
 - [x] `zizmor` added to `security.yml` for repo-tracked GitHub Actions
   security analysis.
