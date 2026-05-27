@@ -23,8 +23,10 @@ RUN touch src/main.rs && cargo build --release
 # Runtime stage - minimal Debian
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y \
-    ca-certificates \
+RUN apt-get update \
+    && DEBIAN_FRONTEND=noninteractive apt-get -y upgrade \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/anti_entropator /usr/local/bin/
