@@ -19,11 +19,17 @@
 #   mkdir -p data/rustfs logs/rustfs data/postgres
 #   chown -R 10001:10001 data/rustfs logs/rustfs
 
+name: anti_entropator
+
+x-lakekeeper-db: &lakekeeper-db
+  LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:?set_in_.env}
+  LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}
+  LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}
+
 services:
   # S3-compatible object storage
   rustfs:
     image: rustfs/rustfs:1.0.0-beta.2
-    container_name: anti_entropator_rustfs
     ports:
       - "${ANTI_BIND_HOST:-127.0.0.1}:${RUSTFS_API_PORT:-8200}:9000" # S3 API (Organized port)
       - "${ANTI_BIND_HOST:-127.0.0.1}:${RUSTFS_CONSOLE_PORT:-8210}:9001" # Web Console (Organized port)
@@ -49,11 +55,12 @@ services:
   # Postgres backend for Lakekeeper catalog
   postgres:
     image: postgres:18.4-alpine3.23
-    container_name: anti_entropator_postgres
     ports:
       - "${ANTI_BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-8300}:5432" # Postgres (Organized port)
     volumes:
-      - ./data/postgres:/var/lib/postgresql/data
+      # Postgres 18 stores data in a version subdirectory, so mount the parent
+      # (not /var/lib/postgresql/data). Wipe a pre-18 ./data/postgres first.
+      - ./data/postgres:/var/lib/postgresql
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-lakekeeper}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set_in_.env}
@@ -72,11 +79,8 @@ services:
   # Lakekeeper catalog (Apache Iceberg REST Catalog)
   lakekeeper-migrate:
     image: quay.io/lakekeeper/catalog:v0.12.2
-    container_name: anti_entropator_lakekeeper_migrate
     environment:
-      LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:?set_in_.env}
-      LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}
-      LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}
+      <<: *lakekeeper-db
       RUST_LOG: info
     command: ["migrate"]
     restart: "no"
@@ -86,13 +90,10 @@ services:
 
   lakekeeper:
     image: quay.io/lakekeeper/catalog:v0.12.2
-    container_name: anti_entropator_lakekeeper
     ports:
       - "${ANTI_BIND_HOST:-127.0.0.1}:${LAKEKEEPER_PORT:-8100}:8181" # REST API + UI (Organized port)
     environment:
-      LAKEKEEPER__PG_ENCRYPTION_KEY: ${LAKEKEEPER_PG_ENCRYPTION_KEY:?set_in_.env}
-      LAKEKEEPER__PG_DATABASE_URL_READ: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}
-      LAKEKEEPER__PG_DATABASE_URL_WRITE: postgresql://${POSTGRES_USER:-lakekeeper}:${POSTGRES_PASSWORD:?set_in_.env}@postgres:5432/${POSTGRES_DB:-lakekeeper}
+      <<: *lakekeeper-db
       # "allowall" is for local development only. Override in shared/public environments.
       LAKEKEEPER__AUTHZ_BACKEND: ${LAKEKEEPER_AUTHZ_BACKEND:-allowall}
       RUST_LOG: info,lakekeeper=info,sqlx=warn
@@ -111,3 +112,7 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+networks:
+  default:
+    driver: bridge

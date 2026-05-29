@@ -27,8 +27,10 @@ Deploy a new container version with:
 - The default `docker-compose.yml` is optimized for a single local stack.
   It parameterizes bind host and published ports while defaulting to
   `ANTI_BIND_HOST=127.0.0.1`.
-  True parallel slots also require isolated project names, container names, and
-  data directories or a dedicated deployment override.
+  Compose now uses an explicit project name and bridge network, and no longer
+  relies on fixed container names.
+  True parallel slots still require isolated data directories or a dedicated
+  deployment override.
 
 ## Slots
 
@@ -53,9 +55,10 @@ names and slot-specific configuration.
 Published ports can vary by slot through `RUSTFS_API_PORT`,
 `RUSTFS_CONSOLE_PORT`, `POSTGRES_PORT`, and `LAKEKEEPER_PORT`, but they should
 remain bound to `ANTI_BIND_HOST=127.0.0.1` for local simulation.
-The current default compose file still uses fixed container names and local data
-directories, so two slots cannot be started safely by only changing
-`docker compose -p`.
+The current default compose file no longer uses fixed container names and now
+declares an explicit project name/bridge network, but it still uses shared
+local data directories. Two slots therefore cannot be started safely by only
+changing `docker compose -p`.
 
 Target local shape for S5-C:
 
