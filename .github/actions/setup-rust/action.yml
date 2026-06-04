@@ -1,0 +1,37 @@
+name: Setup Rust Toolchain and Cache
+description: Install pinned Rust toolchain and restore Cargo cache.
+
+inputs:
+  components:
+    description: "Comma-separated rustup components (e.g. rustfmt,clippy)"
+    required: false
+    default: ""
+  targets:
+    description: "Comma-separated rustup targets (e.g. x86_64-unknown-linux-gnu)"
+    required: false
+    default: ""
+  cache-key-suffix:
+    description: "Cache key suffix to isolate workflows/jobs"
+    required: false
+    default: "default"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable branch commit (no version tag)
+      with:
+        components: ${{ inputs.components }}
+        targets: ${{ inputs.targets }}
+
+    - name: Cache cargo
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-${{ inputs.cache-key-suffix }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-${{ inputs.cache-key-suffix }}-
+          ${{ runner.os }}-cargo-

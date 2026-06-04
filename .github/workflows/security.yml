@@ -40,26 +40,13 @@ jobs:
 
   cargo-audit:
     name: Cargo Audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable branch commit (no version tag)
-
-      - name: Install cargo-audit
-        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2.79.2
-        with:
-          tool: cargo-audit
-
-      - name: Audit dependencies
-        run: cargo audit
-
-      - name: Clean runner workspace
-        if: always()
-        run: ./scripts/ci-cleanup.sh
+    permissions:
+      contents: read
+    uses: ./.github/workflows/rust-quality.yml
+    with:
+      run_lint: false
+      run_test: false
+      run_audit: true
 
   trivy-fs-pr:
     name: Trivy Filesystem Scan (PR)
@@ -125,93 +112,53 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Prepare scan output directory
-        run: mkdir -p trivy-results
-
-      - name: Build local image for scan
-        run: docker build --pull -t anti_entropator:local-scan .
-
-      - name: Smoke test runtime image
-        run: docker run --rm anti_entropator:local-scan --help
-
-      - name: Trivy image scan (report mode)
-        # S5-A report mode: vulnerability findings are logged; scan failures still fail.
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      - name: Verify image security posture
+        uses: ./.github/actions/container-verify
         with:
-          scan-type: image
-          image-ref: anti_entropator:local-scan
+          image-tag: anti_entropator:local-scan
           severity: HIGH,CRITICAL
-          exit-code: "0"
+          artifact-name: trivy-image-main-schedule-${{ github.run_id }}-${{ github.run_attempt }}
 
-      - name: Trivy image scan (JSON artifact)
-        # Persist machine-readable evidence while keeping table output above.
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: image
-          image-ref: anti_entropator:local-scan
-          severity: HIGH,CRITICAL
-          format: json
-          output: trivy-results/trivy-image-high-critical.json
-          exit-code: "0"
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
 
-      - name: Trivy image scan (fixable-only JSON artifact)
-        # Enforcement input: the later policy step fails if this JSON contains findings.
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          scan-type: image
-          image-ref: anti_entropator:local-scan
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          format: json
-          output: trivy-results/trivy-image-fixable-high-critical.json
-          exit-code: "0"
-
-      - name: Summarize image scans
+  # Stable aggregator: the single required status check for this workflow, so
+  # branch protection survives job renames. Require BOTH "CI Gate" (ci.yml) and
+  # this "Security Gate". Fails on failure/cancelled; intentional skips are OK.
+  security-gate:
+    name: Security Gate
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [workflow-security, cargo-audit, trivy-fs-pr, trivy-image-main-schedule]
+    steps:
+      - name: Evaluate security dependency outcomes
         run: |
-          baseline_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results/trivy-image-high-critical.json)
-          fixable_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results/trivy-image-fixable-high-critical.json)
-          {
-            echo "### Trivy Image Scan (main/schedule/manual)"
-            echo "- Baseline scope: HIGH,CRITICAL (report mode)"
-            echo "- Baseline vulnerabilities: ${baseline_total}"
-            echo "- Fixable-only vulnerabilities: ${fixable_total}"
-            echo "- Artifacts: trivy-image-high-critical.json, trivy-image-fixable-high-critical.json"
-            echo ""
-            echo "#### Baseline HIGH/CRITICAL findings"
-            if [ "${baseline_total}" -eq 0 ]; then
-              echo "No baseline HIGH/CRITICAL findings."
-            else
-              echo "| Vulnerability | Severity | Package | Installed | Fixed |"
-              echo "| --- | --- | --- | --- | --- |"
-              jq -r '.Results[]?.Vulnerabilities[]? | "| \(.VulnerabilityID) | \(.Severity) | \(.PkgName // "-") | \(.InstalledVersion // "-") | \(.FixedVersion // "-") |"' trivy-results/trivy-image-high-critical.json
-            fi
-            echo ""
-            echo "#### Fixable HIGH/CRITICAL findings"
-            if [ "${fixable_total}" -eq 0 ]; then
-              echo "No fixable HIGH/CRITICAL findings."
-            else
-              echo "| Vulnerability | Severity | Package | Installed | Fixed |"
-              echo "| --- | --- | --- | --- | --- |"
-              jq -r '.Results[]?.Vulnerabilities[]? | "| \(.VulnerabilityID) | \(.Severity) | \(.PkgName // "-") | \(.InstalledVersion // "-") | \(.FixedVersion // "-") |"' trivy-results/trivy-image-fixable-high-critical.json
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload image scan artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: trivy-image-main-schedule-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            trivy-results/trivy-image-high-critical.json
-            trivy-results/trivy-image-fixable-high-critical.json
-          if-no-files-found: error
-
-      - name: Enforce fixable HIGH/CRITICAL policy
-        run: |
-          fixable_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results/trivy-image-fixable-high-critical.json)
-          if [ "${fixable_total}" -gt 0 ]; then
-            echo "::error::Found ${fixable_total} fixable HIGH/CRITICAL image vulnerabilities."
+          # Fork PRs intentionally skip workflow-security (zizmor / code scanning)
+          # because security-events: write is unavailable to forks; trivy-fs-pr is
+          # PR-only and trivy-image-main-schedule is push/schedule/dispatch-only.
+          # 'skipped' is therefore allowed; only failure/cancelled blocks merge.
+          if [[ "${{ needs.workflow-security.result }}" == "failure" || "${{ needs.workflow-security.result }}" == "cancelled" ]]; then
+            echo "::error::workflow-security completed with '${{ needs.workflow-security.result }}'"
             exit 1
           fi
+
+          if [[ "${{ needs.cargo-audit.result }}" == "failure" || "${{ needs.cargo-audit.result }}" == "cancelled" ]]; then
+            echo "::error::cargo-audit completed with '${{ needs.cargo-audit.result }}'"
+            exit 1
+          fi
+
+          if [[ "${{ needs.trivy-fs-pr.result }}" == "failure" || "${{ needs.trivy-fs-pr.result }}" == "cancelled" ]]; then
+            echo "::error::trivy-fs-pr completed with '${{ needs.trivy-fs-pr.result }}'"
+            exit 1
+          fi
+
+          if [[ "${{ needs.trivy-image-main-schedule.result }}" == "failure" || "${{ needs.trivy-image-main-schedule.result }}" == "cancelled" ]]; then
+            echo "::error::trivy-image-main-schedule completed with '${{ needs.trivy-image-main-schedule.result }}'"
+            exit 1
+          fi
+
+          echo "All required security checks passed or were intentionally skipped."
 
       - name: Clean runner workspace
         if: always()

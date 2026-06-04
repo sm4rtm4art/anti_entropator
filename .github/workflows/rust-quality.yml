@@ -1,0 +1,103 @@
+name: Rust Quality
+
+on:
+  workflow_call:
+    inputs:
+      run_lint:
+        required: false
+        type: boolean
+        default: true
+      run_test:
+        required: false
+        type: boolean
+        default: true
+      run_audit:
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: Lint
+    if: inputs.run_lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          components: rustfmt,clippy
+          cache-key-suffix: quality-lint
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
+  test:
+    name: Build & Test
+    if: inputs.run_test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup
+          sudo apt-get clean
+          df -h /
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key-suffix: quality-test
+
+      - name: Run tests
+        run: cargo test --all-features
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
+  audit:
+    name: Cargo Audit
+    if: inputs.run_audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          cache-key-suffix: quality-audit
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@213ccc1a076163c093f914550b94feb90fab916d # v2.79.2
+        with:
+          tool: cargo-audit
+
+      - name: Audit dependencies
+        run: cargo audit
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
