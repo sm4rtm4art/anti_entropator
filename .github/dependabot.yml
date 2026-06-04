@@ -74,6 +74,7 @@ updates:
           - "taiki-e/install-action"
           - "softprops/action-gh-release"
           - "zizmorcore/zizmor-action"
+          - "dorny/paths-filter"
       ci-docker-actions:
         patterns:
           - "docker/setup-buildx-action"

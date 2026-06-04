@@ -41,6 +41,22 @@ Implemented today:
 
 - CI and release workflows build and publish container artifacts through GitHub
   Actions and GHCR.
+- Release-tag (`v*`) quality gates are enforced before any publish path:
+  formatting, clippy, tests, `cargo audit`, a container smoke check, and the
+  Trivy fixable-only HIGH/CRITICAL image policy.
+- Release-tag container images use a verified-image identity handoff and never
+  rebuild between scan and push: `verify-container` builds, smoke-tests, and
+  scans one canonical image; `prepare-container-publish` loads that exact image
+  and re-tags/saves it; the tag-only `push-container` job loads those tags and
+  pushes them. Only `push-container` holds `packages: write`.
+- The `release.yml` `workflow_dispatch` dry run exercises every gate plus the
+  load/re-tag/save handoff, while the registry push and GitHub release are
+  skipped by `push` + `refs/tags/v` guards. A real `v*` tag has not been cut yet
+  (see ROADMAP M3/M4), so the tag-push publish path is implemented but not yet
+  evidenced end to end.
+- The main-branch CI image publish (`ci.yml` `container` job, `:latest`/`:sha`
+  on push to `main`) is a separate path and is not gated by the release-tag
+  verification above.
 - The repository has a local Docker Compose lakehouse stack.
 - Trivy and `cargo audit` provide supply-chain visibility.
 - `.dockerignore` excludes local state, secrets, build outputs, and generated
@@ -50,11 +66,7 @@ Implemented today:
 
 Planned in S5-C:
 
-- Release workflow gates for formatting, clippy, tests, audit, image scan, and
-  container smoke checks.
 - Multi-platform Buildx path for `linux/amd64` and `linux/arm64`.
-- Persisted scan evidence and a staged Trivy policy that separates fixable,
-  unfixed, `will_not_fix`, and accepted-risk findings.
 - Local delivery simulation with isolated candidate/active slot configuration.
 
 Planned in S5-D:

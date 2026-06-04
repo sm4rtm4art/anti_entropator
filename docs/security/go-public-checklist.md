@@ -36,6 +36,11 @@ Use it in order, and treat each section as a small, testable milestone.
   dependency manifests, container files, scripts, and security/deployment docs.
 - [ ] Require CODEOWNER review for those paths through GitHub branch protection
   or repository rulesets.
+- [ ] Require the stable aggregate status checks through branch protection /
+  rulesets: `CI Gate` (`ci.yml`) and `Security Gate` (`security.yml`). Require
+  both stable gates rather than individual renameable jobs; confirm merges are
+  blocked when either gate fails, and that Markdown-only PRs still report a
+  green `CI Gate` (via the `changes` job) instead of a never-reported check.
 - [ ] Review GitHub Actions failed-run behavior before going public:
   - failed job logs do not print secrets or `.env` contents,
   - post-job cleanup logs do not expose token values,
@@ -113,6 +118,19 @@ Use it in order, and treat each section as a small, testable milestone.
 - [x] Persist image scan evidence outside logs where possible. `security.yml`
   now uploads Trivy JSON artifacts for PR filesystem scans and
   main/schedule/manual image scans.
+- [ ] Validate release workflow gate evidence (`release.yml`, S5-C Slice B):
+  - quality gate (`fmt`, `clippy`, tests, `cargo audit`) runs before any
+    release publish job;
+  - verified-image identity handoff: `verify-container` scans one canonical
+    image, `prepare-container-publish` loads + re-tags + saves it, and the
+    tag-only `push-container` loads + pushes those exact tags (no rebuild
+    between scan and push); only `push-container` carries `packages: write`;
+  - a `workflow_dispatch` dry run executes every gate plus the load/re-tag/save
+    handoff, while `push-container` and `create-release` are skipped by
+    `push` + `refs/tags/v` guards (capture the run link + step summary);
+  - note: the tag-push publish path is implemented but not yet evidenced by a
+    real `v*` tag (none cut yet), and the main-branch CI image publish remains a
+    separate, not-yet-image-scan-gated path.
 - [x] Add a separate fixable-only scan policy path for HIGH/CRITICAL findings.
   `security.yml` records an image-scan `ignore-unfixed` JSON artifact, summarizes
   findings from JSON in the job summary, and enforces fixable-only

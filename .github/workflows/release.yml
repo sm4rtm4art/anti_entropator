@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,8 +20,19 @@ env:
   IMAGE_NAME: sm4rtm4art/anti_entropator
 
 jobs:
+  quality:
+    name: Quality
+    permissions:
+      contents: read
+    uses: ./.github/workflows/rust-quality.yml
+    with:
+      run_lint: true
+      run_test: true
+      run_audit: true
+
   build-binaries:
     name: Build ${{ matrix.target }}
+    needs: [quality]
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -41,9 +53,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable branch commit (no version tag)
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
         with:
+          cache-key-suffix: release-binaries-${{ matrix.target }}
           targets: ${{ matrix.target }}
 
       - name: Build
@@ -65,26 +78,16 @@ jobs:
         if: always()
         run: ./scripts/ci-cleanup.sh
 
-  build-container:
-    name: Build Container Image
+  verify-container:
+    name: Verify Container Image
+    needs: [quality]
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
-
-      - name: Log in to Container Registry
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
@@ -96,17 +99,174 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
-      - name: Build and push
-        uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f # v7.1.0
+      - name: Select canonical tag
+        id: canonical
+        env:
+          TAGS_OUTPUT: ${{ steps.meta.outputs.tags }}
+        shell: bash
+        run: |
+          canonical_tag="$(printf '%s\n' "$TAGS_OUTPUT" | sed -n '1p')"
+          if [ -z "${canonical_tag}" ]; then
+            echo "Unable to determine canonical image tag from metadata-action output" >&2
+            exit 1
+          fi
+          echo "tag=${canonical_tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify image security posture
+        uses: ./.github/actions/container-verify
         with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: false
-          sbom: false
+          image-tag: ${{ steps.canonical.outputs.tag }}
+          severity: HIGH,CRITICAL
+          artifact-name: trivy-image-release-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Save verified image
+        env:
+          CANONICAL_TAG: ${{ steps.canonical.outputs.tag }}
+        run: docker save "$CANONICAL_TAG" -o verified-image.tar
+
+      - name: Upload verified image artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verified-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: verified-image.tar
+          if-no-files-found: error
+          # Short-lived handoff artifact; not a release deliverable.
+          retention-days: 1
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
+  # Runs on dispatch AND tag pushes so the load/re-tag/save handoff is exercised
+  # by the dry run. Holds only contents:read; never logs into or pushes to GHCR.
+  prepare-container-publish:
+    name: Prepare Container Publish
+    needs: [verify-container]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download verified image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: verified-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .
+
+      - name: Load verified image
+        id: load
+        shell: bash
+        run: |
+          loaded="$(docker load -i verified-image.tar | sed -n 's/^Loaded image: //p' | head -n1)"
+          if [ -z "${loaded}" ]; then
+            echo "Could not determine the loaded image reference" >&2
+            exit 1
+          fi
+          echo "image=${loaded}" >> "$GITHUB_OUTPUT"
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Re-tag and save publish image
+        # Re-tags the exact verified image (loaded reference) onto every GHCR tag,
+        # then saves the multi-tag tarball plus an explicit tag manifest. The
+        # manifest (not local `docker images`) is the source of truth for push,
+        # so stale repo tags on a self-hosted runner can never be published.
+        env:
+          LOADED_IMAGE: ${{ steps.load.outputs.image }}
+          TAGS_OUTPUT: ${{ steps.meta.outputs.tags }}
+        shell: bash
+        run: |
+          publish_tags=()
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            docker tag "$LOADED_IMAGE" "$tag"
+            publish_tags+=("$tag")
+          done <<< "$TAGS_OUTPUT"
+          if [ "${#publish_tags[@]}" -eq 0 ]; then
+            echo "No publish tags resolved from metadata-action output" >&2
+            exit 1
+          fi
+          docker save "${publish_tags[@]}" -o publish-image.tar
+          printf '%s\n' "${publish_tags[@]}" > publish-tags.txt
+
+      - name: Upload publish image artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: publish-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            publish-image.tar
+            publish-tags.txt
+          if-no-files-found: error
+          # Short-lived handoff artifact; not a release deliverable.
+          retention-days: 1
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
+  # The only job with packages:write, and the only publish-effecting job.
+  # Guarded to real tag pushes; needs binaries so GHCR is never updated unless
+  # binaries also built. Pushes exactly the tags loaded from the verified tarball.
+  push-container:
+    name: Push Container Image
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [prepare-container-publish, build-binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download publish image artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: publish-image-${{ github.run_id }}-${{ github.run_attempt }}
+          path: .
+
+      - name: Load publish image
+        run: docker load -i publish-image.tar
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push manifest image tags
+        # Pushes only the tags recorded in the publish manifest produced alongside
+        # the verified tarball. The pushed image is byte-identical to the scanned
+        # one, and no stale local tags can leak in on self-hosted runners.
+        shell: bash
+        run: |
+          if [ ! -f publish-tags.txt ]; then
+            echo "publish-tags.txt manifest not found next to publish-image.tar" >&2
+            exit 1
+          fi
+          pushed=0
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            docker push "$tag"
+            pushed=$((pushed + 1))
+          done < publish-tags.txt
+          if [ "${pushed}" -eq 0 ]; then
+            echo "No tags listed in publish-tags.txt to push" >&2
+            exit 1
+          fi
 
       - name: Clean runner workspace
         if: always()
@@ -114,7 +274,8 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-binaries, build-container]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [push-container]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -123,10 +284,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download all artifacts
+      - name: Download binary artifacts
+        # Only the binary tarballs are release deliverables; skip the large
+        # image-handoff tarballs and Trivy evidence artifacts.
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
+          pattern: anti_entropator-*
 
       - name: Create Release
         env:

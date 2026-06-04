@@ -1,0 +1,118 @@
+name: Verify Container Image
+description: Build, smoke-test, scan, upload Trivy evidence, and enforce fixable vulnerability policy.
+
+inputs:
+  image-tag:
+    description: "Canonical single image tag to build and scan"
+    required: false
+    default: "anti_entropator:local-scan"
+  severity:
+    description: "Comma-separated Trivy severities to evaluate"
+    required: false
+    default: "HIGH,CRITICAL"
+  artifact-name:
+    description: "Uploaded artifact name for Trivy JSON evidence"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Prepare scan output directory
+      shell: bash
+      run: mkdir -p trivy-results
+
+    - name: Build local image for scan
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ inputs.image-tag }}
+      run: docker build --pull -t "$IMAGE_TAG" .
+
+    - name: Smoke test runtime image
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ inputs.image-tag }}
+      run: docker run --rm "$IMAGE_TAG" --help
+
+    - name: Trivy image scan (report mode)
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        scan-type: image
+        image-ref: ${{ inputs.image-tag }}
+        severity: ${{ inputs.severity }}
+        exit-code: "0"
+
+    - name: Trivy image scan (JSON artifact)
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        scan-type: image
+        image-ref: ${{ inputs.image-tag }}
+        severity: ${{ inputs.severity }}
+        format: json
+        output: trivy-results/trivy-image-high-critical.json
+        exit-code: "0"
+
+    - name: Trivy image scan (fixable-only JSON artifact)
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+      with:
+        scan-type: image
+        image-ref: ${{ inputs.image-tag }}
+        severity: ${{ inputs.severity }}
+        ignore-unfixed: true
+        format: json
+        output: trivy-results/trivy-image-fixable-high-critical.json
+        exit-code: "0"
+
+    - name: Summarize image scans
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ inputs.image-tag }}
+        SEVERITY: ${{ inputs.severity }}
+      run: |
+        baseline_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results/trivy-image-high-critical.json)
+        fixable_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results/trivy-image-fixable-high-critical.json)
+        {
+          echo "### Trivy Image Scan"
+          echo "- Image: ${IMAGE_TAG}"
+          echo "- Baseline severity scope: ${SEVERITY} (report mode)"
+          echo "- Baseline vulnerabilities: ${baseline_total}"
+          echo "- Fixable-only vulnerabilities: ${fixable_total}"
+          echo "- Artifacts: trivy-image-high-critical.json, trivy-image-fixable-high-critical.json"
+          echo ""
+          echo "#### Baseline findings"
+          if [ "${baseline_total}" -eq 0 ]; then
+            echo "No baseline findings."
+          else
+            echo "| Vulnerability | Severity | Package | Installed | Fixed |"
+            echo "| --- | --- | --- | --- | --- |"
+            jq -r '.Results[]?.Vulnerabilities[]? | "| \(.VulnerabilityID) | \(.Severity) | \(.PkgName // "-") | \(.InstalledVersion // "-") | \(.FixedVersion // "-") |"' trivy-results/trivy-image-high-critical.json
+          fi
+          echo ""
+          echo "#### Fixable findings"
+          if [ "${fixable_total}" -eq 0 ]; then
+            echo "No fixable findings."
+          else
+            echo "| Vulnerability | Severity | Package | Installed | Fixed |"
+            echo "| --- | --- | --- | --- | --- |"
+            jq -r '.Results[]?.Vulnerabilities[]? | "| \(.VulnerabilityID) | \(.Severity) | \(.PkgName // "-") | \(.InstalledVersion // "-") | \(.FixedVersion // "-") |"' trivy-results/trivy-image-fixable-high-critical.json
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Upload image scan artifacts
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}
+        path: |
+          trivy-results/trivy-image-high-critical.json
+          trivy-results/trivy-image-fixable-high-critical.json
+        if-no-files-found: error
+
+    - name: Enforce fixable severity policy
+      shell: bash
+      env:
+        SEVERITY: ${{ inputs.severity }}
+      run: |
+        fixable_total=$(jq '[.Results[]?.Vulnerabilities[]?] | length' trivy-results/trivy-image-fixable-high-critical.json)
+        if [ "${fixable_total}" -gt 0 ]; then
+          echo "::error::Found ${fixable_total} fixable ${SEVERITY} image vulnerabilities."
+          exit 1
+        fi
