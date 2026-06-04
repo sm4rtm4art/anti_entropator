@@ -184,6 +184,13 @@ jobs:
     if: always()
     needs: [changes, quality, coverage, container]
     steps:
+      # Aggregator holds no build state, but still checks out (without a
+      # persisted git token) so the shared cleanup can wipe any docker login /
+      # credentials left on a self-hosted runner this job lands on.
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - name: Evaluate dependency outcomes
         run: |
           # quality/coverage/container are intentionally skipped on Markdown-only
