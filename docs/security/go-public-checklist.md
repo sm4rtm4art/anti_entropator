@@ -118,7 +118,7 @@ Use it in order, and treat each section as a small, testable milestone.
 - [x] Persist image scan evidence outside logs where possible. `security.yml`
   now uploads Trivy JSON artifacts for PR filesystem scans and
   main/schedule/manual image scans.
-- [ ] Validate release workflow gate evidence (`release.yml`, S5-C Slice B):
+- [x] Validate release workflow gate evidence (`release.yml`, S5-C Slice B):
   - quality gate (`fmt`, `clippy`, tests, `cargo audit`) runs before any
     release publish job;
   - verified-image identity handoff: `verify-container` scans one canonical
@@ -128,6 +128,13 @@ Use it in order, and treat each section as a small, testable milestone.
   - a `workflow_dispatch` dry run executes every gate plus the load/re-tag/save
     handoff, while `push-container` and `create-release` are skipped by
     `push` + `refs/tags/v` guards (capture the run link + step summary);
+  - evidence captured: `release.yml` workflow_dispatch run `27274110998`
+    (<https://github.com/sm4rtm4art/anti_entropator/actions/runs/27274110998>)
+    succeeded on `main` with `quality`, both `build-binaries` targets,
+    `verify-container`, and `prepare-container-publish`; `push-container` and
+    `create-release` were skipped by guard as expected. Artifact evidence:
+    `trivy-image-release-27274110998-1`, `verified-image-27274110998-1`, and
+    `publish-image-27274110998-1`.
   - note: the tag-push publish path is implemented but not yet evidenced by a
     real `v*` tag (none cut yet), and the main-branch CI image publish remains a
     separate, not-yet-image-scan-gated path.

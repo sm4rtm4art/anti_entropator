@@ -51,7 +51,11 @@ Implemented today:
   pushes them. Only `push-container` holds `packages: write`.
 - The `release.yml` `workflow_dispatch` dry run exercises every gate plus the
   load/re-tag/save handoff, while the registry push and GitHub release are
-  skipped by `push` + `refs/tags/v` guards. A real `v*` tag has not been cut yet
+  skipped by `push` + `refs/tags/v` guards. Evidence: run `27274110998`
+  (<https://github.com/sm4rtm4art/anti_entropator/actions/runs/27274110998>)
+  on 2026-06-10 passed `quality`, both `build-binaries` targets,
+  `verify-container`, and `prepare-container-publish`, with `push-container`
+  and `create-release` skipped by guard. A real `v*` tag has not been cut yet
   (see ROADMAP M3/M4), so the tag-push publish path is implemented but not yet
   evidenced end to end.
 - The main-branch CI image publish (`ci.yml` `container` job, `:latest`/`:sha`
