@@ -49,6 +49,12 @@ Implemented today:
   scans one canonical image; `prepare-container-publish` loads that exact image
   and re-tags/saves it; the tag-only `push-container` job loads those tags and
   pushes them. Only `push-container` holds `packages: write`.
+- The `verified-image-*` and `publish-image-*` handoff artifacts are named by
+  run id only (no run attempt) and uploaded with overwrite enabled, so
+  re-running failed release jobs in a later attempt can still download the
+  earlier attempt's verified image instead of failing on a per-attempt
+  artifact name. With 1-day retention, re-runs more than a day later rebuild
+  from scratch (accepted).
 - The `release.yml` `workflow_dispatch` dry run exercises every gate plus the
   load/re-tag/save handoff, while the registry push and GitHub release are
   skipped by `push` + `refs/tags/v` guards. Evidence: run `27274110998`
@@ -70,9 +76,19 @@ Implemented today:
 - The blue-green delivery document describes the target local and GitHub-runner
   simulation boundaries.
 
+- A dispatch-gated multi-arch dry-run (`run_multiarch` input on `release.yml`)
+  builds `linux/amd64` and `linux/arm64` on native runners (`ubuntu-latest`
+  and `ubuntu-24.04-arm`) into per-platform OCI archives, verifies the
+  platform manifests registry-free, and records digests, build duration, and
+  disk headroom as workflow evidence. QEMU emulation was evaluated first and
+  ruled out by evidence: the emulated arm64 build exceeded a 150-minute
+  timeout (run `27291370220` on 2026-06-10). Release publishing stays
+  single-arch; promotion to active multi-arch publishing remains gated behind
+  roadmap M3/M4 and would assemble a manifest list from these per-platform
+  builds.
+
 Planned in S5-C:
 
-- Multi-platform Buildx path for `linux/amd64` and `linux/arm64`.
 - Local delivery simulation with isolated candidate/active slot configuration.
 
 Planned in S5-D:

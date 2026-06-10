@@ -332,24 +332,39 @@ jobs:
         if: always()
         run: ./scripts/ci-cleanup.sh
 
-  # Opt-in multi-arch Buildx dry-run (S5-C). Proves the linux/amd64 +
-  # linux/arm64 build path and records manifest/digest plus duration evidence.
-  # Release publishing stays single-arch; promotion is gated behind roadmap
-  # M3/M4. Independent of the quality gate because it is dispatch-only and
-  # publishes nothing; never runs on tag pushes or default dispatches.
+  # Opt-in multi-arch dry-run (S5-C). Proves the linux/amd64 + linux/arm64
+  # build path on native runners and records manifest/digest, duration, and
+  # disk evidence per platform. QEMU emulation was ruled out by evidence: the
+  # arm64 leg exceeded a 150-minute timeout under QEMU (run 27291370220 on
+  # 2026-06-10), so each platform builds natively (arm64 on ubuntu-24.04-arm,
+  # free for public repos). Release publishing stays single-arch; promotion is
+  # gated behind roadmap M3/M4 and would assemble a manifest list from these
+  # per-platform builds. Independent of the quality gate because it is
+  # dispatch-only and publishes nothing; never runs on tag pushes or default
+  # dispatches.
   multiarch-dryrun:
-    name: Multi-Arch Buildx Dry-Run
+    name: Multi-Arch Dry-Run (${{ matrix.platform }})
     if: github.event_name == 'workflow_dispatch' && inputs.run_multiarch
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
-    # arm64 compiles under QEMU emulation; expect a long build.
-    timeout-minutes: 150
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            slug: linux-amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            slug: linux-arm64
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
 
+      # Best-effort: some of these paths exist only on the x64 image.
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
@@ -357,26 +372,23 @@ jobs:
           sudo apt-get clean
           df -h / | tee disk-before-build.txt
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # v4.1.0
-        with:
-          platforms: linux/amd64,linux/arm64
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
 
-      - name: Build multi-arch image (no push)
+      - name: Build platform image (no push)
         id: build
         # OCI tarball output keeps the dry run registry-free; provenance/sbom
-        # stay disabled to match the CI publish path and keep the image index
-        # limited to real platform manifests.
+        # stay disabled to match the CI publish path and keep the output
+        # limited to the real platform manifest.
+        env:
+          PLATFORM: ${{ matrix.platform }}
         run: |
           start="$(date +%s)"
           docker buildx build \
-            --platform linux/amd64,linux/arm64 \
+            --platform "$PLATFORM" \
             --provenance=false \
             --sbom=false \
-            --output type=oci,dest=multiarch-image.tar \
+            --output type=oci,dest=platform-image.tar \
             .
           end="$(date +%s)"
           duration="$((end - start))"
@@ -384,46 +396,71 @@ jobs:
           echo "Build took ${duration}s"
           df -h / | tee disk-after-build.txt
 
-      - name: Inspect manifest list
+      - name: Inspect platform manifest
         # Registry-free inspection: walk the OCI layout with jq (preinstalled)
-        # and fail unless both target platforms are present in the image index.
+        # and fail unless the expected platform manifest is present. Platform
+        # is resolved from the manifest descriptor when present, otherwise
+        # from the image config blob (os/architecture).
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
         run: |
           mkdir -p oci-layout
-          tar -xf multiarch-image.tar -C oci-layout
+          tar -xf platform-image.tar -C oci-layout
+
+          blob_path() {
+            printf 'oci-layout/blobs/%s/%s' "${1%%:*}" "${1#*:}"
+          }
 
           top_media="$(jq -r '.manifests[0].mediaType' oci-layout/index.json)"
           top_digest="$(jq -r '.manifests[0].digest' oci-layout/index.json)"
           case "$top_media" in
             *index*)
-              algo="${top_digest%%:*}"
-              hash="${top_digest#*:}"
-              cp "oci-layout/blobs/${algo}/${hash}" multiarch-manifest-list.json
+              cp "$(blob_path "$top_digest")" manifest-list.json
               ;;
             *)
-              cp oci-layout/index.json multiarch-manifest-list.json
+              cp oci-layout/index.json manifest-list.json
               ;;
           esac
 
-          jq -r '.manifests[]
-            | select(.platform.os != "unknown")
-            | "\(.platform.os)/\(.platform.architecture)\t\(.digest)"' \
-            multiarch-manifest-list.json | tee multiarch-platforms.txt
-
-          for platform in "linux/amd64" "linux/arm64"; do
-            if ! grep -q "^${platform}\b" multiarch-platforms.txt; then
-              echo "Missing expected platform manifest: ${platform}" >&2
-              exit 1
+          : > platform-manifests.txt
+          while IFS= read -r entry; do
+            digest="$(jq -r '.digest' <<<"$entry")"
+            os="$(jq -r '.platform.os // empty' <<<"$entry")"
+            arch="$(jq -r '.platform.architecture // empty' <<<"$entry")"
+            if [ -z "$os" ]; then
+              media="$(jq -r '.mediaType' <<<"$entry")"
+              case "$media" in
+                *manifest*)
+                  config_digest="$(jq -r '.config.digest' "$(blob_path "$digest")")"
+                  os="$(jq -r '.os' "$(blob_path "$config_digest")")"
+                  arch="$(jq -r '.architecture' "$(blob_path "$config_digest")")"
+                  ;;
+              esac
             fi
-          done
+            [ -z "$os" ] && continue
+            [ "$os" = "unknown" ] && continue
+            printf '%s/%s\t%s\n' "$os" "$arch" "$digest" >> platform-manifests.txt
+          done < <(jq -c '.manifests[]' manifest-list.json)
+
+          cat platform-manifests.txt
+          if ! grep -q "^${EXPECTED_PLATFORM}\b" platform-manifests.txt; then
+            echo "Missing expected platform manifest: ${EXPECTED_PLATFORM}" >&2
+            exit 1
+          fi
 
       - name: Write dry-run summary
         env:
+          PLATFORM: ${{ matrix.platform }}
           DURATION_SECONDS: ${{ steps.build.outputs.duration_seconds }}
         run: |
           {
-            echo "## Multi-arch Buildx dry-run"
+            echo "## Multi-arch dry-run (${PLATFORM})"
             echo ""
             echo "Build duration: ${DURATION_SECONDS}s"
+            echo ""
+            echo "| Platform | Digest |"
+            echo "| --- | --- |"
+            awk -F'\t' '{ printf "| %s | `%s` |\n", $1, $2 }' platform-manifests.txt
             echo ""
             echo "### Disk headroom"
             echo ""
@@ -436,26 +473,22 @@ jobs:
             echo '```text'
             cat disk-after-build.txt
             echo '```'
-            echo ""
-            echo "| Platform | Digest |"
-            echo "| --- | --- |"
-            awk -F'\t' '{ printf "| %s | `%s` |\n", $1, $2 }' multiarch-platforms.txt
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload dry-run evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: multiarch-dryrun-${{ github.run_id }}-${{ github.run_attempt }}
+          name: multiarch-dryrun-${{ matrix.slug }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            multiarch-manifest-list.json
-            multiarch-platforms.txt
+            manifest-list.json
+            platform-manifests.txt
             disk-before-build.txt
             disk-after-build.txt
           if-no-files-found: error
 
       - name: Remove local build outputs
         if: always()
-        run: rm -rf multiarch-image.tar oci-layout
+        run: rm -rf platform-image.tar oci-layout
 
       - name: Clean runner workspace
         if: always()
