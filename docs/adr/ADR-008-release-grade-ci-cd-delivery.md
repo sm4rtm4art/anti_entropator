@@ -55,7 +55,9 @@ Implemented today:
   (<https://github.com/sm4rtm4art/anti_entropator/actions/runs/27274110998>)
   on 2026-06-10 passed `quality`, both `build-binaries` targets,
   `verify-container`, and `prepare-container-publish`, with `push-container`
-  and `create-release` skipped by guard. A real `v*` tag has not been cut yet
+  and `create-release` skipped by guard (attempt 2; attempt 1 failed on
+  runner disk exhaustion in the x86_64 binary build — free-disk-space
+  mitigation tracked for S5-C). A real `v*` tag has not been cut yet
   (see ROADMAP M3/M4), so the tag-push publish path is implemented but not yet
   evidenced end to end.
 - The main-branch CI image publish (`ci.yml` `container` job, `:latest`/`:sha`
