@@ -82,10 +82,15 @@ Implemented today:
   platform manifests registry-free, and records digests, build duration, and
   disk headroom as workflow evidence. QEMU emulation was evaluated first and
   ruled out by evidence: the emulated arm64 build exceeded a 150-minute
-  timeout (run `27291370220` on 2026-06-10). Release publishing stays
-  single-arch; promotion to active multi-arch publishing remains gated behind
-  roadmap M3/M4 and would assemble a manifest list from these per-platform
-  builds.
+  timeout (run `27291370220` on 2026-06-10). Native evidence: run
+  `27302097110`
+  (<https://github.com/sm4rtm4art/anti_entropator/actions/runs/27302097110>)
+  on 2026-06-10 built `linux/amd64` in 1032s and `linux/arm64` in 983s with
+  per-platform digests captured, while every release gate passed and
+  `push-container`/`create-release` stayed guard-skipped. Release publishing
+  stays single-arch; promotion to active multi-arch publishing remains gated
+  behind roadmap M3/M4 and would assemble a manifest list from these
+  per-platform builds.
 
 Planned in S5-C:
 
