@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      run_multiarch:
+        description: "Run the multi-arch Buildx dry-run (slow: arm64 under QEMU)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -52,6 +57,17 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
+
+      # Ubuntu runners ran out of disk during Setup Rust in release dry-run
+      # 27274110998 (attempt 1). Same mitigation as rust-quality.yml/ci.yml;
+      # Linux-only because the macOS matrix leg has none of these paths.
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup
+          sudo apt-get clean
+          df -h /
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -124,12 +140,18 @@ jobs:
           CANONICAL_TAG: ${{ steps.canonical.outputs.tag }}
         run: docker save "$CANONICAL_TAG" -o verified-image.tar
 
+      # Handoff artifacts are named by run_id only (no run_attempt) so a
+      # "re-run failed jobs" release attempt can still download artifacts
+      # produced by an earlier attempt; overwrite covers full re-runs. With
+      # retention-days: 1, re-runs more than a day later rebuild from scratch
+      # (acceptable, documented).
       - name: Upload verified image artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: verified-image-${{ github.run_id }}-${{ github.run_attempt }}
+          name: verified-image-${{ github.run_id }}
           path: verified-image.tar
           if-no-files-found: error
+          overwrite: true
           # Short-lived handoff artifact; not a release deliverable.
           retention-days: 1
 
@@ -153,7 +175,7 @@ jobs:
       - name: Download verified image artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: verified-image-${{ github.run_id }}-${{ github.run_attempt }}
+          name: verified-image-${{ github.run_id }}
           path: .
 
       - name: Load verified image
@@ -200,14 +222,16 @@ jobs:
           docker save "${publish_tags[@]}" -o publish-image.tar
           printf '%s\n' "${publish_tags[@]}" > publish-tags.txt
 
+      # run_id-only name + overwrite: see the verified-image upload note.
       - name: Upload publish image artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: publish-image-${{ github.run_id }}-${{ github.run_attempt }}
+          name: publish-image-${{ github.run_id }}
           path: |
             publish-image.tar
             publish-tags.txt
           if-no-files-found: error
+          overwrite: true
           # Short-lived handoff artifact; not a release deliverable.
           retention-days: 1
 
@@ -234,7 +258,7 @@ jobs:
       - name: Download publish image artifact
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: publish-image-${{ github.run_id }}-${{ github.run_attempt }}
+          name: publish-image-${{ github.run_id }}
           path: .
 
       - name: Load publish image
@@ -303,6 +327,168 @@ jobs:
             exit 1
           fi
           gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
+  # Opt-in multi-arch dry-run (S5-C). Proves the linux/amd64 + linux/arm64
+  # build path on native runners and records manifest/digest, duration, and
+  # disk evidence per platform. QEMU emulation was ruled out by evidence: the
+  # arm64 leg exceeded a 150-minute timeout under QEMU (run 27291370220 on
+  # 2026-06-10), so each platform builds natively (arm64 on ubuntu-24.04-arm,
+  # free for public repos). Release publishing stays single-arch; promotion is
+  # gated behind roadmap M3/M4 and would assemble a manifest list from these
+  # per-platform builds. Independent of the quality gate because it is
+  # dispatch-only and publishes nothing; never runs on tag pushes or default
+  # dispatches.
+  multiarch-dryrun:
+    name: Multi-Arch Dry-Run (${{ matrix.platform }})
+    if: github.event_name == 'workflow_dispatch' && inputs.run_multiarch
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+            slug: linux-amd64
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
+            slug: linux-arm64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      # Best-effort: some of these paths exist only on the x64 image.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup
+          sudo apt-get clean
+          df -h / | tee disk-before-build.txt
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+
+      - name: Build platform image (no push)
+        id: build
+        # OCI tarball output keeps the dry run registry-free; provenance/sbom
+        # stay disabled to match the CI publish path and keep the output
+        # limited to the real platform manifest.
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          start="$(date +%s)"
+          docker buildx build \
+            --platform "$PLATFORM" \
+            --provenance=false \
+            --sbom=false \
+            --output type=oci,dest=platform-image.tar \
+            .
+          end="$(date +%s)"
+          duration="$((end - start))"
+          echo "duration_seconds=${duration}" >> "$GITHUB_OUTPUT"
+          echo "Build took ${duration}s"
+          df -h / | tee disk-after-build.txt
+
+      - name: Inspect platform manifest
+        # Registry-free inspection: walk the OCI layout with jq (preinstalled)
+        # and fail unless the expected platform manifest is present. Platform
+        # is resolved from the manifest descriptor when present, otherwise
+        # from the image config blob (os/architecture).
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+        run: |
+          mkdir -p oci-layout
+          tar -xf platform-image.tar -C oci-layout
+
+          blob_path() {
+            printf 'oci-layout/blobs/%s/%s' "${1%%:*}" "${1#*:}"
+          }
+
+          top_media="$(jq -r '.manifests[0].mediaType' oci-layout/index.json)"
+          top_digest="$(jq -r '.manifests[0].digest' oci-layout/index.json)"
+          case "$top_media" in
+            *index*)
+              cp "$(blob_path "$top_digest")" manifest-list.json
+              ;;
+            *)
+              cp oci-layout/index.json manifest-list.json
+              ;;
+          esac
+
+          : > platform-manifests.txt
+          while IFS= read -r entry; do
+            digest="$(jq -r '.digest' <<<"$entry")"
+            os="$(jq -r '.platform.os // empty' <<<"$entry")"
+            arch="$(jq -r '.platform.architecture // empty' <<<"$entry")"
+            if [ -z "$os" ]; then
+              media="$(jq -r '.mediaType' <<<"$entry")"
+              case "$media" in
+                *manifest*)
+                  config_digest="$(jq -r '.config.digest' "$(blob_path "$digest")")"
+                  os="$(jq -r '.os' "$(blob_path "$config_digest")")"
+                  arch="$(jq -r '.architecture' "$(blob_path "$config_digest")")"
+                  ;;
+              esac
+            fi
+            [ -z "$os" ] && continue
+            [ "$os" = "unknown" ] && continue
+            printf '%s/%s\t%s\n' "$os" "$arch" "$digest" >> platform-manifests.txt
+          done < <(jq -c '.manifests[]' manifest-list.json)
+
+          cat platform-manifests.txt
+          if ! grep -q "^${EXPECTED_PLATFORM}\b" platform-manifests.txt; then
+            echo "Missing expected platform manifest: ${EXPECTED_PLATFORM}" >&2
+            exit 1
+          fi
+
+      - name: Write dry-run summary
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          DURATION_SECONDS: ${{ steps.build.outputs.duration_seconds }}
+        run: |
+          {
+            echo "## Multi-arch dry-run (${PLATFORM})"
+            echo ""
+            echo "Build duration: ${DURATION_SECONDS}s"
+            echo ""
+            echo "| Platform | Digest |"
+            echo "| --- | --- |"
+            awk -F'\t' '{ printf "| %s | `%s` |\n", $1, $2 }' platform-manifests.txt
+            echo ""
+            echo "### Disk headroom"
+            echo ""
+            echo "**Before build**"
+            echo '```text'
+            cat disk-before-build.txt
+            echo '```'
+            echo ""
+            echo "**After build**"
+            echo '```text'
+            cat disk-after-build.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload dry-run evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: multiarch-dryrun-${{ matrix.slug }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            manifest-list.json
+            platform-manifests.txt
+            disk-before-build.txt
+            disk-after-build.txt
+          if-no-files-found: error
+
+      - name: Remove local build outputs
+        if: always()
+        run: rm -rf platform-image.tar oci-layout
 
       - name: Clean runner workspace
         if: always()
