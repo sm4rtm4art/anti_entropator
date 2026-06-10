@@ -85,6 +85,15 @@ jobs:
         with:
           persist-credentials: false
 
+      # Same runner-space mitigation used by test/release jobs; audit can also
+      # fail early on saturated hosted runners before toolchain setup.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup
+          sudo apt-get clean
+          df -h /
+
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
