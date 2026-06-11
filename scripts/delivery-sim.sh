@@ -200,6 +200,10 @@ run_smoke() {
     trap 'rm -rf "${smoke_fixtures_dir}"' EXIT
     printf 'hello-%s\n' "$marker" >"${smoke_fixtures_dir}/s5d_${marker}_a.txt"
     printf 'world-%s\n' "$marker" >"${smoke_fixtures_dir}/s5d_${marker}_b.txt"
+    # mktemp -d yields mode 0700; the container user (UID 1000) must be able
+    # to traverse and read the bind-mounted fixtures on Linux hosts.
+    chmod 755 "${smoke_fixtures_dir}"
+    chmod 644 "${smoke_fixtures_dir}"/s5d_*.txt
 
     # Gates run in one container so init state survives across commands.
     # doctor is intentionally absent: it requires a Docker daemon and cannot
