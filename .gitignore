@@ -21,6 +21,9 @@ logs/
 .env
 .env.*
 
+# Delivery simulation marker state
+.delivery/
+
 # Lakehouse runtime state (project ID, etc.)
 .lakehouse_state.json
 

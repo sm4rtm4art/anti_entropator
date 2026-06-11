@@ -7,7 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       run_multiarch:
-        description: "Run the multi-arch Buildx dry-run (slow: arm64 under QEMU)"
+        description: "Run the multi-arch Buildx dry-run (linux/amd64 + linux/arm64)"
+        type: boolean
+        default: false
+      run_delivery_smoke:
+        description: "Run delivery simulation smoke (ephemeral green slot)"
         type: boolean
         default: false
 
@@ -327,6 +331,137 @@ jobs:
             exit 1
           fi
           gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
+
+  # Opt-in delivery smoke (S5-C Slice D). Reuses the local delivery helper
+  # against an ephemeral green slot with generated non-secret credentials.
+  # Dispatch-only and non-publishing; this validates the rollout simulation
+  # path without changing release/tag behavior.
+  delivery-smoke:
+    name: Delivery Smoke Simulation
+    if: github.event_name == 'workflow_dispatch' && inputs.run_delivery_smoke
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+            /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup
+          sudo apt-get clean
+          df -h / | tee disk-before-delivery-smoke.txt
+
+      - name: Build candidate image
+        id: build_image
+        env:
+          CANDIDATE_IMAGE: anti_entropator:delivery-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+        run: |
+          start="$(date +%s)"
+          docker build --pull -t "$CANDIDATE_IMAGE" .
+          end="$(date +%s)"
+          duration="$((end - start))"
+          echo "candidate_image=${CANDIDATE_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "build_duration_seconds=${duration}" >> "$GITHUB_OUTPUT"
+          df -h / | tee disk-after-delivery-build.txt
+
+      - name: Run delivery simulation smoke
+        id: delivery_smoke
+        env:
+          CANDIDATE_IMAGE: ${{ steps.build_image.outputs.candidate_image }}
+        run: |
+          start="$(date +%s)"
+          ./scripts/delivery-sim.sh deploy green "$CANDIDATE_IMAGE" --ephemeral-env
+          end="$(date +%s)"
+          duration="$((end - start))"
+          echo "smoke_duration_seconds=${duration}" >> "$GITHUB_OUTPUT"
+
+      - name: Capture delivery evidence
+        if: always()
+        run: |
+          project="anti_entropator_green"
+          export DELIVERY_SLOT=green
+          export ANTI_BIND_HOST=127.0.0.1
+          export RUSTFS_API_PORT=9200
+          export RUSTFS_CONSOLE_PORT=9210
+          export POSTGRES_PORT=9300
+          export LAKEKEEPER_PORT=9100
+          export RUSTFS_ACCESS_KEY=delivery-evidence-access
+          export RUSTFS_SECRET_KEY=delivery-evidence-secret
+          export POSTGRES_USER=lakekeeper
+          export POSTGRES_DB=lakekeeper
+          export POSTGRES_PASSWORD=delivery-evidence-postgres
+          export LAKEKEEPER_PG_ENCRYPTION_KEY=delivery-evidence-lakekeeper
+          export LAKEKEEPER_AUTHZ_BACKEND=allowall
+          docker compose -p "$project" -f docker-compose.yml -f docker-compose.delivery.yml ps > delivery-compose-ps.txt || true
+          cp .delivery/slots/green.env delivery-slot-green.env 2>/dev/null || true
+          cp .delivery/last-smoke-green.log delivery-smoke.log 2>/dev/null || true
+          df -h / | tee disk-after-delivery-smoke.txt
+
+      - name: Write delivery summary
+        if: always()
+        env:
+          CANDIDATE_IMAGE: ${{ steps.build_image.outputs.candidate_image }}
+          BUILD_DURATION_SECONDS: ${{ steps.build_image.outputs.build_duration_seconds }}
+          SMOKE_DURATION_SECONDS: ${{ steps.delivery_smoke.outputs.smoke_duration_seconds }}
+        run: |
+          digest="$(awk -F= '/^DIGEST=/{print $2}' delivery-slot-green.env 2>/dev/null || true)"
+          {
+            echo "## Delivery smoke simulation (green slot)"
+            echo ""
+            echo "- Candidate image: \`${CANDIDATE_IMAGE}\`"
+            if [ -n "$digest" ]; then
+              echo "- Image identity: \`${digest}\`"
+            fi
+            if [ -n "${BUILD_DURATION_SECONDS}" ]; then
+              echo "- Build duration: ${BUILD_DURATION_SECONDS}s"
+            fi
+            if [ -n "${SMOKE_DURATION_SECONDS}" ]; then
+              echo "- Smoke duration: ${SMOKE_DURATION_SECONDS}s"
+            fi
+            echo ""
+            echo "### Disk headroom"
+            echo ""
+            echo "**Before build**"
+            echo '```text'
+            cat disk-before-delivery-smoke.txt
+            echo '```'
+            echo ""
+            echo "**After build**"
+            echo '```text'
+            cat disk-after-delivery-build.txt
+            echo '```'
+            echo ""
+            echo "**After smoke**"
+            echo '```text'
+            cat disk-after-delivery-smoke.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload delivery smoke evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: delivery-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            delivery-compose-ps.txt
+            delivery-slot-green.env
+            delivery-smoke.log
+            disk-before-delivery-smoke.txt
+            disk-after-delivery-build.txt
+            disk-after-delivery-smoke.txt
+          if-no-files-found: error
+
+      - name: Tear down delivery smoke slot
+        if: always()
+        run: ./scripts/delivery-sim.sh down green --destroy-data
 
       - name: Clean runner workspace
         if: always()

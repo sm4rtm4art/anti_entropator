@@ -50,45 +50,65 @@ Only one slot is active for user traffic at a time.
 
 ## Local Delivery Simulation
 
-The same pattern should be executed locally with isolated Docker Compose project
-names and slot-specific configuration.
-Published ports can vary by slot through `RUSTFS_API_PORT`,
-`RUSTFS_CONSOLE_PORT`, `POSTGRES_PORT`, and `LAKEKEEPER_PORT`, but they should
-remain bound to `ANTI_BIND_HOST=127.0.0.1` for local simulation.
-The current default compose file no longer uses fixed container names and now
-declares an explicit project name/bridge network, but it still uses shared
-local data directories. Two slots therefore cannot be started safely by only
-changing `docker compose -p`.
+S5-C Slice D implements the delivery simulation with:
 
-Target local shape for S5-C:
+- `docker-compose.yml` as the stable default local stack.
+- `docker-compose.delivery.yml` as an opt-in override for slot-isolated bind
+  mounts (`./data/<slot>/...`, `./logs/<slot>/...`).
+- `scripts/delivery-sim.sh` as the orchestration helper for deploy/smoke,
+  promotion, rollback marker handling, and teardown.
 
-1. Start the active slot with the previously accepted image tag or digest.
-2. Start the candidate slot with the new image tag or digest and isolated ports
-   or data directories.
-3. Run smoke checks against the candidate slot.
-4. Switch the active slot marker only after the candidate passes.
-5. Keep the previous image tag or digest available for rollback.
+Slot defaults:
 
-Until slot isolation is implemented and tested, this document describes the
-intended CD model rather than claiming a working dual-slot controller.
+| Slot | Compose project | RustFS API | RustFS Console | Postgres | Lakekeeper |
+| --- | --- | --- | --- | --- | --- |
+| blue | `anti_entropator_blue` | `8200` | `8210` | `8300` | `8100` |
+| green | `anti_entropator_green` | `9200` | `9210` | `9300` | `9100` |
+
+All published ports stay bound to `ANTI_BIND_HOST=127.0.0.1`.
+
+Helper commands:
+
+```bash
+# Deploy candidate image to green and run smoke gates
+scripts/delivery-sim.sh deploy green anti_entropator:s5d-candidate
+
+# Mark green as active after smoke passes
+scripts/delivery-sim.sh promote green
+
+# Roll back active marker to the previous slot/image identity
+scripts/delivery-sim.sh rollback
+
+# Inspect slot and marker state
+scripts/delivery-sim.sh status
+
+# Tear down a slot (optionally remove slot data/log dirs)
+scripts/delivery-sim.sh down green --destroy-data
+```
+
+The helper records slot metadata under `.delivery/slots/<slot>.env` and updates
+`.delivery/active-slot` / `.delivery/active-slot.previous` during promote and
+rollback operations. Rollback simulation is local-tag/digest based.
 
 ## GitHub Runner Simulation
 
-GitHub Actions can validate the delivery path, but it should stay ephemeral:
+`release.yml` exposes a dispatch-gated `run_delivery_smoke` input that runs the
+same helper script in ephemeral mode (`--ephemeral-env`) against the green
+slot:
 
-1. Build or pull the candidate image.
-2. Start a temporary local stack using generated non-secret credentials.
-3. Run a small smoke sequence, such as container `--help`, `doctor`, `init`, or
-   a minimal query-path check when fixtures are available.
-4. Upload logs or scan reports that are safe to publish.
-5. Tear the stack down.
+1. Build a candidate image locally on the runner.
+2. Run `scripts/delivery-sim.sh deploy green <image> --ephemeral-env`.
+3. Capture safe evidence (`docker compose ps`, helper smoke log, disk headroom).
+4. Upload the evidence artifact.
+5. Teardown with `scripts/delivery-sim.sh down green --destroy-data`.
 
-Do not use GitHub repository secrets for local-only simulation.
-Add protected environment secrets only when a persistent external deployment
-target exists.
+The job is dispatch-only, uses generated non-secret values, and publishes
+nothing. It validates rollout simulation behavior without changing tag-push
+release semantics.
 
 Run `scripts/check-compose-local-bindings.sh` after Compose changes to confirm
-the default rendered config does not publish service ports beyond localhost.
+both default and delivery-override rendered configs keep published ports bound
+to localhost.
 
 ## Health Check Gates
 
