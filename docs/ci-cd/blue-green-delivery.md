@@ -67,6 +67,10 @@ Slot defaults:
 
 All published ports stay bound to `ANTI_BIND_HOST=127.0.0.1`.
 
+The blue slot reuses the default stack's port set. Stop the default
+`anti_entropator` Compose project before deploying the blue slot, or treat the
+blue slot as its replacement.
+
 Helper commands:
 
 ```bash
@@ -115,7 +119,9 @@ to localhost.
 Recommended gate sequence before slot switch:
 
 1. Container process health (compose healthcheck).
-2. Application preflight (`anti_entropator doctor` where applicable).
+2. Application preflight (`anti_entropator doctor`, host-side only: it
+   requires a Docker daemon, so it is not part of the containerized smoke
+   gate run by `scripts/delivery-sim.sh`).
 3. Minimal query-path smoke check (`query` command with a simple SQL statement).
 4. Security gate confirmation (`cargo audit`, Trivy scan evidence, and release
    workflow status).

@@ -134,11 +134,28 @@ prepare_slot_directories() {
 
     mkdir -p "$rustfs_data_dir" "$rustfs_log_dir" "$postgres_dir"
 
-    # RustFS runs as UID 10001 in the container.
+    # RustFS runs as UID 10001 in the container. sudo -n avoids hanging on an
+    # interactive password prompt (e.g. local macOS shells).
     if command -v sudo >/dev/null 2>&1; then
-        sudo chown -R 10001:10001 "$rustfs_data_dir" "$rustfs_log_dir" 2>/dev/null || true
+        sudo -n chown -R 10001:10001 "$rustfs_data_dir" "$rustfs_log_dir" 2>/dev/null || true
     fi
     chown -R 10001:10001 "$rustfs_data_dir" "$rustfs_log_dir" 2>/dev/null || true
+}
+
+remove_slot_tree() {
+    # Slot trees can contain container-UID-owned files (Postgres internal
+    # user, RustFS 10001) that a non-root user cannot delete on Linux, so
+    # fall back to sudo when plain rm fails (e.g. GitHub-hosted runners).
+    local dir="$1"
+    [[ -e "$dir" ]] || return 0
+    if rm -rf "$dir" 2>/dev/null; then
+        return 0
+    fi
+    if command -v sudo >/dev/null 2>&1; then
+        sudo -n rm -rf "$dir"
+    else
+        rm -rf "$dir"
+    fi
 }
 
 compose_cmd() {
@@ -174,19 +191,25 @@ run_smoke() {
     local image="$2"
     local project_name="$3"
     local marker
-    local fixtures_dir
     local smoke_log="${DELIVERY_DIR}/last-smoke-${slot}.log"
 
     marker="$(date +%s)-${slot}"
-    fixtures_dir="$(mktemp -d)"
-    trap 'rm -rf "${fixtures_dir}"' RETURN
-    printf 'hello-%s\n' "$marker" >"${fixtures_dir}/s5d_${marker}_a.txt"
-    printf 'world-%s\n' "$marker" >"${fixtures_dir}/s5d_${marker}_b.txt"
+    # Intentionally global: the EXIT trap must still resolve the path after
+    # set -e aborts this function (a RETURN trap would not fire then).
+    smoke_fixtures_dir="$(mktemp -d)"
+    trap 'rm -rf "${smoke_fixtures_dir}"' EXIT
+    printf 'hello-%s\n' "$marker" >"${smoke_fixtures_dir}/s5d_${marker}_a.txt"
+    printf 'world-%s\n' "$marker" >"${smoke_fixtures_dir}/s5d_${marker}_b.txt"
 
+    # Gates run in one container so init state survives across commands.
+    # doctor is intentionally absent: it requires a Docker daemon and cannot
+    # pass inside the runtime image; compose healthchecks cover readiness.
+    # Gates use redirection plus an explicit exit (never pipes) so failures
+    # keep their exit codes under POSIX sh without pipefail.
     docker run --rm \
         --network "${project_name}_default" \
         --entrypoint /bin/sh \
-        -v "${fixtures_dir}:/fixtures:ro" \
+        -v "${smoke_fixtures_dir}:/fixtures:ro" \
         -e ANTI_ENTROPATOR_S3_ENDPOINT="http://rustfs:9000" \
         -e ANTI_ENTROPATOR_S3_ENDPOINT_INTERNAL="http://rustfs:9000" \
         -e ANTI_ENTROPATOR_CATALOG_ENDPOINT="http://lakekeeper:8181" \
@@ -198,13 +221,23 @@ run_smoke() {
         -e SMOKE_MARKER="${marker}" \
         "$image" \
         -ceu '
-anti_entropator --help >/tmp/help.out
-anti_entropator doctor | tee /tmp/doctor.out
-anti_entropator init | tee /tmp/init.out
-anti_entropator ingest /fixtures | tee /tmp/ingest.out
+run_gate() {
+    name="$1"
+    shift
+    if "$@" >"/tmp/${name}.out" 2>&1; then
+        cat "/tmp/${name}.out"
+    else
+        cat "/tmp/${name}.out"
+        echo "Gate failed: ${name}" >&2
+        exit 1
+    fi
+}
+run_gate help anti_entropator --help
+run_gate init anti_entropator init
+run_gate ingest anti_entropator ingest /fixtures
 grep -Eq "Uploaded:[[:space:]]+2" /tmp/ingest.out
 query="SELECT count(*) FROM files WHERE filename LIKE '\''s5d_${SMOKE_MARKER}%'\''"
-anti_entropator query "$query" | tee /tmp/query.out
+run_gate query anti_entropator query "$query"
 grep -F "| 2        |" /tmp/query.out
 echo "Smoke marker: ${SMOKE_MARKER}"
 ' | tee "$smoke_log"
@@ -310,7 +343,8 @@ cmd_down() {
     project_name="$(project_name_for_slot "$slot")"
     compose_cmd "$project_name" down --remove-orphans
     if [[ "$destroy_data" == "true" ]]; then
-        rm -rf "$(slot_data_root "$slot")" "$(slot_log_root "$slot")"
+        remove_slot_tree "$(slot_data_root "$slot")"
+        remove_slot_tree "$(slot_log_root "$slot")"
         echo "Removed data/log directories for slot '${slot}'."
     fi
 }

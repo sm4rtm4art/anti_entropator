@@ -431,17 +431,17 @@ jobs:
             echo ""
             echo "**Before build**"
             echo '```text'
-            cat disk-before-delivery-smoke.txt
+            if [ -f disk-before-delivery-smoke.txt ]; then cat disk-before-delivery-smoke.txt; else echo "(not captured)"; fi
             echo '```'
             echo ""
             echo "**After build**"
             echo '```text'
-            cat disk-after-delivery-build.txt
+            if [ -f disk-after-delivery-build.txt ]; then cat disk-after-delivery-build.txt; else echo "(not captured)"; fi
             echo '```'
             echo ""
             echo "**After smoke**"
             echo '```text'
-            cat disk-after-delivery-smoke.txt
+            if [ -f disk-after-delivery-smoke.txt ]; then cat disk-after-delivery-smoke.txt; else echo "(not captured)"; fi
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
