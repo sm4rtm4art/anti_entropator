@@ -1,0 +1,15 @@
+# Delivery simulation override for dual-slot local runs.
+# Use with:
+#   docker compose -f docker-compose.yml -f docker-compose.delivery.yml ...
+#
+# Requires DELIVERY_SLOT to isolate bind-mounted runtime state per slot.
+
+services:
+  rustfs:
+    volumes:
+      - ./data/${DELIVERY_SLOT:?set_delivery_slot}/rustfs:/data
+      - ./logs/${DELIVERY_SLOT:?set_delivery_slot}/rustfs:/logs
+
+  postgres:
+    volumes:
+      - ./data/${DELIVERY_SLOT:?set_delivery_slot}/postgres:/var/lib/postgresql
