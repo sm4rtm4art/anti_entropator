@@ -100,9 +100,13 @@ Guard rails:
   (`RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`, `POSTGRES_PASSWORD`,
   `LAKEKEEPER_PG_ENCRYPTION_KEY`) and fails fast instead of falling back to
   static placeholder values.
-- `promote` refuses slots without running containers.
-- `down --destroy-data` removes the slot record alongside the data/log
-  directories, so a destroyed slot is no longer promotable.
+- `promote` refuses slots whose services (`rustfs`, `postgres`, `lakekeeper`)
+  are not all running and healthy.
+- `rollback` validates that the previous slot still has a slot record and
+  healthy services before restoring the active marker.
+- `down --destroy-data` removes the slot record and any active/previous
+  markers referencing the slot alongside the data/log directories, so a
+  destroyed slot is neither promotable nor restorable.
 
 ## GitHub Runner Simulation
 

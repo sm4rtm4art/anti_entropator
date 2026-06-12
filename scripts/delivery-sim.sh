@@ -183,18 +183,45 @@ compose_cmd() {
     docker compose -p "${project_name}" "${COMPOSE_FILES[@]}" "$@"
 }
 
-# Uses the compose project label directly so the check needs no compose
-# config parsing (which would require the slot env to be populated).
-slot_has_running_containers() {
+# Long-running slot services; lakekeeper-migrate is a one-shot job and exits.
+SLOT_SERVICES=(rustfs postgres lakekeeper)
+
+# Uses compose labels directly so the check needs no compose config parsing
+# (which would require the slot env to be populated). All slot services define
+# healthchecks, so requiring health=healthy is strictly stronger than running.
+require_slot_services_healthy() {
     local slot="$1"
+    local action="$2"
     local project_name
+    local service
     project_name="$(project_name_for_slot "$slot")"
-    [[ -n "$(docker ps --filter "label=com.docker.compose.project=${project_name}" --filter status=running --quiet)" ]]
+    for service in "${SLOT_SERVICES[@]}"; do
+        if [[ -z "$(docker ps \
+            --filter "label=com.docker.compose.project=${project_name}" \
+            --filter "label=com.docker.compose.service=${service}" \
+            --filter health=healthy \
+            --quiet)" ]]; then
+            echo "Slot '${slot}' service '${service}' is not running/healthy; refusing to ${action}." >&2
+            echo "Redeploy it first: scripts/delivery-sim.sh deploy ${slot} <image>" >&2
+            exit 1
+        fi
+    done
 }
 
 image_identity() {
     local image="$1"
     docker image inspect --format '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}{{.Id}}{{end}}' "$image"
+}
+
+invalidate_markers_for_slot() {
+    local slot="$1"
+    local marker
+    for marker in "$ACTIVE_SLOT_FILE" "$PREVIOUS_SLOT_FILE"; do
+        if [[ -f "$marker" ]] && grep -q "^SLOT=${slot}$" "$marker"; then
+            rm -f "$marker"
+            echo "Removed marker referencing destroyed slot '${slot}': ${marker}"
+        fi
+    done
 }
 
 write_slot_record() {
@@ -315,11 +342,7 @@ cmd_promote() {
         echo "Slot record not found for '${slot}'. Run deploy first." >&2
         exit 1
     fi
-    if ! slot_has_running_containers "$slot"; then
-        echo "Slot '${slot}' has no running containers; refusing to promote." >&2
-        echo "Redeploy it first: scripts/delivery-sim.sh deploy ${slot} <image>" >&2
-        exit 1
-    fi
+    require_slot_services_healthy "$slot" "promote"
     if [[ -f "$ACTIVE_SLOT_FILE" ]]; then
         cp "$ACTIVE_SLOT_FILE" "$PREVIOUS_SLOT_FILE"
     fi
@@ -329,16 +352,31 @@ cmd_promote() {
 }
 
 cmd_rollback() {
+    local previous_slot
+
     ensure_delivery_dirs
     if [[ ! -f "$PREVIOUS_SLOT_FILE" ]]; then
         echo "No previous active marker found at ${PREVIOUS_SLOT_FILE}." >&2
         exit 1
     fi
+    previous_slot="$(awk -F= '/^SLOT=/{print $2}' "$PREVIOUS_SLOT_FILE")"
+    case "$previous_slot" in
+    blue | green) ;;
+    *)
+        echo "Previous active marker has no valid SLOT entry; refusing to rollback." >&2
+        exit 1
+        ;;
+    esac
+    if [[ ! -f "${SLOTS_DIR}/${previous_slot}.env" ]]; then
+        echo "Slot record not found for previous slot '${previous_slot}' (destroyed?); refusing to rollback." >&2
+        exit 1
+    fi
+    require_slot_services_healthy "$previous_slot" "rollback"
     if [[ -f "$ACTIVE_SLOT_FILE" ]]; then
         cp "$ACTIVE_SLOT_FILE" "${ACTIVE_SLOT_FILE}.failed.$(date +%s)"
     fi
     cp "$PREVIOUS_SLOT_FILE" "$ACTIVE_SLOT_FILE"
-    echo "Rollback marker restored from previous active slot."
+    echo "Rollback marker restored from previous active slot '${previous_slot}'."
     echo "Active marker: ${ACTIVE_SLOT_FILE}"
 }
 
@@ -382,10 +420,10 @@ cmd_down() {
     if [[ "$destroy_data" == "true" ]]; then
         remove_slot_tree "$(slot_data_root "$slot")"
         remove_slot_tree "$(slot_log_root "$slot")"
-        # A destroyed slot must not stay promotable: drop its record so
-        # promote fails with "Slot record not found" instead of marking a
-        # gone slot active.
+        # A destroyed slot must not stay promotable or restorable: drop its
+        # record and any active/previous markers that still reference it.
         rm -f "${SLOTS_DIR}/${slot}.env"
+        invalidate_markers_for_slot "$slot"
         echo "Removed data/log directories and slot record for slot '${slot}'."
     fi
 }
