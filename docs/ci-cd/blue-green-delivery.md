@@ -94,6 +94,16 @@ The helper records slot metadata under `.delivery/slots/<slot>.env` and updates
 `.delivery/active-slot` / `.delivery/active-slot.previous` during promote and
 rollback operations. Rollback simulation is local-tag/digest based.
 
+Guard rails:
+
+- Local (non-ephemeral) `deploy` requires the credentials from `.env`
+  (`RUSTFS_ACCESS_KEY`, `RUSTFS_SECRET_KEY`, `POSTGRES_PASSWORD`,
+  `LAKEKEEPER_PG_ENCRYPTION_KEY`) and fails fast instead of falling back to
+  static placeholder values.
+- `promote` refuses slots without running containers.
+- `down --destroy-data` removes the slot record alongside the data/log
+  directories, so a destroyed slot is no longer promotable.
+
 ## GitHub Runner Simulation
 
 `release.yml` exposes a dispatch-gated `run_delivery_smoke` input that runs the
@@ -112,7 +122,7 @@ release semantics.
 
 Run `scripts/check-compose-local-bindings.sh` after Compose changes to confirm
 both default and delivery-override rendered configs keep published ports bound
-to localhost.
+to localhost and preserve the expected service/target/published port mappings.
 
 ## Health Check Gates
 

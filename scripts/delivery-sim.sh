@@ -71,6 +71,8 @@ set_runtime_env_defaults() {
     export ANTI_ENTROPATOR_WAREHOUSE="${ANTI_ENTROPATOR_WAREHOUSE:-anti-entropator}"
 }
 
+# Placeholders are acceptable only for non-deploy paths (down) where compose
+# must parse the config but no service handles real data with these values.
 set_compose_required_defaults() {
     export RUSTFS_ACCESS_KEY="${RUSTFS_ACCESS_KEY:-compose-delivery-access}"
     export RUSTFS_SECRET_KEY="${RUSTFS_SECRET_KEY:-compose-delivery-secret}"
@@ -79,6 +81,23 @@ set_compose_required_defaults() {
     export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-compose-delivery-postgres}"
     export LAKEKEEPER_PG_ENCRYPTION_KEY="${LAKEKEEPER_PG_ENCRYPTION_KEY:-compose-delivery-lakekeeper-key}"
     export LAKEKEEPER_AUTHZ_BACKEND="${LAKEKEEPER_AUTHZ_BACKEND:-allowall}"
+}
+
+# Local (non-ephemeral) deploys must use real .env credentials; fail fast
+# instead of falling back to static placeholders.
+require_local_credentials() {
+    local missing=()
+    local var
+    for var in RUSTFS_ACCESS_KEY RUSTFS_SECRET_KEY POSTGRES_PASSWORD LAKEKEEPER_PG_ENCRYPTION_KEY; do
+        if [[ -z "${!var:-}" ]]; then
+            missing+=("$var")
+        fi
+    done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo "Missing required credentials after loading .env: ${missing[*]}" >&2
+        echo "Set them in .env or use --ephemeral-env." >&2
+        exit 1
+    fi
 }
 
 set_ephemeral_credentials() {
@@ -162,6 +181,15 @@ compose_cmd() {
     local project_name="$1"
     shift
     docker compose -p "${project_name}" "${COMPOSE_FILES[@]}" "$@"
+}
+
+# Uses the compose project label directly so the check needs no compose
+# config parsing (which would require the slot env to be populated).
+slot_has_running_containers() {
+    local slot="$1"
+    local project_name
+    project_name="$(project_name_for_slot "$slot")"
+    [[ -n "$(docker ps --filter "label=com.docker.compose.project=${project_name}" --filter status=running --quiet)" ]]
 }
 
 image_identity() {
@@ -261,10 +289,10 @@ cmd_deploy() {
         set_ephemeral_credentials
     else
         load_env_file
+        require_local_credentials
     fi
     set_slot_ports "$slot"
     set_runtime_env_defaults
-    set_compose_required_defaults
     prepare_slot_directories "$slot"
 
     project_name="$(project_name_for_slot "$slot")"
@@ -285,6 +313,11 @@ cmd_promote() {
     ensure_delivery_dirs
     if [[ ! -f "$record_file" ]]; then
         echo "Slot record not found for '${slot}'. Run deploy first." >&2
+        exit 1
+    fi
+    if ! slot_has_running_containers "$slot"; then
+        echo "Slot '${slot}' has no running containers; refusing to promote." >&2
+        echo "Redeploy it first: scripts/delivery-sim.sh deploy ${slot} <image>" >&2
         exit 1
     fi
     if [[ -f "$ACTIVE_SLOT_FILE" ]]; then
@@ -349,7 +382,11 @@ cmd_down() {
     if [[ "$destroy_data" == "true" ]]; then
         remove_slot_tree "$(slot_data_root "$slot")"
         remove_slot_tree "$(slot_log_root "$slot")"
-        echo "Removed data/log directories for slot '${slot}'."
+        # A destroyed slot must not stay promotable: drop its record so
+        # promote fails with "Slot record not found" instead of marking a
+        # gone slot active.
+        rm -f "${SLOTS_DIR}/${slot}.env"
+        echo "Removed data/log directories and slot record for slot '${slot}'."
     fi
 }
 
