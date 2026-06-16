@@ -106,9 +106,13 @@ Use it in order, and treat each section as a small, testable milestone.
   HIGH/CRITICAL Trivy image scan, and fixable-only Trivy image scan. The full
   baseline reported 4 Debian-context findings; the fixable-only scan reported 0.
 - [x] Fix Docker image runtime compatibility before public-showcase S5 closeout:
-  `Dockerfile` now uses `rust:1.95-bookworm` builder with `debian:bookworm-slim`
-  runtime; local `docker run --rm anti_entropator:local-scan --help` passes
-  (verified 2026-05-27).
+  the 2026-05-27 local `docker run --rm anti_entropator:local-scan --help` smoke
+  validated the then-current `rust:1.95-bookworm` builder with
+  `debian:bookworm-slim` runtime. The builder was later bumped to
+  `rust:1.96-bookworm` (#107, 2026-06-04, after the Rust 1.96.0 release on
+  2026-05-28) and exercised runner-side by release dispatch run `27274110998`
+  (2026-06-10, `verify-container` smoke + Trivy); a dated local runtime smoke
+  against the 1.96 builder is not yet re-captured.
 - [x] Pin container images to fixed release tags for S5-B:
   Dockerfile, RustFS, Postgres, and Lakekeeper are pinned to release tags.
   Digest pinning remains deferred to S5-C release-grade publishing.
@@ -215,8 +219,10 @@ When you are ready to make the repository public:
   Status: blue-green remains a local/GitHub-runner simulation. No persistent
   external deployment target exists yet.
   Deferred until S5 or post-v0.3.
-- [ ] Confirm rollback steps are documented and tested at least once in a local simulation.
-  Deferred to S5 (container delivery path).
+- [x] Confirm rollback steps are documented and tested at least once in a local simulation.
+  Verified in S5-C Slice D (PR #117): helper rollback path documented in
+  `docs/ci-cd/blue-green-delivery.md` and exercised in local dual-slot
+  simulation evidence.
 - [ ] Confirm GitHub-runner deployment simulation is limited to ephemeral smoke
   checks with generated non-secret values and small fixtures, not persistent
   deployment credentials or local data dumps.
