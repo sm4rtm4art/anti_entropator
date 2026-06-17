@@ -1,5 +1,5 @@
 name: Setup Rust Toolchain and Cache
-description: Install pinned Rust toolchain and restore Cargo cache.
+description: Install pinned Rust toolchain and restore bounded Cargo caches.
 
 inputs:
   components:
@@ -14,6 +14,10 @@ inputs:
     description: "Cache key suffix to isolate workflows/jobs"
     required: false
     default: "default"
+  cache-enabled:
+    description: "Whether to restore/save Cargo cache entries"
+    required: false
+    default: "true"
 
 runs:
   using: "composite"
@@ -24,7 +28,11 @@ runs:
         components: ${{ inputs.components }}
         targets: ${{ inputs.targets }}
 
+    # Each job restores only its own suffix-scoped cache. The previous broad
+    # `${{ runner.os }}-cargo-` fallback let unrelated jobs (e.g. Cargo Audit)
+    # restore a multi-GB cache they did not need and exhaust runner disk.
     - name: Cache cargo
+      if: inputs.cache-enabled == 'true'
       uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: |
@@ -34,4 +42,3 @@ runs:
         key: ${{ runner.os }}-cargo-${{ inputs.cache-key-suffix }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-${{ inputs.cache-key-suffix }}-
-          ${{ runner.os }}-cargo-
