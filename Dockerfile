@@ -20,8 +20,8 @@ RUN mkdir src && \
 COPY src ./src
 RUN touch src/main.rs && cargo build --release
 
-# Runtime stage - minimal Debian
-FROM debian:bookworm-slim
+# Runtime stage - default Bookworm baseline
+FROM debian:bookworm-slim AS runtime-bookworm
 
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get -y upgrade \
@@ -37,3 +37,14 @@ USER anti
 
 ENTRYPOINT ["anti_entropator"]
 CMD ["--help"]
+
+# Runtime stage - distroless experiment candidate (S5-D B1)
+FROM gcr.io/distroless/cc-debian12:nonroot AS runtime-distroless
+
+COPY --from=builder /app/target/release/anti_entropator /usr/local/bin/
+
+ENTRYPOINT ["/usr/local/bin/anti_entropator"]
+CMD ["--help"]
+
+# Keep default local/CI image on Bookworm until S5-D chooses a baseline.
+FROM runtime-bookworm AS runtime
