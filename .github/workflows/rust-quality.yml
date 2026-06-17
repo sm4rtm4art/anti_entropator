@@ -98,6 +98,7 @@ jobs:
         uses: ./.github/actions/setup-rust
         with:
           cache-key-suffix: quality-audit
+          cache-enabled: "false"
 
       - name: Install cargo-audit
         uses: taiki-e/install-action@56545b37b57562edd73171cb6c62cc509db4c34e # v2.81.7
