@@ -78,7 +78,7 @@ services:
 
   # Lakekeeper catalog (Apache Iceberg REST Catalog)
   lakekeeper-migrate:
-    image: quay.io/lakekeeper/catalog:v0.12.3
+    image: quay.io/lakekeeper/catalog:v0.12.4
     environment:
       <<: *lakekeeper-db
       RUST_LOG: info
@@ -89,7 +89,7 @@ services:
         condition: service_healthy
 
   lakekeeper:
-    image: quay.io/lakekeeper/catalog:v0.12.3
+    image: quay.io/lakekeeper/catalog:v0.12.4
     ports:
       - "${ANTI_BIND_HOST:-127.0.0.1}:${LAKEKEEPER_PORT:-8100}:8181" # REST API + UI (Organized port)
     environment:
