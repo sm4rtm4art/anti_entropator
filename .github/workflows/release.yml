@@ -67,11 +67,7 @@ jobs:
       # Linux-only because the macOS matrix leg has none of these paths.
       - name: Free disk space
         if: runner.os == 'Linux'
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup
-          sudo apt-get clean
-          df -h /
+        uses: ./.github/actions/free-disk-space
 
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
@@ -353,11 +349,10 @@ jobs:
           persist-credentials: false
 
       - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup
-          sudo apt-get clean
-          df -h / | tee disk-before-delivery-smoke.txt
+        uses: ./.github/actions/free-disk-space
+
+      - name: Capture disk headroom before build
+        run: df -h / | tee disk-before-delivery-smoke.txt
 
       - name: Build candidate image
         id: build_image
@@ -501,11 +496,10 @@ jobs:
 
       # Best-effort: some of these paths exist only on the x64 image.
       - name: Free disk space
-        run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-            /usr/local/share/powershell /usr/share/swift /usr/local/.ghcup
-          sudo apt-get clean
-          df -h / | tee disk-before-build.txt
+        uses: ./.github/actions/free-disk-space
+
+      - name: Capture disk headroom before build
+        run: df -h / | tee disk-before-build.txt
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
