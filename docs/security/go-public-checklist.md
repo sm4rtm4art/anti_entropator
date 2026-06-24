@@ -125,14 +125,19 @@ Use it in order, and treat each section as a small, testable milestone.
 - [x] Validate release workflow gate evidence (`release.yml`, S5-C Slice B):
   - quality gate (`fmt`, `clippy`, tests, `cargo audit`) runs before any
     release publish job;
-  - verified-image identity handoff: `verify-container` scans one canonical
-    image, `prepare-container-publish` loads + re-tags + saves it, and the
-    tag-only `push-container` loads + pushes those exact tags (no rebuild
-    between scan and push); only `push-container` carries `packages: write`;
-  - a `workflow_dispatch` dry run executes every gate plus the load/re-tag/save
-    handoff, while `push-container` and `create-release` are skipped by
-    `push` + `refs/tags/v` guards (capture the run link + step summary);
-  - evidence captured: `release.yml` workflow_dispatch run `27274110998`
+  - container path (current, amended 2026-06-24): a dispatch-only
+    `verify-container` job (`contents: read`) and a tag-only `publish-container`
+    job (`packages: write`) each build and verify one canonical image in-job
+    (smoke + Trivy baseline + fixable-only enforcement); `publish-container` then
+    pushes that exact image (no rebuild between scan and push). `packages: write`
+    is held only by the tag-gated `publish-container` job, so `workflow_dispatch`
+    runs cannot publish. This replaced the earlier `verify-container` ->
+    `prepare-container-publish` -> `push-container` tarball handoff;
+  - a `workflow_dispatch` dry run executes every gate plus `verify-container`
+    (build + scan), while `publish-container` and `create-release` are skipped by
+    their tag-only guards (capture the run link + step summary);
+  - evidence captured (pre-flatten three-job design): `release.yml`
+    workflow_dispatch run `27274110998`
     (<https://github.com/sm4rtm4art/anti_entropator/actions/runs/27274110998>)
     succeeded on `main` with `quality`, both `build-binaries` targets,
     `verify-container`, and `prepare-container-publish`; `push-container` and
@@ -140,8 +145,9 @@ Use it in order, and treat each section as a small, testable milestone.
     `trivy-image-release-27274110998-1`, `verified-image-27274110998-1`, and
     `publish-image-27274110998-1`. The run succeeded on attempt 2; attempt 1
     hit a GitHub-runner disk-exhaustion infra failure during `Setup Rust` in
-    `Build x86_64-unknown-linux-gnu`. Follow-up tracked for S5-C Slice C: add
-    the free-disk-space step to the release `build-binaries` job.
+    `Build x86_64-unknown-linux-gnu`. Resolved (#126): the disk-exhaustion
+    mitigation is now centralized in `.github/actions/free-disk-space` and
+    applied to the release `build-binaries` job (and other heavy CI jobs).
   - note: the tag-push publish path is implemented but not yet evidenced by a
     real `v*` tag (none cut yet), and the main-branch CI image publish remains a
     separate, not-yet-image-scan-gated path.
