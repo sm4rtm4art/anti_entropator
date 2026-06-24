@@ -145,8 +145,9 @@ Use it in order, and treat each section as a small, testable milestone.
     `trivy-image-release-27274110998-1`, `verified-image-27274110998-1`, and
     `publish-image-27274110998-1`. The run succeeded on attempt 2; attempt 1
     hit a GitHub-runner disk-exhaustion infra failure during `Setup Rust` in
-    `Build x86_64-unknown-linux-gnu`. Follow-up tracked for S5-C Slice C: add
-    the free-disk-space step to the release `build-binaries` job.
+    `Build x86_64-unknown-linux-gnu`. Resolved (#126): the disk-exhaustion
+    mitigation is now centralized in `.github/actions/free-disk-space` and
+    applied to the release `build-binaries` job (and other heavy CI jobs).
   - note: the tag-push publish path is implemented but not yet evidenced by a
     real `v*` tag (none cut yet), and the main-branch CI image publish remains a
     separate, not-yet-image-scan-gated path.
