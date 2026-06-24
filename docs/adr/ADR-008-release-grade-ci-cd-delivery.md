@@ -44,20 +44,24 @@ Implemented today:
 - Release-tag (`v*`) quality gates are enforced before any publish path:
   formatting, clippy, tests, `cargo audit`, a container smoke check, and the
   Trivy fixable-only HIGH/CRITICAL image policy.
-- Release-tag container images use a verified-image identity handoff and never
-  rebuild between scan and push: `verify-container` builds, smoke-tests, and
-  scans one canonical image; `prepare-container-publish` loads that exact image
-  and re-tags/saves it; the tag-only `push-container` job loads those tags and
-  pushes them. Only `push-container` holds `packages: write`.
-- The `verified-image-*` and `publish-image-*` handoff artifacts are named by
-  run id only (no run attempt) and uploaded with overwrite enabled, so
-  re-running failed release jobs in a later attempt can still download the
-  earlier attempt's verified image instead of failing on a per-attempt
-  artifact name. With 1-day retention, re-runs more than a day later rebuild
-  from scratch (accepted).
+- Release-tag container images never rebuild between scan and push. Amended
+  2026-06-24: the earlier three-job tarball handoff (`verify-container` ->
+  `prepare-container-publish` -> `push-container`) was flattened into two in-job
+  paths that share the `container-verify` composite action:
+  - a dispatch-only `verify-container` job (`contents: read`) builds,
+    smoke-tests, and scans one canonical image and publishes nothing;
+  - a tag-only `publish-container` job (`packages: write`) builds and verifies
+    the canonical image, then pushes that exact image. `packages: write` is held
+    only by this tag-gated job, so a `workflow_dispatch` run cannot publish.
+- The `verified-image-*`/`publish-image-*` handoff artifacts were removed with
+  the flatten (2026-06-24); each container job now builds and verifies its image
+  in the same job, so there is no cross-job image artifact to reuse or expire.
+  Re-running a failed release job rebuilds and re-verifies from scratch
+  (accepted).
 - The `release.yml` `workflow_dispatch` dry run exercises every gate plus the
-  load/re-tag/save handoff, while the registry push and GitHub release are
-  skipped by `push` + `refs/tags/v` guards. Evidence: run `27274110998`
+  `verify-container` build + scan, while the registry push and GitHub release are
+  skipped by their tag-only guards. Evidence (pre-flatten three-job design): run
+  `27274110998`
   (<https://github.com/sm4rtm4art/anti_entropator/actions/runs/27274110998>)
   on 2026-06-10 passed `quality`, both `build-binaries` targets,
   `verify-container`, and `prepare-container-publish`, with `push-container`

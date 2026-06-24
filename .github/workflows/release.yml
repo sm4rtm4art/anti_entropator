@@ -94,8 +94,13 @@ jobs:
         if: always()
         run: ./scripts/ci-cleanup.sh
 
+  # Dispatch-only container validation. Builds the canonical image and runs the
+  # shared verify (smoke + Trivy baseline + fixable-only enforcement). It holds
+  # no publish scope, so a `workflow_dispatch` run on any branch cannot push to
+  # GHCR. The tag-only `publish-container` job below carries `packages: write`.
   verify-container:
     name: Verify Container Image
+    if: github.event_name == 'workflow_dispatch'
     needs: [quality]
     runs-on: ubuntu-latest
     permissions:
@@ -135,59 +140,27 @@ jobs:
           severity: HIGH,CRITICAL
           artifact-name: trivy-image-release-${{ github.run_id }}-${{ github.run_attempt }}
 
-      - name: Save verified image
-        env:
-          CANONICAL_TAG: ${{ steps.canonical.outputs.tag }}
-        run: docker save "$CANONICAL_TAG" -o verified-image.tar
-
-      # Handoff artifacts are named by run_id only (no run_attempt) so a
-      # "re-run failed jobs" release attempt can still download artifacts
-      # produced by an earlier attempt; overwrite covers full re-runs. With
-      # retention-days: 1, re-runs more than a day later rebuild from scratch
-      # (acceptable, documented).
-      - name: Upload verified image artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: verified-image-${{ github.run_id }}
-          path: verified-image.tar
-          if-no-files-found: error
-          overwrite: true
-          # Short-lived handoff artifact; not a release deliverable.
-          retention-days: 1
-
       - name: Clean runner workspace
         if: always()
         run: ./scripts/ci-cleanup.sh
 
-  # Runs on dispatch AND tag pushes so the load/re-tag/save handoff is exercised
-  # by the dry run. Holds only contents:read; never logs into or pushes to GHCR.
-  prepare-container-publish:
-    name: Prepare Container Publish
-    needs: [verify-container]
+  # Tag-only publish. Builds the canonical image, runs the same shared verify,
+  # then pushes that exact verified image. `packages: write` lives only on this
+  # job, and the job-level guard keeps it off `workflow_dispatch`, so the publish
+  # boundary is enforced by job gating (not just step conditions). No rebuild and
+  # no tarball handoff occur between scan and push.
+  publish-container:
+    name: Publish Container Image
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [quality, build-binaries]
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           persist-credentials: false
-
-      - name: Download verified image artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: verified-image-${{ github.run_id }}
-          path: .
-
-      - name: Load verified image
-        id: load
-        shell: bash
-        run: |
-          loaded="$(docker load -i verified-image.tar | sed -n 's/^Loaded image: //p' | head -n1)"
-          if [ -z "${loaded}" ]; then
-            echo "Could not determine the loaded image reference" >&2
-            exit 1
-          fi
-          echo "image=${loaded}" >> "$GITHUB_OUTPUT"
 
       - name: Extract metadata
         id: meta
@@ -199,70 +172,25 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha
 
-      - name: Re-tag and save publish image
-        # Re-tags the exact verified image (loaded reference) onto every GHCR tag,
-        # then saves the multi-tag tarball plus an explicit tag manifest. The
-        # manifest (not local `docker images`) is the source of truth for push,
-        # so stale repo tags on a self-hosted runner can never be published.
+      - name: Select canonical tag
+        id: canonical
         env:
-          LOADED_IMAGE: ${{ steps.load.outputs.image }}
           TAGS_OUTPUT: ${{ steps.meta.outputs.tags }}
         shell: bash
         run: |
-          publish_tags=()
-          while IFS= read -r tag; do
-            [ -z "$tag" ] && continue
-            docker tag "$LOADED_IMAGE" "$tag"
-            publish_tags+=("$tag")
-          done <<< "$TAGS_OUTPUT"
-          if [ "${#publish_tags[@]}" -eq 0 ]; then
-            echo "No publish tags resolved from metadata-action output" >&2
+          canonical_tag="$(printf '%s\n' "$TAGS_OUTPUT" | sed -n '1p')"
+          if [ -z "${canonical_tag}" ]; then
+            echo "Unable to determine canonical image tag from metadata-action output" >&2
             exit 1
           fi
-          docker save "${publish_tags[@]}" -o publish-image.tar
-          printf '%s\n' "${publish_tags[@]}" > publish-tags.txt
+          echo "tag=${canonical_tag}" >> "$GITHUB_OUTPUT"
 
-      # run_id-only name + overwrite: see the verified-image upload note.
-      - name: Upload publish image artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - name: Verify image security posture
+        uses: ./.github/actions/container-verify
         with:
-          name: publish-image-${{ github.run_id }}
-          path: |
-            publish-image.tar
-            publish-tags.txt
-          if-no-files-found: error
-          overwrite: true
-          # Short-lived handoff artifact; not a release deliverable.
-          retention-days: 1
-
-      - name: Clean runner workspace
-        if: always()
-        run: ./scripts/ci-cleanup.sh
-
-  # The only job with packages:write, and the only publish-effecting job.
-  # Guarded to real tag pushes; needs binaries so GHCR is never updated unless
-  # binaries also built. Pushes exactly the tags loaded from the verified tarball.
-  push-container:
-    name: Push Container Image
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [prepare-container-publish, build-binaries]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          persist-credentials: false
-
-      - name: Download publish image artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: publish-image-${{ github.run_id }}
-          path: .
-
-      - name: Load publish image
-        run: docker load -i publish-image.tar
+          image-tag: ${{ steps.canonical.outputs.tag }}
+          severity: HIGH,CRITICAL
+          artifact-name: trivy-image-release-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Log in to Container Registry
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
@@ -272,23 +200,22 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Push manifest image tags
-        # Pushes only the tags recorded in the publish manifest produced alongside
-        # the verified tarball. The pushed image is byte-identical to the scanned
-        # one, and no stale local tags can leak in on self-hosted runners.
+        # Re-tags the verified canonical image onto every resolved GHCR tag,
+        # then pushes those tags. No rebuild occurs between verify and publish.
+        env:
+          CANONICAL_TAG: ${{ steps.canonical.outputs.tag }}
+          TAGS_OUTPUT: ${{ steps.meta.outputs.tags }}
         shell: bash
         run: |
-          if [ ! -f publish-tags.txt ]; then
-            echo "publish-tags.txt manifest not found next to publish-image.tar" >&2
-            exit 1
-          fi
           pushed=0
           while IFS= read -r tag; do
             [ -z "$tag" ] && continue
+            docker tag "$CANONICAL_TAG" "$tag"
             docker push "$tag"
             pushed=$((pushed + 1))
-          done < publish-tags.txt
+          done <<< "$TAGS_OUTPUT"
           if [ "${pushed}" -eq 0 ]; then
-            echo "No tags listed in publish-tags.txt to push" >&2
+            echo "No publish tags resolved from metadata-action output" >&2
             exit 1
           fi
 
@@ -299,7 +226,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [push-container]
+    needs: [publish-container]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -309,8 +236,8 @@ jobs:
           persist-credentials: false
 
       - name: Download binary artifacts
-        # Only the binary tarballs are release deliverables; skip the large
-        # image-handoff tarballs and Trivy evidence artifacts.
+        # Only the binary tarballs are release deliverables; image scan evidence
+        # remains in workflow artifacts and is not attached to the GitHub release.
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           path: artifacts
