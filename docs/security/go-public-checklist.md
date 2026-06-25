@@ -148,9 +148,20 @@ Use it in order, and treat each section as a small, testable milestone.
     `Build x86_64-unknown-linux-gnu`. Resolved (#126): the disk-exhaustion
     mitigation is now centralized in `.github/actions/free-disk-space` and
     applied to the release `build-binaries` job (and other heavy CI jobs).
-  - note: the tag-push publish path is implemented but not yet evidenced by a
-    real `v*` tag (none cut yet), and the main-branch CI image publish remains a
-    separate, not-yet-image-scan-gated path.
+  - evidence captured (tag-push path): `release.yml` push run `28154844011`
+    (<https://github.com/sm4rtm4art/anti_entropator/actions/runs/28154844011>)
+    on tag `v0.3.0-rc.1` succeeded with `publish-container` and `create-release`
+    both executed. `publish-container` pushed
+    `ghcr.io/sm4rtm4art/anti_entropator:0.3.0-rc.1` and
+    `ghcr.io/sm4rtm4art/anti_entropator:sha-29a4fec` at digest
+    `sha256:5b7d674c34d3cc52cdc8acdb7bd1ef96fde28203062b4ae4c04ece91b3cf431b`.
+    `create-release` produced a GitHub Pre-release `v0.3.0-rc.1` (not Latest;
+    `v0.2.0` remained Latest), confirming the prerelease guard. This was a
+    throwaway rehearsal: the `v0.3.0-rc.1` git tag, the GitHub pre-release, and
+    the GHCR image versions (`0.3.0-rc.1`, `sha-29a4fec`) were removed after
+    evidence capture; the durable evidence is workflow run `28154844011`.
+  - note: the main-branch CI image publish remains a separate,
+    not-yet-image-scan-gated path.
 - [x] Add a separate fixable-only scan policy path for HIGH/CRITICAL findings.
   `security.yml` records an image-scan `ignore-unfixed` JSON artifact, summarizes
   findings from JSON in the job summary, and enforces fixable-only
