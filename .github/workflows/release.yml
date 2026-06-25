@@ -253,7 +253,11 @@ jobs:
             echo "No release artifacts found" >&2
             exit 1
           fi
-          gh release create "$GITHUB_REF_NAME" "${files[@]}" --generate-notes
+          release_args=(--generate-notes)
+          case "$GITHUB_REF_NAME" in
+            *-*) release_args+=(--prerelease) ;; # semver prerelease identifier
+          esac
+          gh release create "$GITHUB_REF_NAME" "${files[@]}" "${release_args[@]}"
 
       - name: Clean runner workspace
         if: always()
