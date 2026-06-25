@@ -155,7 +155,11 @@ Use it in order, and treat each section as a small, testable milestone.
     `ghcr.io/sm4rtm4art/anti_entropator:0.3.0-rc.1` and
     `ghcr.io/sm4rtm4art/anti_entropator:sha-29a4fec` at digest
     `sha256:5b7d674c34d3cc52cdc8acdb7bd1ef96fde28203062b4ae4c04ece91b3cf431b`.
-    The release `v0.3.0-rc.1` is marked Pre-release and `v0.2.0` remains Latest.
+    `create-release` produced a GitHub Pre-release `v0.3.0-rc.1` (not Latest;
+    `v0.2.0` remained Latest), confirming the prerelease guard. This was a
+    throwaway rehearsal: the `v0.3.0-rc.1` git tag, the GitHub pre-release, and
+    the GHCR image versions (`0.3.0-rc.1`, `sha-29a4fec`) were removed after
+    evidence capture; the durable evidence is workflow run `28154844011`.
   - note: the main-branch CI image publish remains a separate,
     not-yet-image-scan-gated path.
 - [x] Add a separate fixable-only scan policy path for HIGH/CRITICAL findings.
