@@ -1,0 +1,28 @@
+# Project cargo-audit configuration.
+# Docs: https://github.com/rustsec/rustsec/blob/main/cargo-audit/audit.toml.example
+
+[advisories]
+ignore = [
+    # RUSTSEC-2026-0195 — quick-xml < 0.41: unbounded namespace-declaration
+    # allocation in NsReader (DoS / memory exhaustion). Severity 7.5 (high).
+    #
+    # RUSTSEC-2026-0194 — quick-xml < 0.41: quadratic run time checking
+    # duplicate attribute names on start tags. Severity 7.5 (high).
+    # Same dependency path and same fix as 0195; ignored together.
+    #
+    # Why ignored (temporary):
+    # - Transitive via reqsign 0.16.5 -> quick-xml 0.37.5 and
+    #   opendal 0.55 -> quick-xml 0.38.4
+    # - opendal 0.55 pins reqsign ^0.16.5; patched reqsign 0.20.2 (and
+    #   quick-xml >= 0.41) needs leaving that OpenDAL line
+    # - OpenDAL majors are already Dependabot-ignored pending
+    #   DataFusion / object_store compatibility
+    #
+    # This is not a fix. Remove these ignores when the OpenDAL / reqsign
+    # stack resolves to quick-xml >= 0.41, then re-run cargo audit.
+    #
+    # Canonical planning note: S6 in .local/v0.3-stabilization-plan.md
+    # Review by: S6 release-readiness sweep (re-validate or delete)
+    "RUSTSEC-2026-0195",
+    "RUSTSEC-2026-0194",
+]
