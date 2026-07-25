@@ -150,6 +150,7 @@ observable and queryable by:
 - **Persisting** selected files and metadata in a lakehouse-shaped local stack
 - **Querying** the catalog with SQL
 
+<!--TODO: To be removed 
 ## Database-Centered Systems Inspiration
 
 Projects in the DBOS space are exploring a much stronger idea: make the database
@@ -163,6 +164,7 @@ question: what if a familiar mess, like a Downloads folder, was treated as
 structured operational data? In this project, the database/lakehouse layer is
 the place where file metadata, object placement, and query behavior become
 explicit instead of being scattered across filenames, folders, and memory.
+-->
 
 ## Quick Start
 
