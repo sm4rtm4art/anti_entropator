@@ -16,10 +16,8 @@ flowchart LR
 
     subgraph OR["🔀  Orchestration"]
         direction TB
-        SWITCH{{"⚙️  --engine"}}
-        PROC["🔁  Procedural"]
-        DFRS["🌊  dataflow-rs"]
-        SWITCH --> PROC & DFRS
+        PROC["🔁  Procedural (current)"]
+        DFRS["🌊  dataflow-rs (planned)"]
     end
 
     subgraph CP["⚡  Compute"]
@@ -43,12 +41,14 @@ flowchart LR
     end
 
     CLI -->|"profile / scan"| Downloads
-    CLI -->|"ingest / scan"| SWITCH
+    CLI -->|"ingest / scan"| PROC
     CLI -->|query| DF
     REPL --> DF
 
-    PROC & DFRS -->|"raw bytes"| IO
-    PROC & DFRS -->|"commit snapshot"| ICE
+    PROC -->|"raw bytes"| IO
+    PROC -->|"commit snapshot"| ICE
+    DFRS -.->|"planned"| IO
+    DFRS -.->|"planned"| ICE
 
     DF -->|"read / write"| IO
     ICE -->|manifests| IO
@@ -81,8 +81,10 @@ flowchart LR
 
 ### Orchestration Layer (v0.3.0)
 
-- **Procedural engine**: Current sequential pipeline (default)
-- **dataflow-rs engine**: Optional DAG-based orchestration behind `--engine dataflow`
+- **Procedural engine**: Current sequential pipeline (only engine shipped today)
+- **dataflow-rs engine**: **Planned** optional DAG orchestration (see
+  [ADR-007](../adr/ADR-007-dataflow-rs-orchestration.md)). No `--engine`
+  CLI flag is exposed yet; do not treat dataflow as available.
 
 ### I/O Layer
 
@@ -108,7 +110,7 @@ flowchart LR
 sequenceDiagram
     participant User
     participant CLI
-    participant Engine as Engine<br/>(procedural / dataflow-rs)
+    participant Engine as Engine<br/>(procedural today)
     participant Scanner
     participant Hasher
     participant OpenDAL

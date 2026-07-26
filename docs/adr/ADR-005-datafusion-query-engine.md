@@ -32,23 +32,31 @@ We will use **Apache DataFusion** as the query engine.
 
 ## Example Queries
 
+Canonical Iceberg identity (Lakekeeper): namespace `anti_entropator`, table
+`file_catalog` → `iceberg.anti_entropator.file_catalog`.
+
+The `query` command optionally rewrites `FROM files` / `JOIN files` to that
+qualified name. Prefer the Iceberg identity in design docs; use `files` only
+as labeled CLI sugar. Do not present bare `FROM file_catalog` as the primary
+form (it is not rewritten).
+
 ```sql
--- Find all duplicates
-SELECT sha256, COUNT(*) as count, ARRAY_AGG(source_path) as files
-FROM file_catalog
+-- Find all duplicates (CLI shorthand)
+SELECT sha256, COUNT(*) as count, ARRAY_AGG(source_path) as paths
+FROM files
 GROUP BY sha256
 HAVING COUNT(*) > 1;
 
--- Find large videos from last month
+-- Find large videos from last month (canonical)
 SELECT source_path, size_bytes / 1024 / 1024 as size_mb
-FROM file_catalog
+FROM iceberg.anti_entropator.file_catalog
 WHERE category = 'video'
   AND size_bytes > 100 * 1024 * 1024
   AND ingested_at > '2024-11-01';
 
--- Category breakdown
+-- Category breakdown (CLI shorthand)
 SELECT category, COUNT(*) as files, SUM(size_bytes) as total_bytes
-FROM file_catalog
+FROM files
 GROUP BY category
 ORDER BY total_bytes DESC;
 ```

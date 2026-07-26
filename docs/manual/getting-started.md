@@ -91,10 +91,18 @@ anti_entropator ingest ~/Downloads
 
 > **Note:** `query` is implemented as a one-shot command.
 > `sql` exits with an error indicating the interactive REPL is planned but not yet implemented.
+>
+> Lakekeeper registers Iceberg table `file_catalog` (namespace
+> `anti_entropator`). The `query` command rewrites `FROM files` /
+> `JOIN files` to `iceberg.anti_entropator.file_catalog`. Prefer the
+> Iceberg name in docs; `files` is optional CLI sugar.
 
 ```bash
-# One-shot query (basic implementation)
-anti_entropator query "SELECT category, COUNT(*) FROM file_catalog GROUP BY category"
+# One-shot query (shorthand)
+anti_entropator query "SELECT category, COUNT(*) FROM files GROUP BY category"
+
+# Same query with the canonical Iceberg table reference
+anti_entropator query "SELECT category, COUNT(*) FROM iceberg.anti_entropator.file_catalog GROUP BY category"
 
 # Interactive SQL REPL (placeholder)
 anti_entropator sql

@@ -35,6 +35,19 @@ partially verified behavior as shipped.
 | Correctness | Catalog/store consistency failures must not look like full success. |
 | Defaults | Local-first unless a deployment profile explicitly says otherwise. |
 
+### Query / table identity
+
+Canonical lakehouse object (Lakekeeper + `src/lakehouse/schema.rs`):
+
+- Namespace: `anti_entropator`
+- Table: `file_catalog`
+- Fully qualified for DataFusion: `iceberg.anti_entropator.file_catalog`
+
+The `query` command optionally rewrites `FROM files` / `JOIN files` to that
+qualified name (`src/query/mod.rs`). Treat `files` as CLI sugar only — not an
+Iceberg table name. Prefer documenting the Iceberg identity first; do not use
+bare `FROM file_catalog` as the primary example (it is not rewritten).
+
 ## Repository Map
 
 ```text
@@ -62,6 +75,9 @@ cargo run -- init
 cargo run -- scan <path>
 cargo run -- ingest <path> --dry-run
 cargo run -- ingest <path>
+# Canonical Iceberg table (preferred in docs / agent examples):
+cargo run -- query "SELECT * FROM iceberg.anti_entropator.file_catalog LIMIT 10"
+# Optional CLI shorthand (rewritten to the qualified name above):
 cargo run -- query "SELECT * FROM files LIMIT 10"
 ```
 
@@ -103,7 +119,9 @@ behavior and exit semantics are implemented and tested.
 - Lead with what works today.
 - Mark planned, placeholder, experimental, and unverified behavior clearly.
 - Verify CLI examples against `src/cli/mod.rs` and runtime behavior.
-- Verify SQL examples against `src/lakehouse/schema.rs` and query registration.
+- Verify SQL examples against `src/lakehouse/schema.rs` (`file_catalog`) and
+  the `query` rewrite in `src/query/mod.rs` (`files` → qualified Iceberg name).
+  Lead with the Iceberg identity; document `files` only as optional shorthand.
 - Label security claims as enforced today, required for shared/public
   deployments, or planned.
 - Keep blue/green language as a simulation/reference until real infrastructure

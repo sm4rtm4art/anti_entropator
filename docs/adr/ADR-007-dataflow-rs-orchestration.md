@@ -1,5 +1,9 @@
 # ADR-007: dataflow-rs as Optional Orchestration Engine
 
+Status: **decided, not yet implemented.** The `--engine` flag and dataflow
+path are not available in the CLI today; the procedural pipeline is the only
+shipped engine.
+
 ## Context
 
 The current ingest pipeline is a sequential (procedural) flow: traverse → hash → upload → commit. This works well for correctness and debuggability, but has limitations:
@@ -12,7 +16,10 @@ We want to introduce DAG-based orchestration without destabilizing the working p
 
 ## Decision
 
-We will integrate **dataflow-rs** as an optional execution engine, available behind `--engine dataflow` (or a feature flag `--features orchestration`). The procedural pipeline remains the default.
+We will integrate **dataflow-rs** as an optional execution engine, planned to
+be available behind `--engine dataflow` (or a feature flag
+`--features orchestration`) once implemented. The procedural pipeline remains
+the only shipped path today and will stay the default.
 
 ### Dual-Engine Strategy
 

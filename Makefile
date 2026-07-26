@@ -1,7 +1,9 @@
 SHELL := /bin/bash
 
 DOWNLOADS ?= $(HOME)/Downloads
-QUERY ?= SELECT * FROM file_catalog LIMIT 10
+# Iceberg table is file_catalog. `files` is CLI sugar rewritten by `query` to
+# iceberg.anti_entropator.file_catalog (see src/query/mod.rs).
+QUERY ?= SELECT * FROM files LIMIT 10
 
 .PHONY: help setup up down doctor init profile scan ingest-dry-run ingest query fmt clippy test check docs-shell
 
