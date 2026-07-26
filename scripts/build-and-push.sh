@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Build and push container image to GitHub Container Registry
 #
 # Prerequisites:

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Local pre-push gate: full cargo test --all-features.
 set -euo pipefail
 
 echo "==> pre-push: cargo test"

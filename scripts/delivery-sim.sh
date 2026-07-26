@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Delivery simulation helper for S5-C Slice D.
+# Blue/green delivery simulation helper (local/reference; not production).
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"

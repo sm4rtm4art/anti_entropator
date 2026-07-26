@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Local pre-commit gate: fmt, clippy, and cargo test --no-run.
 set -euo pipefail
 
 echo "==> pre-commit: cargo fmt --check"
