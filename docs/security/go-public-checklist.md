@@ -177,8 +177,10 @@ Use it in order, and treat each section as a small, testable milestone.
   images, and Docker Compose service images.
 - [ ] Consider adding `cargo deny` policy checks for licenses/advisories (post-v0.3).
 - [x] Workflow toolchain setup remains aligned with repository contract:
-  workflows use `dtolnay/rust-toolchain@stable`; `rust-toolchain.toml` also
-  declares stable with `rustfmt` and `clippy` (verified 2026-05-10).
+  workflows pin a reachable `dtolnay/rust-toolchain` stable-branch SHA (not a
+  floating `@stable` ref); `rust-toolchain.toml` also declares stable with
+  `rustfmt` and `clippy` (re-verified 2026-07-26; clears zizmor impostor-commit
+  on the previous orphaned pin).
 - [x] Workflow action pins keep full SHA references with release-ref comments
   where available; `dtolnay/rust-toolchain` remains pinned to a stable-branch
   commit because no version tag points at the pinned SHA.
