@@ -150,22 +150,6 @@ observable and queryable by:
 - **Persisting** selected files and metadata in a lakehouse-shaped local stack
 - **Querying** the catalog with SQL
 
-<!--TODO: To be removed 
-## Database-Centered Systems Inspiration
-
-Projects in the DBOS space are exploring a much stronger idea: make the database
-a core execution and state substrate for an operating system or runtime. That is
-interesting because it treats durable, queryable state as an organizing
-principle rather than a passive storage detail.
-
-Anti-Entropator is a small application-level proof of concept in that spirit,
-not an operating system and not an implementation of DBOS. It asks a humbler
-question: what if a familiar mess, like a Downloads folder, was treated as
-structured operational data? In this project, the database/lakehouse layer is
-the place where file metadata, object placement, and query behavior become
-explicit instead of being scattered across filenames, folders, and memory.
--->
-
 ## Quick Start
 
 The `Makefile` is a thin wrapper around the underlying `cargo` and
@@ -235,8 +219,14 @@ make ingest
 
 ### 5. Query the catalog
 
+The catalog table in Lakekeeper is Iceberg `file_catalog`. The `query`
+command also accepts the `files` shorthand (`FROM` / `JOIN`), which it
+rewrites to `iceberg.anti_entropator.file_catalog`.
+
 ```bash
-make query QUERY="SELECT category, COUNT(*) FROM file_catalog GROUP BY category"
+make query QUERY="SELECT category, COUNT(*) FROM files GROUP BY category"
+# equivalent:
+# make query QUERY="SELECT category, COUNT(*) FROM iceberg.anti_entropator.file_catalog GROUP BY category"
 ```
 
 To point the workflow at another folder, pass `DOWNLOADS=/path/to/folder` to the
