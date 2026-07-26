@@ -75,6 +75,6 @@ check: fmt clippy test
 
 docs-shell:
 	typos --config .config/lint/typos.toml
-	markdownlint-cli2 --config .config/lint/markdownlint-cli2.yaml "README.md" "AGENTS.md" "CHANGELOG.md" "docs/**/*.md" "scripts/**/*.md" ".cursor/rules/**/*.mdc"
+	markdownlint-cli2 --config .config/lint/markdownlint-cli2.yaml
 	shellcheck scripts/*.sh scripts/hooks/*
 	shfmt -i 4 -d scripts/ scripts/hooks/

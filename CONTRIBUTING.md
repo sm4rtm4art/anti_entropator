@@ -43,6 +43,10 @@ If your change affects coverage-sensitive areas, also run:
 
 - `cargo llvm-cov --workspace --summary-only`
 
+If your change touches Markdown, shell scripts, or `.cursor/rules`, also run:
+
+- `make docs-shell`
+
 ## Commit and PR Guidelines
 
 - Keep PRs single-purpose and reviewable in one sitting.
