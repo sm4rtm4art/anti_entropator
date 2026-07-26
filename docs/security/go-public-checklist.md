@@ -57,8 +57,12 @@ Use it in order, and treat each section as a small, testable milestone.
   - [x] Automated typos/spelling checks via `typos` with config
     `.config/lint/typos.toml`
   - [x] Automated Markdown linting via `markdownlint-cli2` with config
-    `.config/lint/markdownlint-cli2.yaml`
+    `.config/lint/markdownlint-cli2.yaml` (globs include root operator docs:
+    `README.md`, `AGENTS.md`, `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`,
+    plus `docs/**/*.md`, `scripts/**/*.md`, and `.cursor/rules/**/*.mdc`)
   - [x] Automated Shell script checks via `shellcheck` and formatting via `shfmt -i 4 -d`
+  - [x] Markdown lint runs via SHA-pinned `DavidAnson/markdownlint-cli2-action`
+    (no ad-hoc `npm install -g`)
 - [x] Add final best-effort runner cleanup to CI, release, and security jobs.
   The cleanup runs after intentional evidence upload/release publication and
   removes local scan output, release staging files, Docker auth leftovers, and
