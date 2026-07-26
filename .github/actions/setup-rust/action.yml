@@ -23,7 +23,7 @@ runs:
   using: "composite"
   steps:
     - name: Install Rust toolchain
-      uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable branch commit (no version tag)
+      uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable branch tip 2026-07-16 (no version tag)
       with:
         components: ${{ inputs.components }}
         targets: ${{ inputs.targets }}
