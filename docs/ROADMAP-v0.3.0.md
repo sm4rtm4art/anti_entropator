@@ -48,6 +48,22 @@
 - CI now enforces the roadmap coverage floor (`>= 50%`) in the main/scheduled
   coverage job via `cargo llvm-cov --fail-under-lines 50`.
 
+### Status update (2026-07-26)
+
+- Stabilization lane: **S5 complete**; **S6** (final cleanup / release-readiness
+  sweep) is next month. Active execution detail remains in local
+  `v0.3-stabilization-plan.md`; this roadmap stays the `v0.3.0` release contract.
+- OpenDAL / `quick-xml` real upgrade remains deferred (DataFusion /
+  `object_store` compatibility). Temporary `cargo audit` ignores for
+  `RUSTSEC-2026-0195` and `RUSTSEC-2026-0194` are in `.cargo/audit.toml`;
+  remove when OpenDAL/`reqsign` resolve to `quick-xml >= 0.41` (S6 re-validates).
+- Dependabot `thrift` advisory stays open — transitive via Parquet/DataFusion;
+  no in-range bump; revisit with a stack-major evaluation.
+- **dataflow-rs** remains in v0.3 scope (M4 / ADR-007) but is **not shipped**;
+  ingest is procedural only today (`--engine` not available yet).
+- Query identity reminder: Iceberg table is `file_catalog`; `FROM files` is CLI
+  sugar rewritten by `query` to `iceberg.anti_entropator.file_catalog`.
+
 ### Completed (M1 -- Unified Storage, 2026-03-14)
 
 - Replaced `aws-sdk-s3` + `aws-config` with OpenDAL for all S3 I/O
@@ -288,8 +304,8 @@ flowchart LR
 | P0       | S1 correctness queue (ingest filters, SQL rewrite, ingest counters) | Medium | **Next** | Defined in local stabilization plan; must land before M3/M4 resume |
 | P1       | Integration test: Ingest -> Query (containers)   | Medium | **Next**    | Builds on stable OpenDAL boundary and S1 correctness fixes |
 | P1       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | Pending     | Required for `v0.3.0` success criteria                    |
-| P2       | Introduce dataflow-rs engine behind flag/switch  | Large  | Pending     | Run side-by-side with procedural                         |
-| P2       | S5 CI/CD hardening (Trivy + multi-arch path)     | Medium | Pending     | Starts after M3/M4 feature gates, required before release tag |
+| P2       | Introduce dataflow-rs engine behind flag/switch  | Large  | Pending     | In v0.3 scope; not shipped yet (procedural only today)   |
+| ~~P2~~   | ~~S5 CI/CD hardening (Trivy + multi-arch path)~~ | ~~Medium~~ | **Done** | S5 closed; residual multi-arch/Trivy enforcement deferred; S6 next |
 | P2       | Add `optimize plan` (report-only)                | Small  | Pending     |                                                          |
 | P2       | Refactor `files_to_batch` into helpers           | Small  | Deferred    | Already clean with `BatchColumnsBuilder`                 |
 
