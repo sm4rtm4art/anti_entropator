@@ -17,14 +17,18 @@ This project is currently in a public-showcase stabilization phase, so correctne
 This repository ships hook scripts in `scripts/hooks/`.
 Install them in your local clone so quality checks run before commit/push:
 
-- `ln -sf ../../scripts/hooks/pre-commit .git/hooks/pre-commit`
-- `ln -sf ../../scripts/hooks/pre-push .git/hooks/pre-push`
+- `./scripts/install-hooks.sh`
+- or symlink:
+  - `ln -sf ../../scripts/hooks/pre-commit .git/hooks/pre-commit`
+  - `ln -sf ../../scripts/hooks/pre-push .git/hooks/pre-push`
 
 Hook policy:
 
 - `pre-commit`: `fmt` + `clippy` + `cargo test --no-run`
 - `pre-push`: full `cargo test --all-features`
 
+Other helper scripts (compose checks, delivery sim, CI cleanup) are indexed in
+[`scripts/README.md`](scripts/README.md).
 
 ## Local Validation Checklist
 

@@ -49,7 +49,7 @@ jobs:
         run: typos --config .config/lint/typos.toml
 
       - name: Run markdownlint-cli2
-        run: markdownlint-cli2 --config .config/lint/markdownlint-cli2.yaml "README.md" "AGENTS.md" "CHANGELOG.md" "docs/**/*.md" ".cursor/rules/**/*.mdc"
+        run: markdownlint-cli2 --config .config/lint/markdownlint-cli2.yaml "README.md" "AGENTS.md" "CHANGELOG.md" "docs/**/*.md" "scripts/**/*.md" ".cursor/rules/**/*.mdc"
 
       - name: Run shellcheck
         run: shellcheck scripts/*.sh scripts/hooks/*
