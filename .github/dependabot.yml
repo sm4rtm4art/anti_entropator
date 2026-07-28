@@ -9,6 +9,9 @@ updates:
       default-days: 7
     open-pull-requests-limit: 10
     groups:
+      # Stack groups first: a dependency matching multiple groups is only
+      # assigned to one group (first match). Keep coordinated majors/minors
+      # for the deferred OpenDAL / DataFusion / Iceberg lines together.
       opendal-stack:
         patterns:
           - "opendal"
@@ -25,6 +28,24 @@ updates:
           - "iceberg"
           - "iceberg-catalog-rest"
           - "iceberg-storage-opendal"
+      # Catch-all for everything else: one weekly PR for clap/anyhow/serde/…
+      # instead of N separate CI runs. Stack crates above stay in their groups.
+      cargo-patch-and-minor:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+          - "minor"
+      # Without an explicit major group, some major bumps that match `*` can be
+      # dropped instead of falling through to individual PRs
+      # (dependabot-core#14202). Stack majors remain governed by `ignore` below.
+      cargo-major:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "major"
     ignore:
       # Deferred until DataFusion line can consume object_store/opendal major updates.
       - dependency-name: "opendal"
