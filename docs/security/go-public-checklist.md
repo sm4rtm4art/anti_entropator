@@ -39,8 +39,10 @@ Use it in order, and treat each section as a small, testable milestone.
 - [ ] Require the stable aggregate status checks through branch protection /
   rulesets: `CI Gate` (`ci.yml`) and `Security Gate` (`security.yml`). Require
   both stable gates rather than individual renameable jobs; confirm merges are
-  blocked when either gate fails, and that Markdown-only PRs still report a
-  green `CI Gate` (via the `changes` job) instead of a never-reported check.
+  blocked when either gate fails, and that docs/rules-only PRs (`*.md` /
+  `*.mdc`) still report a green `CI Gate` (via the `changes` job with
+  `predicate-quantifier: every`) instead of a never-reported check or a
+  false-positive Rust Quality run.
 - [ ] Review GitHub Actions failed-run behavior before going public:
   - failed job logs do not print secrets or `.env` contents,
   - post-job cleanup logs do not expose token values,

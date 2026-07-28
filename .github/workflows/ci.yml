@@ -10,11 +10,12 @@ on:
     # Security workflow's 02:00 cron so the two heavy workflows do not collide.
     - cron: "0 3 * * 1"
 
-# Markdown-only changes skip the heavy Rust/container jobs via the `changes`
-# job below (not workflow-level paths-ignore), so the required "CI Gate" check
-# still reports on docs-only PRs instead of never running. Coverage is not a PR
-# gate: it runs on pushes to main and on the weekly schedule (see the coverage
-# job). Docs/Markdown/shell linting lives in docs-shell.yml.
+# Docs/rules-only changes (*.md / *.mdc) skip the heavy Rust/container jobs via
+# the `changes` job below (not workflow-level paths-ignore), so the required
+# "CI Gate" check still reports on docs-only PRs instead of never running.
+# Coverage is not a PR gate: it runs on pushes to main and on the weekly
+# schedule (see the coverage job). Docs/Markdown/shell linting lives in
+# docs-shell.yml.
 
 permissions:
   contents: read
@@ -30,9 +31,10 @@ env:
   IMAGE_NAME: sm4rtm4art/anti_entropator
 
 jobs:
-  # Cheap path filter: `code` is true unless the change set is Markdown-only.
-  # This mirrors the previous `paths-ignore: ['**/*.md']` semantics but as a job,
-  # so downstream skips still let the aggregate "CI Gate" report success.
+  # Cheap path filter: `code` is true unless the change set is docs/rules-only
+  # (*.md / *.mdc). `predicate-quantifier: every` is required so exclusions bind
+  # against `**`; with the default `some`, README.md matched `**` and still set
+  # code=true (seen on docs-only PR #161).
   changes:
     name: Detect changes
     runs-on: ubuntu-latest
@@ -54,10 +56,13 @@ jobs:
         id: filter
         uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         with:
+          # every: a path must match all patterns (so !**/*.md / !**/*.mdc apply).
+          predicate-quantifier: every
           filters: |
             code:
               - '**'
               - '!**/*.md'
+              - '!**/*.mdc'
 
   # Shared quality gates (fmt, clippy, tests)
   quality:
@@ -190,7 +195,7 @@ jobs:
 
       - name: Evaluate dependency outcomes
         run: |
-          # quality/coverage/container are intentionally skipped on Markdown-only
+          # quality/coverage/container are intentionally skipped on docs/rules-only
           # changes (container off-main, coverage off-PR); 'skipped' is allowed,
           # only failure/cancelled blocks. 'changes' itself is skipped on the
           # weekly schedule (coverage-only run), which is also acceptable.
