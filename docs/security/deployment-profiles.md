@@ -91,9 +91,9 @@ port is not bound to `127.0.0.1`.
 
 ## CI/CD Secret Boundary
 
-Current GitHub Actions publish containers to GHCR with the built-in
-`GITHUB_TOKEN` and do not deploy to a persistent host.
-That means repository-level deployment secrets are not required yet.
+Current CI publishes container images for release/reference use and does not
+deploy to a persistent host. Repository-level deployment secrets are therefore
+not required yet for the local-demo default.
 
 When a real target is introduced, do not reuse local `.env` values.
 Create target-scoped secrets through GitHub Environments or a secret manager,
