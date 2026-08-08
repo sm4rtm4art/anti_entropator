@@ -1,6 +1,6 @@
 ---
 description: Documentation truth and verification standards.
-globs: ["README.md", "docs/**/*.md", "SECURITY.md", "CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/*.md"]
+globs: ["README.md", "AGENTS.md", "docs/**/*.md", "SECURITY.md", "CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/*.md", ".github/ISSUE_TEMPLATE/*.yml"]
 alwaysApply: false
 ---
 
@@ -10,128 +10,94 @@ alwaysApply: false
 
 - Write for a technical reviewer evaluating repository credibility.
 - Prefer accuracy, reproducibility, and explicit limitations over polished claims.
+- If code and docs disagree, code, workflows, and configuration win.
 
 ## Change Discipline
 
-- Do not rewrite documentation for style alone unless that is the explicit task.
-- Prefer small, targeted documentation edits over large rewrites.
-- When touching docs, fix nearby stale claims if the correction is local and verifiable.
-- Do not broaden claims beyond what code, workflows, compose files, or security docs support.
-- If code and docs disagree, treat code, workflows, and configuration as the source of truth.
+- Do not rewrite docs for style alone unless that is the explicit task.
+- Prefer small, targeted edits. Fix nearby stale claims only when local and verifiable.
+- Do not broaden claims beyond what code, workflows, compose, or security docs support.
+- Prefer **delete or narrow** a wrong claim over rewriting the surrounding section.
+- Do not expand into adjacent “helpful” sections the task did not ask for.
+
+## Anti-Slop
+
+- No filler openers (“It’s worth noting…”, “In order to…”, “This ensures…”).
+- Lead with the fact, command, or limitation.
+- No new emoji or decorative diagram chrome unless the file already uses it.
+- No comparative or absolute performance/security claims without a cited
+  measurement or existing security/delivery doc.
+- Do not paraphrase the whole stack when a pointer or table already exists.
 
 ## Status Accuracy
 
 - Lead with what works today.
 - Mark planned, placeholder, experimental, and incomplete behavior clearly.
-- Do not describe roadmap items as shipped behavior.
-- Keep limitations next to capabilities so readers do not have to infer risk.
-- Use status labels consistently when useful: Implemented, Placeholder,
-  Planned, Experimental, Unknown.
+- Do not describe roadmap items as shipped.
+- Keep limitations next to capabilities.
+- Status labels when useful: Implemented, Placeholder, Planned, Experimental, Unknown.
 
-## Verification Rules
+## Verification
 
-- CLI examples must be checked against `src/cli/mod.rs`, runtime behavior, or a
-  named manual verification.
-- SQL examples must use fields from `src/lakehouse/schema.rs` and table names
-  supported by the current query registration behavior.
-- Workflow, coverage, audit, release, and container claims must match
+- CLI examples: check `src/cli/mod.rs`, runtime behavior, or named manual verification.
+- SQL examples: fields from `src/lakehouse/schema.rs`; prefer FQN
+  `iceberg.anti_entropator.file_catalog` (`files` is optional sugar only).
+- Workflow / coverage / audit / release / container claims: match
   `.github/workflows/*`.
-- Docker and deployment claims must match `Dockerfile`, `docker-compose.yml`,
-  and `docs/security/*`.
-- Do not claim that tests, scans, audits, coverage, or workflows passed unless
-  they were run or explicitly documented as not run.
-- If behavior is not verified, label it as planned, placeholder, experimental,
-  or unknown.
+- Docker / deployment claims: match `Dockerfile`, `docker-compose.yml`,
+  `docs/security/*`.
+- Do not claim tests, scans, audits, coverage, or workflows passed unless run
+  or explicitly marked not run.
 
 ## Banned Or Risky Language
 
 | Avoid | Prefer |
 |---|---|
 | "blazing fast", "revolutionary", "enterprise-grade" | Measured facts or omit |
-| "simply", "just", "easily" | Actual steps and assumptions |
-| Vague claims like "robust" or "seamless" | Name the behavior and limitation |
-| "production-ready" | Local-first or deployment-profile-specific wording |
+| "simply", "just", "easily", "leverage" | Actual steps and assumptions |
+| "robust", "seamless", "comprehensive" | Name the behavior and limitation |
+| "production-ready" | Local-first or deployment-profile wording |
 | Planned feature as shipped | Explicit status label |
 | Absolute repo-doc URLs | Relative links |
 
 ## Architecture And Diagrams
 
-- Label architecture diagrams as `current`, `target`, or `current with planned
-  elements`.
+- Label diagrams `current`, `target`, or `current with planned elements`.
 - Do not put `dataflow-rs`, `--engine`, maintenance commands, or full SQL REPL
-  behavior in current-state diagrams unless clearly marked as planned.
+  in current-state diagrams unless marked planned.
 - Keep OpenDAL, Lakekeeper, RustFS, DataFusion, Iceberg, and Postgres roles
-  consistent with the current stack.
-- Mermaid diagrams are preferred for multi-step flows; keep labels short.
+  consistent with `.cursor/rules/project-architecture.mdc`.
+- Prefer short-label Mermaid for multi-step flows.
 
 ## Security And Delivery Claims
 
-- Label controls as `enforced today`, `required for shared/public deployment`,
-  or `planned`.
+- Label controls `enforced today`, `required for shared/public deployment`, or `planned`.
 - `.env` is local convenience, not a security boundary.
-- Do not include secrets, tokens, private endpoints, real credentials, or copied
-  `.env` values.
-- Local compose ports should be described as localhost-bound by default.
-- Blue/green deployment language must remain a reference simulation unless real
-  infrastructure exists.
-- If SBOM, provenance, image scanning, or release gating are disabled or planned,
-  state that plainly.
-
-## Capitalization
-
-- Bold the first mention per document for core technologies when editing nearby text:
-  **Iceberg**, **Lakekeeper**, **DataFusion**, **DataFrame**, **OpenDAL**,
-  **RustFS**, **Postgres**.
-- Do not create cosmetic-only churn just to enforce capitalization.
+- No secrets, tokens, private endpoints, real credentials, or copied `.env` values.
+- Compose ports: localhost-bound by default.
+- Blue/green remains a reference simulation unless real infrastructure exists.
+- If SBOM, provenance, image scanning, or release gating are disabled/planned, say so.
 
 ## Formatting
 
-- One sentence per line when it improves diffs; do not harm readability to force it.
-- Heading hierarchy: H1 -> H2 -> H3. No skipping levels.
-- Keep README and getting-started commands copy-paste safe for a fresh clone.
-- Use relative links for repository docs.
+- Bold first mention of core tech only when editing nearby text
+  (**Iceberg**, **Lakekeeper**, **DataFusion**, **OpenDAL**, **RustFS**, **Postgres**).
+  No cosmetic-only capitalization churn.
+- One sentence per line when it improves diffs; do not force it.
+- Heading hierarchy: H1 → H2 → H3. No skipping.
+- README / getting-started commands must be copy-paste safe for a fresh clone.
+- Relative links for repository docs.
 
-## ADR Template
+## ADRs
 
-New ADRs in `docs/adr/` should follow this structure:
+New ADRs in `docs/adr/`: follow the shape of recent ADRs (Context, Decision,
+Current State, Consequences, Alternatives, References). Preserve historical
+decisions; add current-state notes for stale commands, schema, ports, or tables.
+Do not silently rewrite history into inaccurate current-state docs.
 
-```markdown
-# ADR-00X: [Title]
+## Rust In Markdown
 
-## Context
-[Problem we need to solve]
-
-## Decision
-We will use [Technology/Pattern].
-
-## Current State
-[What is implemented today, what remains planned, and any known caveats.]
-
-## Consequences
-### Positive
-- [Benefit]
-### Negative
-- [Cost or limitation]
-
-## Alternatives Considered
-- [Option]: [Why rejected]
-
-## Examples (optional)
-[Concrete usage: SQL queries, CLI commands, code snippets]
-
-## References
-- [Links]
-```
-
-- ADRs may preserve historical decisions.
-- Add current-state notes for stale commands, schema fields, ports, or table names.
-- Do not silently drift historical ADRs into inaccurate current-state docs.
-
-## Rust Code in Markdown
-
-Rust examples in docs must be verifiable and follow current Rust standards:
-
-- Avoid `.unwrap()` in examples. Use `?` with `anyhow::Result` where practical.
-- Semantic variable names: `landing_zone` not `foo`.
-- Wrap standalone async examples in `#[tokio::main] async fn main() -> Result<()>`.
-- Wrap standalone sync examples in `fn main() -> Result<()>` when fallibility is shown.
+- Avoid `.unwrap()` in examples; prefer `?` with `anyhow::Result`.
+- Semantic names (`landing_zone`, not `foo`).
+- Standalone async: `#[tokio::main] async fn main() -> Result<()>`.
+- Standalone sync fallible: `fn main() -> Result<()>`.

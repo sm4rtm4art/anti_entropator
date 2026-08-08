@@ -11,43 +11,57 @@ Phase: **v0.3 stabilization**.
 
 | Component | Is | Is NOT |
 |---|---|---|
-| Object store | RustFS | MinIO (test-only fallback) |
+| Object store | RustFS | MinIO / second S3 stack (rejected; not in tree — Ask first) |
 | Catalog | Lakekeeper (Iceberg REST) | Nessie |
-| Object-store data I/O | OpenDAL | raw `aws-sdk-s3`, ad hoc S3 clients |
+| Object-store data I/O | OpenDAL via `storage::create_operator` | `aws-sdk-s3`, raw signed S3 HTTP, second Operator factories |
 | Query engine | DataFusion | DuckDB, Polars |
-| Catalog DB | Postgres | SQLite |
-| Local orchestration | Docker Compose | Kubernetes, bare `docker run` as docs default |
+| Catalog DB | Postgres (Lakekeeper backend only) | SQLite; CLI/query must not use Postgres |
+| Local orchestration | Docker Compose | Kubernetes; bare `docker run` as docs default |
 | SQL queries | DataFusion (over Iceberg) | Direct Postgres queries |
+| Pipeline engine | Procedural (current) | `dataflow-rs`, `--engine` (not shipped) |
+
+## Lakehouse identity
+
+Canonical object (`src/lakehouse/schema.rs`): namespace `anti_entropator`,
+table `file_catalog`, FQN `iceberg.anti_entropator.file_catalog`.
+`files` is CLI sugar only (`src/query/mod.rs`). Prefer the FQN in docs; do not
+use bare `FROM file_catalog` as the primary example.
+
+## Object-store I/O contract
+
+```text
+// BAD — parallel S3 client / second factory
+let client = aws_sdk_s3::Client::new(&cfg);
+
+// GOOD — shared OpenDAL boundary
+let op = storage::create_operator(&config)?;
+```
+
+Allowed adapters over that operator: `object_store_opendal`,
+`iceberg-storage-opendal`.
 
 ## Hard Stops
 
-- Do not reintroduce Nessie or MinIO as active defaults.
-- Do not present planned features as implemented.
-- Do not bypass OpenDAL for object-store reads, writes, list, head, or delete.
-- Do not add JVM dependencies.
-- Do not add Kubernetes guidance for v0.3.
+- Do not add MinIO, Nessie, JVM deps, or Kubernetes guidance for v0.3.
+- Do not present planned features as implemented (`dataflow-rs`, SQL REPL, etc.).
+- Do not bypass OpenDAL for object-store read, write, list, head, or delete.
 
-## Allowed Integration Boundaries
+## Allowed HTTP boundaries
 
-Direct HTTP is allowed only for explicit integration boundaries:
-
-- Lakekeeper catalog bootstrap and project/warehouse setup.
-- Health checks and doctor/preflight checks.
-- Signed setup calls where a crate boundary does not expose the needed operation.
-
-Keep these calls narrow, documented, fallible, and covered by tests when touched.
+Direct HTTP (`reqwest`) only in: `lakehouse/` bootstrap, `doctor/` health
+checks, ingest connectivity preflight, and narrow signed setup calls. Keep
+fallible and tested when touched.
 
 ## Data Correctness
 
 - Catalog/store consistency is a correctness requirement.
-- Ingest must not report full success if object upload succeeds but Iceberg
-  metadata commit fails.
+- Ingest must not report full success if upload succeeds but Iceberg metadata
+  commit fails.
 - Re-running unchanged ingest/query flows should be deterministic or document
   the known limitation.
-- Placeholder workflows must not return success semantics once their behavior is
-  touched.
+- Placeholder workflows must not return success semantics once touched.
 
 ## Delivery Boundary
 
-Container, Compose, CI, release, and deployment documentation rules live in
-`.cursor/rules/docker-ci-standards`. Do not duplicate those rules here.
+Compose, CI, release, and deployment docs:
+`.cursor/rules/docker-ci-standards.mdc`. Do not duplicate those rules here.
