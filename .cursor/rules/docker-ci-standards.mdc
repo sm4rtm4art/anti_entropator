@@ -1,97 +1,87 @@
 ---
 description: Docker, Compose, and CI delivery guardrails for v0.3 stabilization.
-globs: ["Dockerfile", "Dockerfile.*", "docker-compose*.yml", "compose.yaml", ".dockerignore", ".github/workflows/*.yml", ".github/workflows/*.yaml", "docs/security/docker-hardening-review.md", "docs/security/deployment-profiles.md", "docs/security/go-public-checklist.md", "docs/ci-cd/blue-green-delivery.md"]
+globs: ["Dockerfile", "Dockerfile.*", "docker-compose*.yml", "compose.yaml", ".dockerignore", ".github/workflows/*.yml", ".github/workflows/*.yaml", ".github/dependabot.yml", "scripts/check-compose*.sh", "docs/security/docker-hardening-review.md", "docs/security/deployment-profiles.md", "docs/security/go-public-checklist.md", "docs/ci-cd/blue-green-delivery.md"]
 alwaysApply: false
 ---
 
 # Docker And CI Delivery Standards
 
-Use this rule for local stack, container, workflow, release, and deployment
-documentation changes. Keep v0.3 stability ahead of release expansion.
+Use for local stack, container, workflow, Dependabot, compose-check scripts,
+release, and deployment documentation. Keep v0.3 stability ahead of release expansion.
 
 ## Operating Principle
 
-- During v0.3 stabilization, do not weaken Docker, Compose, CI, or delivery
-  controls to make local workflows easier or CI greener.
+- Do not weaken Docker, Compose, CI, or delivery controls to make local workflows
+  easier or CI greener.
 - Preserve reproducibility, least privilege, and honest release posture.
-- Migrate touched delivery code toward the standard when the change is local and
-  testable.
+- Migrate touched delivery code toward the standard when local and testable.
 
 ## Activation Policy
 
-- Release-grade container delivery requires explicit activation: multi-arch
-  images, blocking vulnerability scans, SBOM/provenance, and release gating.
-- Until those controls are enabled, document the gap and avoid release-grade
-  claims.
-- Blue/green remains a reference simulation until real target infrastructure
-  exists.
+- Release-grade delivery needs explicit activation: multi-arch images, blocking
+  vulnerability scans, SBOM/provenance, and release gating.
+- Until enabled, document the gap; do not make release-grade claims.
+- Blue/green remains a reference simulation until real target infrastructure exists.
 
 ## Dockerfile
 
-- Runtime images should run as non-root.
-- Base images should be pinned to tested versions or digests before
-  release-grade publishing.
-- Floating tags are temporary exceptions. Document the reason, date, and removal
-  condition next to the image tag or in `docs/security/docker-hardening-review.md`.
-- Do not bake secrets into `ENV`, `ARG`, labels, layers, or examples.
-- Keep build changes reproducible on GitHub-hosted runners.
-- Prefer multi-stage builds for release images.
-- Keep runtime images minimal and free of build-only tooling.
-- Use `.dockerignore` when build context size or secret exposure risk grows.
-- Avoid host-local paths, caches, or machine-specific state in image builds.
+- Runtime images run as non-root.
+- Pin base images to tested versions or digests before release-grade publishing.
+- Floating tags are temporary: document reason, date, and removal condition next
+  to the tag or in `docs/security/docker-hardening-review.md`.
+- No secrets in `ENV`, `ARG`, labels, layers, or examples.
+- Builds must be reproducible on GitHub-hosted runners.
+- Prefer multi-stage builds; keep runtime images free of build-only tooling.
+- Use `.dockerignore` when context size or secret exposure risk grows.
+- No host-local paths, caches, or machine-specific state in image builds.
 
 ## Docker Compose
 
-- Local service ports bind to `127.0.0.1` by default, either directly or through
-  an explicit safe default such as `${ANTI_BIND_HOST:-127.0.0.1}`.
+- Ports bind to `127.0.0.1` by default (`${ANTI_BIND_HOST:-127.0.0.1}`).
 - Do not switch to `0.0.0.0` without a reviewed deployment profile.
-- After Compose port-binding changes, run or document
+- After port-binding changes, run or document
   `scripts/check-compose-local-bindings.sh`.
-- Required local secrets should use `${VAR:?}` where practical.
+- Required secrets: `${VAR:?}` where practical.
 - `allowall` authorization is local-demo only.
-- Do not add runtime services that are absent from the architecture docs and
-  `AGENTS.md`.
-- Init or migration helper containers, such as `lakekeeper-migrate`, are allowed
-  when they are tied to a documented runtime service and do not introduce a new
-  system dependency.
-- Prefer healthchecks/readiness checks over fixed sleeps.
-- Keep volumes and test data disposable unless persistence is explicitly documented.
-- Do not expose new host ports without a documented CLI, operator, or health-check need.
+- Do not add runtime services absent from architecture docs /
+  `.cursor/rules/project-architecture.mdc`.
+- Init helpers (e.g. `lakekeeper-migrate`) OK when tied to a documented runtime
+  service and not a new system dependency.
+- Prefer healthchecks over fixed sleeps.
+- Volumes/test data disposable unless persistence is documented.
+- No new host ports without a documented CLI, operator, or health-check need.
 
-## GitHub Actions
+## GitHub Actions And Dependabot
 
-- Preserve least-privilege `permissions`.
-- Preserve concurrency controls unless there is a documented reason to change
-  them.
-- Correctness checks (`fmt`, `clippy`, tests, audit, coverage) should stay on
-  GitHub-hosted runners for reproducibility.
-- If workflow files change, run or document `actionlint` / `zizmor` status.
-- Release claims must match the actual release workflow. If release jobs do not
-  directly gate on audit, tests, image scan, SBOM, or provenance, say so.
+- Preserve least-privilege `permissions` and concurrency controls unless
+  documented otherwise.
+- Correctness checks (`fmt`, `clippy`, tests, audit, coverage) stay on
+  GitHub-hosted runners.
+- Workflow changes: run or document `actionlint` / `zizmor` status.
+- Release claims must match the actual release workflow (including whether
+  audit, tests, image scan, SBOM, or provenance gate release).
+- Dependabot/audit findings: fix or record severity and owner.
 
 ## CI Correctness
 
-- Do not hide failing commands with `|| true`, broad `continue-on-error`, or
-  non-blocking placeholders unless the exception is documented.
-- Do not weaken fmt, clippy, test, audit, coverage, or scan jobs only to make CI pass.
-- CI jobs must fail when the checked behavior fails.
+- Do not hide failures with `|| true`, broad `continue-on-error`, or undocumented
+  non-blocking placeholders.
+- Do not weaken fmt, clippy, test, audit, coverage, or scan jobs only to go green.
+- CI must fail when the checked behavior fails.
 - Cache misses must still produce correct builds.
-- Workflow changes must preserve reproducibility on GitHub-hosted runners.
 
 ## Supply Chain
 
-- Image vulnerability scanning is required before public release-grade claims.
-- PR scans may start non-blocking; main, scheduled, or release scans should
-  become blocking on HIGH/CRITICAL findings in S5.
-- SBOM/provenance disabled state must remain documented as an accepted exception
-  until re-enabled.
-- Dependabot/audit findings must be fixed or recorded with severity and owner.
+- Image vulnerability scanning required before public release-grade claims.
+- Describe scan posture accurately: fixable-only HIGH/CRITICAL may be enforced
+  while the full baseline stays report-only. Do not claim full HIGH/CRITICAL
+  blocking until that gate is actually enabled.
+- Disabled SBOM/provenance must stay documented as an accepted exception until
+  re-enabled.
 
 ## Documentation
 
-- Docker and deployment docs must distinguish local demo, shared internal, and
-  public deployment profiles.
+- Distinguish local demo, shared internal, and public deployment profiles.
 - Do not call the local compose stack production-ready.
-- Rollback and blue/green docs must say whether they are simulated, manually
-  executed, or automated.
-- Any hardening exception should have a next step rather than open-ended wording.
+- Rollback / blue-green docs must say simulated, manual, or automated.
+- Hardening exceptions need a next step, not open-ended wording.

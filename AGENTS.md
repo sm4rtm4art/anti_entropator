@@ -9,6 +9,19 @@ evidence over feature volume.
 Phase: **v0.3 stabilization**. Do not describe planned, placeholder, or
 partially verified behavior as shipped.
 
+## Rule Activation
+
+| Rule | When it applies |
+|---|---|
+| `AGENTS.md` (this file) | Always — role, commands, Always/Ask/Never, workflow |
+| `.cursor/rules/project-architecture.mdc` | Always — stack, identity, OpenDAL, correctness |
+| `.cursor/rules/rust-standards.mdc` | `**/*.rs`, `Cargo.toml` |
+| `.cursor/rules/docs-standards.mdc` | Docs, README, AGENTS, templates |
+| `.cursor/rules/docker-ci-standards.mdc` | Compose, Dockerfile, workflows, Dependabot, compose scripts |
+
+Do not reprint rule bodies here. Defaults remain local-first unless a deployment
+profile says otherwise.
+
 ## Canonical References
 
 | Need | Source |
@@ -21,32 +34,6 @@ partially verified behavior as shipped.
 | Docs standards | `.cursor/rules/docs-standards.mdc` |
 | Docker/CI standards | `.cursor/rules/docker-ci-standards.mdc` |
 | S1 baseline evidence | `.local/2026-05-04-s1-baseline.md` |
-
-## Stack Guard Rails
-
-| Boundary | Rule |
-|---|---|
-| Object store | RustFS default; do not reintroduce MinIO as active default. |
-| Catalog | Lakekeeper/Iceberg REST; do not reintroduce Nessie. |
-| Object-store I/O | Use OpenDAL for reads, writes, list, head, delete. |
-| Query engine | DataFusion over Iceberg; no DuckDB/Polars substitution. |
-| Local orchestration | Docker Compose; no Kubernetes guidance for v0.3. |
-| Direct HTTP | Allowed only for Lakekeeper/bootstrap, health checks, signed setup calls. |
-| Correctness | Catalog/store consistency failures must not look like full success. |
-| Defaults | Local-first unless a deployment profile explicitly says otherwise. |
-
-### Query / table identity
-
-Canonical lakehouse object (Lakekeeper + `src/lakehouse/schema.rs`):
-
-- Namespace: `anti_entropator`
-- Table: `file_catalog`
-- Fully qualified for DataFusion: `iceberg.anti_entropator.file_catalog`
-
-The `query` command optionally rewrites `FROM files` / `JOIN files` to that
-qualified name (`src/query/mod.rs`). Treat `files` as CLI sugar only — not an
-Iceberg table name. Prefer documenting the Iceberg identity first; do not use
-bare `FROM file_catalog` as the primary example (it is not rewritten).
 
 ## Repository Map
 
@@ -116,17 +103,9 @@ behavior and exit semantics are implemented and tested.
 
 ## Documentation Posture
 
-- Lead with what works today.
-- Mark planned, placeholder, experimental, and unverified behavior clearly.
-- Verify CLI examples against `src/cli/mod.rs` and runtime behavior.
-- Verify SQL examples against `src/lakehouse/schema.rs` (`file_catalog`) and
-  the `query` rewrite in `src/query/mod.rs` (`files` → qualified Iceberg name).
-  Lead with the Iceberg identity; document `files` only as optional shorthand.
-- Label security claims as enforced today, required for shared/public
-  deployments, or planned.
-- Keep blue/green language as a simulation/reference until real infrastructure
-  exists.
-- Treat `.env` as local convenience, not a security boundary.
+Honesty, verification, and anti-slop rules live in
+`.cursor/rules/docs-standards.mdc`. Lead with what works today; never present
+planned or placeholder behavior as shipped.
 
 ## AI-Assisted Workflow
 
