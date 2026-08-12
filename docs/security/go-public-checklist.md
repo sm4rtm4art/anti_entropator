@@ -185,7 +185,7 @@ Use it in order, and treat each section as a small, testable milestone.
 - [x] Workflow toolchain setup remains aligned with repository contract:
   workflows pin a reachable `dtolnay/rust-toolchain` stable-branch SHA (not a
   floating `@stable` ref); `rust-toolchain.toml` also declares stable with
-  `rustfmt` and `clippy` (re-verified 2026-07-26; clears zizmor impostor-commit
+  `rustfmt` and `clippy` (re-verified 2026-08-12; clears zizmor impostor-commit
   on the previous orphaned pin).
 - [x] Workflow action pins keep full SHA references with release-ref comments
   where available; `dtolnay/rust-toolchain` remains pinned to a stable-branch
