@@ -25,9 +25,9 @@ object_store_opendal = "0.55"
 object_store = { version = "0.12", default-features = false }
 
 # Lakehouse
-iceberg = "0.9.1"
-iceberg-catalog-rest = "0.9.1"
-iceberg-storage-opendal = { version = "0.9.1", features = ["opendal-s3"] }
+iceberg = "0.10.1"
+iceberg-catalog-rest = "0.10.1"
+iceberg-storage-opendal = { version = "0.10.1", features = ["opendal-s3"] }
 datafusion = "52"
 iceberg-datafusion = "0.9"
 arrow = { version = "57.3.1", features = ["prettyprint"] }
