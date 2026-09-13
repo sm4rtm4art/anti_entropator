@@ -33,7 +33,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup Rust
-        uses: ./.github/actions/setup-rust
+        uses: $/.github/actions/setup-rust
         with:
           components: rustfmt,clippy
           cache-key-suffix: quality-lint
@@ -58,10 +58,10 @@ jobs:
           persist-credentials: false
 
       - name: Free disk space
-        uses: ./.github/actions/free-disk-space
+        uses: $/.github/actions/free-disk-space
 
       - name: Setup Rust
-        uses: ./.github/actions/setup-rust
+        uses: $/.github/actions/setup-rust
         with:
           cache-key-suffix: quality-test
 
@@ -82,10 +82,10 @@ jobs:
           persist-credentials: false
 
       - name: Free disk space
-        uses: ./.github/actions/free-disk-space
+        uses: $/.github/actions/free-disk-space
 
       - name: Setup Rust
-        uses: ./.github/actions/setup-rust
+        uses: $/.github/actions/setup-rust
         with:
           cache-key-suffix: quality-audit
           cache-enabled: "false"
