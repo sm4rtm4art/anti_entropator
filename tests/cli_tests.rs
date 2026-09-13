@@ -356,6 +356,33 @@ fn ingest_max_size_filters_files() -> Result<()> {
     Ok(())
 }
 
+#[test]
+#[cfg(unix)]
+fn ingest_partial_errors_exit_nonzero() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("readable.txt"), b"hello")?;
+    let blocked = temp.path().join("unreadable.txt");
+    std::fs::write(&blocked, b"blocked")?;
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o000))?;
+
+    let result = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .arg("--dry-run")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains("Errors:          1 files"))
+        .stderr(predicate::str::contains(
+            "ingest preview incomplete: 1 file(s) failed",
+        ));
+
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o644))?;
+    drop(result);
+    Ok(())
+}
+
 // ==================== Unimplemented Commands Tests ====================
 
 #[test]

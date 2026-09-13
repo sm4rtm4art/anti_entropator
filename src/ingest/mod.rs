@@ -197,7 +197,14 @@ fn finalize_ingest(
             style("  Dry run - no files were uploaded. Remove --dry-run to actually ingest.").dim()
         );
         println!();
-        return Ok(());
+        return if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(anyhow::anyhow!(
+                "ingest preview incomplete: {} file(s) failed",
+                errors.len()
+            ))
+        };
     }
 
     match commit_result {
@@ -211,14 +218,19 @@ fn finalize_ingest(
             Err(e.context("metadata commit failed"))
         }
         _ => {
-            if errors.is_empty() {
-                println!("{}", style("  Files ingested successfully!").green());
-            } else {
+            if !errors.is_empty() {
                 println!(
                     "{}",
-                    style("  Ingest completed with errors (see above).").yellow()
+                    style("  Ingest incomplete: one or more files failed.").red()
                 );
+                println!();
+                return Err(anyhow::anyhow!(
+                    "ingest incomplete: {} file(s) failed",
+                    errors.len()
+                ));
             }
+
+            println!("{}", style("  Files ingested successfully!").green());
             println!();
             println!("  Next steps:");
             println!("    1. Run `anti_entropator query` to explore your catalog");
@@ -691,5 +703,44 @@ mod tests {
     fn finalize_no_commit() {
         let result = finalize_ingest(None, 0, 5, &[], 0, false);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn finalize_partial_processing_failure() {
+        let errors = vec!["unreadable.txt: permission denied".to_string()];
+        let result = finalize_ingest(Some(Ok(())), 2, 0, &errors, 1024, false);
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("ingest incomplete: 1 file(s) failed"));
+    }
+
+    #[test]
+    fn finalize_complete_processing_failure() {
+        let errors = vec![
+            "unreadable-a.txt: permission denied".to_string(),
+            "unreadable-b.txt: permission denied".to_string(),
+        ];
+        let result = finalize_ingest(None, 0, 0, &errors, 0, false);
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("ingest incomplete: 2 file(s) failed"));
+    }
+
+    #[test]
+    fn finalize_dry_run_processing_failure() {
+        let errors = vec!["unreadable.txt: permission denied".to_string()];
+        let result = finalize_ingest(None, 0, 0, &errors, 0, true);
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("ingest preview incomplete: 1 file(s) failed"));
     }
 }
