@@ -99,7 +99,7 @@ async fn write_parquet_file(
     config: &LakehouseConfig,
 ) -> Result<Vec<DataFile>> {
     let file_io = create_file_io(config);
-    let location_generator = DefaultLocationGenerator::new(table.metadata().clone())?;
+    let location_generator = DefaultLocationGenerator::new(table.metadata())?;
     let file_id = Uuid::new_v4();
     let file_name = format!("{file_id}.parquet");
     let file_path = location_generator.generate_location(None, &file_name);

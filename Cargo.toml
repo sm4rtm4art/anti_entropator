@@ -2,6 +2,7 @@
 name = "anti_entropator"
 version = "0.2.0"
 edition = "2021"
+rust-version = "1.94"
 description = "A local data lakehouse for file organization - transform chaos into queryable order"
 authors = ["Martin"]
 license = "MIT"
@@ -20,18 +21,18 @@ anyhow = "^1.0.102"
 clap = { version = "4", features = ["derive", "env"] }
 
 # Storage (unified I/O via OpenDAL)
-opendal = { version = "0.55", features = ["services-s3"] }
-object_store_opendal = "0.55"
-object_store = { version = "0.12", default-features = false }
+opendal = { version = "0.57", features = ["services-s3"] }
+object_store_opendal = "0.57"
+object_store = { version = "0.13", default-features = false }
 
 # Lakehouse
-iceberg = "0.9.1"
-iceberg-catalog-rest = "0.9.1"
-iceberg-storage-opendal = { version = "0.9.1", features = ["opendal-s3"] }
-datafusion = "52"
-iceberg-datafusion = "0.9"
-arrow = { version = "57.3.1", features = ["prettyprint"] }
-parquet = { version = "57.3.1", features = ["zstd"] }
+iceberg = "0.10.1"
+iceberg-catalog-rest = "0.10.1"
+iceberg-storage-opendal = { version = "0.10.1", features = ["opendal-s3"] }
+datafusion = "53.1"
+iceberg-datafusion = "0.10.1"
+arrow = { version = "58", features = ["prettyprint"] }
+parquet = { version = "58", features = ["zstd"] }
 
 # File Processing & Crypto
 sha2 = "0.10"
@@ -69,7 +70,7 @@ assert_cmd = "2"
 predicates = "3"
 test-case = "3"
 tokio-test = "0.4"
-opendal = { version = "0.55", features = ["services-memory"] }
+opendal = { version = "0.57", features = ["services-memory"] }
 insta = "1.47.2"
 
 [profile.release]

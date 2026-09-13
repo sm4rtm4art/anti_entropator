@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Rust 1.85+**: Install via [rustup](https://rustup.rs/)
+- **Rust 1.94+**: Install via [rustup](https://rustup.rs/)
 - **Docker**: For running the lakehouse stack
 - **Optional tools**: `ffprobe`, `exiftool`, `pdfinfo` for richer metadata extraction
 
