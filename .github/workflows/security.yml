@@ -42,7 +42,7 @@ jobs:
     name: Cargo Audit
     permissions:
       contents: read
-    uses: ./.github/workflows/rust-quality.yml
+    uses: $/.github/workflows/rust-quality.yml
     with:
       run_lint: false
       run_test: false
@@ -113,7 +113,7 @@ jobs:
           persist-credentials: false
 
       - name: Verify image security posture
-        uses: ./.github/actions/container-verify
+        uses: $/.github/actions/container-verify
         with:
           image-tag: anti_entropator:local-scan
           severity: HIGH,CRITICAL
