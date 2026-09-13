@@ -324,6 +324,38 @@ fn ingest_dry_run_does_not_upload() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn ingest_rejects_invalid_max_size() -> Result<()> {
+    let temp = tempdir()?;
+
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--max-size", "100TB", "--dry-run"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid size '100TB'"))
+        .stderr(predicate::str::contains("B, KB, MB, or GB"));
+    Ok(())
+}
+
+#[test]
+fn ingest_max_size_filters_files() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("small.txt"), b"small")?;
+    std::fs::write(temp.path().join("large.txt"), vec![0_u8; 2048])?;
+
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--max-size", "1KB", "--dry-run"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Found 1 files to ingest"))
+        .stdout(predicate::str::contains("Would upload:    1 files"));
+    Ok(())
+}
+
 // ==================== Unimplemented Commands Tests ====================
 
 #[test]
