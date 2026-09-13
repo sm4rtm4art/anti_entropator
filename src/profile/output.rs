@@ -2,9 +2,7 @@
 
 use crate::domain::stats::ProfileResult;
 use anyhow::Result;
-use comfy_table::{
-    modifiers::UTF8_ROUND_CORNERS, presets::UTF8_FULL, Cell, Color, ContentArrangement, Table,
-};
+use comfy_table::{presets::UTF8_FULL, Cell, Color, ContentArrangement, Table};
 use humansize::{format_size, BINARY, DECIMAL};
 
 /// Format bytes as human-readable string
@@ -77,8 +75,7 @@ fn print_extension_table(result: &ProfileResult, decimal: bool) -> Result<()> {
 
     let mut table = Table::new();
     table
-        .load_preset(UTF8_FULL)
-        .apply_modifier(UTF8_ROUND_CORNERS)
+        .load_style(UTF8_FULL.with_rounded_corners())
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_header(vec![
             Cell::new("Extension").fg(Color::Cyan),
@@ -120,8 +117,7 @@ fn print_category_table(result: &ProfileResult, decimal: bool) -> Result<()> {
 
     let mut table = Table::new();
     table
-        .load_preset(UTF8_FULL)
-        .apply_modifier(UTF8_ROUND_CORNERS)
+        .load_style(UTF8_FULL.with_rounded_corners())
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_header(vec![
             Cell::new("Category").fg(Color::Cyan),
@@ -160,8 +156,7 @@ fn print_mime_table(result: &ProfileResult, decimal: bool) -> Result<()> {
 
     let mut table = Table::new();
     table
-        .load_preset(UTF8_FULL)
-        .apply_modifier(UTF8_ROUND_CORNERS)
+        .load_style(UTF8_FULL.with_rounded_corners())
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_header(vec![
             Cell::new("MIME Type").fg(Color::Cyan),

@@ -4,6 +4,17 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
+pub(crate) fn to_lower_hex(bytes: &[u8]) -> String {
+    const HEX_DIGITS: &[u8; 16] = b"0123456789abcdef";
+
+    let mut encoded = String::with_capacity(bytes.len() * 2);
+    for &byte in bytes {
+        encoded.push(HEX_DIGITS[(byte >> 4) as usize] as char);
+        encoded.push(HEX_DIGITS[(byte & 0x0f) as usize] as char);
+    }
+    encoded
+}
+
 /// Compute SHA-256 of the full file using streaming reads.
 pub(crate) fn full_sha256(path: &Path) -> Result<String> {
     let mut file = File::open(path)?;
@@ -18,7 +29,7 @@ pub(crate) fn full_sha256(path: &Path) -> Result<String> {
         hasher.update(&buffer[..bytes_read]);
     }
 
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(to_lower_hex(&hasher.finalize()))
 }
 
 /// Compute SHA-256 of only the first `block_size` bytes.
@@ -31,7 +42,7 @@ pub(crate) fn quick_sha256(path: &Path, block_size: usize) -> Result<String> {
     let mut hasher = Sha256::new();
     hasher.update(&buffer);
 
-    Ok(format!("{:x}", hasher.finalize()))
+    Ok(to_lower_hex(&hasher.finalize()))
 }
 
 #[cfg(test)]
@@ -85,7 +96,7 @@ mod tests {
         let shared = full_sha256(&path).expect("shared hash");
         let mut hasher = Sha256::new();
         hasher.update(payload);
-        let reference = format!("{:x}", hasher.finalize());
+        let reference = to_lower_hex(&hasher.finalize());
 
         assert_eq!(shared, reference);
     }
@@ -113,7 +124,7 @@ mod tests {
 
         let mut hasher = Sha256::new();
         hasher.update(&content[..block_size]);
-        let expected = format!("{:x}", hasher.finalize());
+        let expected = to_lower_hex(&hasher.finalize());
 
         assert_eq!(hash, expected);
     }
