@@ -33,7 +33,7 @@ jobs:
     name: Quality
     permissions:
       contents: read
-    uses: ./.github/workflows/rust-quality.yml
+    uses: $/.github/workflows/rust-quality.yml
     with:
       run_lint: true
       run_test: true
@@ -68,10 +68,10 @@ jobs:
       # Linux-only because the macOS matrix leg has none of these paths.
       - name: Free disk space
         if: runner.os == 'Linux'
-        uses: ./.github/actions/free-disk-space
+        uses: $/.github/actions/free-disk-space
 
       - name: Setup Rust
-        uses: ./.github/actions/setup-rust
+        uses: $/.github/actions/setup-rust
         with:
           cache-key-suffix: release-binaries-${{ matrix.target }}
           targets: ${{ matrix.target }}
@@ -135,7 +135,7 @@ jobs:
           echo "tag=${canonical_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Verify image security posture
-        uses: ./.github/actions/container-verify
+        uses: $/.github/actions/container-verify
         with:
           image-tag: ${{ steps.canonical.outputs.tag }}
           severity: HIGH,CRITICAL
@@ -187,7 +187,7 @@ jobs:
           echo "tag=${canonical_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Verify image security posture
-        uses: ./.github/actions/container-verify
+        uses: $/.github/actions/container-verify
         with:
           image-tag: ${{ steps.canonical.outputs.tag }}
           severity: HIGH,CRITICAL
@@ -281,7 +281,7 @@ jobs:
           persist-credentials: false
 
       - name: Free disk space
-        uses: ./.github/actions/free-disk-space
+        uses: $/.github/actions/free-disk-space
 
       - name: Capture disk headroom before build
         run: df -h / | tee disk-before-delivery-smoke.txt
@@ -428,7 +428,7 @@ jobs:
 
       # Best-effort: some of these paths exist only on the x64 image.
       - name: Free disk space
-        uses: ./.github/actions/free-disk-space
+        uses: $/.github/actions/free-disk-space
 
       - name: Capture disk headroom before build
         run: df -h / | tee disk-before-build.txt
