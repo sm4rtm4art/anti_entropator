@@ -22,7 +22,6 @@ use std::time::Duration;
 /// Used by both writer and query modules.
 pub(crate) fn s3_storage_factory() -> Arc<dyn iceberg::io::StorageFactory> {
     Arc::new(OpenDalStorageFactory::S3 {
-        configured_scheme: "s3".to_string(),
         customized_credential_load: None,
     })
 }

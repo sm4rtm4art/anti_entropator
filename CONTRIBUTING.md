@@ -5,7 +5,7 @@ This project is currently in a public-showcase stabilization phase, so correctne
 
 ## Development Setup
 
-1. Install Rust 1.85+ and Docker.
+1. Install Rust 1.94+ and Docker.
 2. Clone the repository and build once:
    - `cargo build --release`
 3. For local lakehouse workflows:
