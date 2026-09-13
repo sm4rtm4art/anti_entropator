@@ -283,9 +283,6 @@ fn collect_files(path: &Path, args: &IngestArgs) -> Result<Vec<std::path::PathBu
         type_filter = Some(args.types.iter().map(|t| t.to_lowercase()).collect());
     }
 
-    // Parse max size
-    let max_size: Option<u64> = args.max_size.as_ref().and_then(|s| parse_size(s));
-
     for entry in WalkDir::new(path).follow_links(false) {
         let entry = entry?;
 
@@ -326,11 +323,15 @@ fn collect_files(path: &Path, args: &IngestArgs) -> Result<Vec<std::path::PathBu
         }
 
         // Apply size filter
-        if let Some(max) = max_size {
-            if let Ok(metadata) = entry.metadata() {
-                if metadata.len() > max {
-                    continue;
-                }
+        if let Some(max) = args.max_size {
+            let metadata = entry.metadata().with_context(|| {
+                format!(
+                    "Failed to read file metadata for size filtering: {}",
+                    file_path.display()
+                )
+            })?;
+            if metadata.len() > max {
+                continue;
             }
         }
 
@@ -412,25 +413,6 @@ async fn process_file(
     Ok(IngestOutcome::Uploaded(Box::new(info)))
 }
 
-/// Parse size string like "100MB", "1GB"
-fn parse_size(s: &str) -> Option<u64> {
-    let s = s.trim().to_uppercase();
-
-    let (num_str, multiplier) = if s.ends_with("GB") {
-        (&s[..s.len() - 2], 1024 * 1024 * 1024)
-    } else if s.ends_with("MB") {
-        (&s[..s.len() - 2], 1024 * 1024)
-    } else if s.ends_with("KB") {
-        (&s[..s.len() - 2], 1024)
-    } else if s.ends_with("B") {
-        (&s[..s.len() - 1], 1)
-    } else {
-        return None;
-    };
-
-    num_str.trim().parse::<u64>().ok().map(|n| n * multiplier)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -447,63 +429,6 @@ mod tests {
             limit: None,
             dry_run: true,
         }
-    }
-
-    // ── parse_size ──
-
-    #[test]
-    fn parse_size_megabytes() {
-        assert_eq!(parse_size("1MB"), Some(1024 * 1024));
-    }
-
-    #[test]
-    fn parse_size_kilobytes() {
-        assert_eq!(parse_size("100KB"), Some(100 * 1024));
-    }
-
-    #[test]
-    fn parse_size_gigabytes() {
-        assert_eq!(parse_size("2GB"), Some(2 * 1024 * 1024 * 1024));
-    }
-
-    #[test]
-    fn parse_size_bytes() {
-        assert_eq!(parse_size("500B"), Some(500));
-    }
-
-    #[test]
-    fn parse_size_zero() {
-        assert_eq!(parse_size("0MB"), Some(0));
-    }
-
-    #[test]
-    fn parse_size_with_whitespace() {
-        assert_eq!(parse_size("  10 MB  "), Some(10 * 1024 * 1024));
-    }
-
-    #[test]
-    fn parse_size_lowercase() {
-        assert_eq!(parse_size("5mb"), Some(5 * 1024 * 1024));
-    }
-
-    #[test]
-    fn parse_size_invalid_suffix() {
-        assert_eq!(parse_size("100TB"), None);
-    }
-
-    #[test]
-    fn parse_size_no_suffix() {
-        assert_eq!(parse_size("100"), None);
-    }
-
-    #[test]
-    fn parse_size_no_number() {
-        assert_eq!(parse_size("MB"), None);
-    }
-
-    #[test]
-    fn parse_size_garbage() {
-        assert_eq!(parse_size("abc"), None);
     }
 
     // ── collect_files ──
@@ -569,7 +494,7 @@ mod tests {
         std::fs::write(dir.path().join("small.txt"), b"hi").unwrap();
         std::fs::write(dir.path().join("big.txt"), vec![0u8; 2048]).unwrap();
         let mut args = default_args(dir.path().to_path_buf());
-        args.max_size = Some("1KB".to_string());
+        args.max_size = Some(1024);
 
         let files = collect_files(dir.path(), &args).unwrap();
         assert_eq!(files.len(), 1);

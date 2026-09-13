@@ -5,6 +5,37 @@
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+const KIBIBYTE: u64 = 1024;
+const MEBIBYTE: u64 = KIBIBYTE * 1024;
+const GIBIBYTE: u64 = MEBIBYTE * 1024;
+
+fn parse_byte_size(value: &str) -> Result<u64, String> {
+    let normalized = value.trim().to_ascii_uppercase();
+    let (number, multiplier) = if let Some(number) = normalized.strip_suffix("GB") {
+        (number, GIBIBYTE)
+    } else if let Some(number) = normalized.strip_suffix("MB") {
+        (number, MEBIBYTE)
+    } else if let Some(number) = normalized.strip_suffix("KB") {
+        (number, KIBIBYTE)
+    } else if let Some(number) = normalized.strip_suffix('B') {
+        (number, 1)
+    } else {
+        return Err(format!(
+            "invalid size '{value}': expected a non-negative integer followed by B, KB, MB, or GB"
+        ));
+    };
+
+    let number = number.trim().parse::<u64>().map_err(|_| {
+        format!(
+            "invalid size '{value}': expected a non-negative integer followed by B, KB, MB, or GB"
+        )
+    })?;
+
+    number
+        .checked_mul(multiplier)
+        .ok_or_else(|| format!("invalid size '{value}': value exceeds the supported byte range"))
+}
+
 /// Anti-Entropator: A Local Data Lakehouse for File Organization
 ///
 /// Transform a chaotic downloads folder into a queryable, organized data lakehouse.
@@ -119,8 +150,8 @@ pub struct IngestArgs {
     pub types: Vec<String>,
 
     /// Maximum file size to ingest (e.g., "1GB", "500MB")
-    #[arg(long)]
-    pub max_size: Option<String>,
+    #[arg(long, value_name = "SIZE", value_parser = parse_byte_size)]
+    pub max_size: Option<u64>,
 
     /// Limit the number of files to ingest
     #[arg(long)]
@@ -140,4 +171,37 @@ pub enum OutputFormat {
     Json,
     /// Markdown report
     Markdown,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_byte_size;
+
+    #[test]
+    fn parse_byte_size_accepts_supported_units() {
+        assert_eq!(parse_byte_size("500B"), Ok(500));
+        assert_eq!(parse_byte_size("100KB"), Ok(100 * 1024));
+        assert_eq!(parse_byte_size("1MB"), Ok(1024 * 1024));
+        assert_eq!(parse_byte_size("2GB"), Ok(2 * 1024 * 1024 * 1024));
+    }
+
+    #[test]
+    fn parse_byte_size_normalizes_case_and_whitespace() {
+        assert_eq!(parse_byte_size(" 10 mb "), Ok(10 * 1024 * 1024));
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_invalid_values() {
+        for value in ["100TB", "100", "MB", "abc", "-1KB"] {
+            assert!(
+                parse_byte_size(value).is_err(),
+                "{value} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_byte_size_rejects_overflow() {
+        assert!(parse_byte_size("18446744073709551615GB").is_err());
+    }
 }
