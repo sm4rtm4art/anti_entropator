@@ -83,9 +83,17 @@ The command is idempotent - run it multiple times safely. The project ID is stor
 # Preview what would be ingested
 anti_entropator ingest ~/Downloads --dry-run
 
+# Machine-readable preview (one JSON document on stdout)
+anti_entropator ingest ~/Downloads --dry-run --format json
+
 # Actually ingest (uploads to object storage)
 anti_entropator ingest ~/Downloads
 ```
+
+`--format json` writes a versioned summary (`format_version`, counts, `status`, `catalog_commit`) to stdout.
+Human output remains the default.
+`--dry-run` is still an offline candidate preview: it does not check existing objects in the store.
+Partial and complete ingest failures still exit non-zero; JSON mode keeps that exit status and prints the summary before the error on stderr.
 
 ### 5. Query Your Catalog
 

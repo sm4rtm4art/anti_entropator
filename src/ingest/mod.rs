@@ -2,7 +2,9 @@
 //!
 //! Implements content-addressed storage with Iceberg catalog integration.
 
-use crate::cli::IngestArgs;
+mod output;
+
+use crate::cli::{IngestArgs, IngestOutputFormat};
 use crate::domain::{ContentHash, FileCategory, FileInfo};
 use crate::file_hash;
 use crate::lakehouse::{writer, LakehouseConfig};
@@ -13,6 +15,9 @@ use chrono::Utc;
 use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use opendal::Operator;
+use output::{
+    catalog_commit_from_result, outcome_error, print_human_report, print_json_report, IngestSummary,
+};
 use std::collections::HashSet;
 use std::path::Path;
 use walkdir::WalkDir;
@@ -36,30 +41,41 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     }
 
     let config = LakehouseConfig::default();
+    let json_output = args.format == IngestOutputFormat::Json;
 
-    println!();
-    println!(
-        "{}",
-        style("═══════════════════════════════════════════════════════════════").cyan()
-    );
-    println!("  📤 Anti-Entropator Ingest");
-    println!(
-        "{}",
-        style("═══════════════════════════════════════════════════════════════").cyan()
-    );
-    println!();
-    println!("  Source:  {}", path.display());
-    println!("  Target:  {}", config.warehouse);
-    println!("  Dry run: {}", if args.dry_run { "yes" } else { "no" });
-    println!();
+    if !json_output {
+        println!();
+        println!(
+            "{}",
+            style("═══════════════════════════════════════════════════════════════").cyan()
+        );
+        println!("  📤 Anti-Entropator Ingest");
+        println!(
+            "{}",
+            style("═══════════════════════════════════════════════════════════════").cyan()
+        );
+        println!();
+        println!("  Source:  {}", path.display());
+        println!("  Target:  {}", config.warehouse);
+        println!("  Dry run: {}", if args.dry_run { "yes" } else { "no" });
+        println!();
+    }
 
     // Check lakehouse connectivity first (unless dry-run)
     if !args.dry_run {
-        print!("  Checking lakehouse connectivity... ");
+        if !json_output {
+            print!("  Checking lakehouse connectivity... ");
+        }
         match check_connectivity(&config).await {
-            Ok(_) => println!("{}", style("OK").green()),
+            Ok(_) => {
+                if !json_output {
+                    println!("{}", style("OK").green());
+                }
+            }
             Err(e) => {
-                println!("{}", style("FAILED").red());
+                if !json_output {
+                    println!("{}", style("FAILED").red());
+                }
                 anyhow::bail!(
                     "Cannot connect to lakehouse: {}. Run `docker compose up -d`",
                     e
@@ -70,20 +86,40 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     // Collect files to ingest
     let files = collect_files(&path, &args)?;
-    println!("  Found {} files to ingest", files.len());
-
-    if files.is_empty() {
-        println!("\n  Nothing to ingest.");
-        return Ok(());
+    if !json_output {
+        println!("  Found {} files to ingest", files.len());
     }
 
-    // Create progress bar
-    let pb = ProgressBar::new(files.len() as u64);
-    let pb_style = ProgressStyle::default_bar()
-        .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})")
-        .context("Invalid ingest progress bar template")?
-        .progress_chars("#>-");
-    pb.set_style(pb_style);
+    if files.is_empty() {
+        return finalize_ingest(
+            IngestSummary::build(
+                args.dry_run,
+                0,
+                0,
+                0,
+                0,
+                &[],
+                catalog_commit_from_result(&None),
+            ),
+            None,
+            args.format,
+        );
+    }
+
+    // Create progress bar (stderr). Hide it in JSON mode so stdout stays one document.
+    let pb = if json_output {
+        ProgressBar::hidden()
+    } else {
+        let pb = ProgressBar::new(files.len() as u64);
+        let pb_style = ProgressStyle::default_bar()
+            .template(
+                "{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {pos}/{len} ({eta})",
+            )
+            .context("Invalid ingest progress bar template")?
+            .progress_chars("#>-");
+        pb.set_style(pb_style);
+        pb
+    };
 
     let mut uploaded_files = Vec::new();
     let mut uploaded_count = 0u64;
@@ -126,14 +162,20 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     // Commit to Iceberg if not dry-run and there are new uploads
     let commit_result = if !args.dry_run && !uploaded_files.is_empty() {
-        print!("  Committing metadata to Iceberg catalog... ");
+        if !json_output {
+            print!("  Committing metadata to Iceberg catalog... ");
+        }
         match writer::commit_files(uploaded_files, &config).await {
             Ok(_) => {
-                println!("{}", style("OK").green());
+                if !json_output {
+                    println!("{}", style("OK").green());
+                }
                 Some(Ok(()))
             }
             Err(e) => {
-                println!("{}", style("FAILED").red());
+                if !json_output {
+                    println!("{}", style("FAILED").red());
+                }
                 Some(Err(e))
             }
         }
@@ -141,104 +183,37 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         None
     };
 
+    let catalog_commit = catalog_commit_from_result(&commit_result);
     finalize_ingest(
+        IngestSummary::build(
+            args.dry_run,
+            files.len() as u64,
+            uploaded_count,
+            exists_count,
+            total_bytes,
+            &errors,
+            catalog_commit,
+        ),
         commit_result,
-        uploaded_count,
-        exists_count,
-        &errors,
-        total_bytes,
-        args.dry_run,
+        args.format,
     )
 }
 
 /// Finalize the ingest operation: print summary and determine command outcome.
 fn finalize_ingest(
+    summary: IngestSummary,
     commit_result: Option<Result<()>>,
-    uploaded_count: u64,
-    exists_count: u64,
-    errors: &[String],
-    total_bytes: u64,
-    dry_run: bool,
+    format: IngestOutputFormat,
 ) -> Result<()> {
-    println!();
-    println!("─── Ingest Results ─────────────────────────────────────────────");
-    println!();
-    if dry_run {
-        println!(
-            "  Would upload:    {} files ({})",
-            uploaded_count,
-            humansize::format_size(total_bytes, humansize::BINARY)
-        );
-    } else {
-        println!(
-            "  Uploaded:        {} files ({})",
-            uploaded_count,
-            humansize::format_size(total_bytes, humansize::BINARY)
-        );
-    }
-    println!("  Already in store: {} files", exists_count);
-    println!("  Errors:          {} files", errors.len());
-    println!();
-
-    if !errors.is_empty() {
-        println!("  Errors:");
-        for err in errors.iter().take(5) {
-            println!("    - {}", err);
+    match format {
+        IngestOutputFormat::Json => print_json_report(&summary)?,
+        IngestOutputFormat::Human if summary.candidates == 0 => {
+            println!("\n  Nothing to ingest.");
         }
-        if errors.len() > 5 {
-            println!("    ... and {} more", errors.len() - 5);
-        }
-        println!();
+        IngestOutputFormat::Human => print_human_report(&summary),
     }
 
-    if dry_run {
-        println!(
-            "{}",
-            style("  Dry run - no files were uploaded. Remove --dry-run to actually ingest.").dim()
-        );
-        println!();
-        return if errors.is_empty() {
-            Ok(())
-        } else {
-            Err(anyhow::anyhow!(
-                "ingest preview incomplete: {} file(s) failed",
-                errors.len()
-            ))
-        };
-    }
-
-    match commit_result {
-        Some(Err(e)) => {
-            println!(
-                "{}",
-                style("  Ingest incomplete: metadata commit failed.").red()
-            );
-            println!("  Objects may have been uploaded but are not registered in the catalog.");
-            println!();
-            Err(e.context("metadata commit failed"))
-        }
-        _ => {
-            if !errors.is_empty() {
-                println!(
-                    "{}",
-                    style("  Ingest incomplete: one or more files failed.").red()
-                );
-                println!();
-                return Err(anyhow::anyhow!(
-                    "ingest incomplete: {} file(s) failed",
-                    errors.len()
-                ));
-            }
-
-            println!("{}", style("  Files ingested successfully!").green());
-            println!();
-            println!("  Next steps:");
-            println!("    1. Run `anti_entropator query` to explore your catalog");
-            println!("    2. Run `anti_entropator duplicates` to find duplicate files");
-            println!();
-            Ok(())
-        }
-    }
+    outcome_error(&summary, commit_result)
 }
 
 /// Check lakehouse connectivity
@@ -416,7 +391,7 @@ async fn process_file(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cli::IngestArgs;
+    use crate::cli::{IngestArgs, IngestOutputFormat};
     use std::path::PathBuf;
 
     fn default_args(path: PathBuf) -> IngestArgs {
@@ -428,7 +403,53 @@ mod tests {
             max_size: None,
             limit: None,
             dry_run: true,
+            format: IngestOutputFormat::Human,
         }
+    }
+
+    fn finalize(
+        commit_result: Option<Result<()>>,
+        uploaded_count: u64,
+        exists_count: u64,
+        errors: &[String],
+        total_bytes: u64,
+        dry_run: bool,
+    ) -> Result<()> {
+        finalize_with_format(
+            commit_result,
+            uploaded_count,
+            exists_count,
+            errors,
+            total_bytes,
+            dry_run,
+            IngestOutputFormat::Human,
+        )
+    }
+
+    fn finalize_with_format(
+        commit_result: Option<Result<()>>,
+        uploaded_count: u64,
+        exists_count: u64,
+        errors: &[String],
+        total_bytes: u64,
+        dry_run: bool,
+        format: IngestOutputFormat,
+    ) -> Result<()> {
+        let candidates = uploaded_count + exists_count + errors.len() as u64;
+        let catalog_commit = catalog_commit_from_result(&commit_result);
+        finalize_ingest(
+            IngestSummary::build(
+                dry_run,
+                candidates,
+                uploaded_count,
+                exists_count,
+                total_bytes,
+                errors,
+                catalog_commit,
+            ),
+            commit_result,
+            format,
+        )
     }
 
     // ── collect_files ──
@@ -687,28 +708,28 @@ mod tests {
 
     #[test]
     fn finalize_commit_success() {
-        let result = finalize_ingest(Some(Ok(())), 3, 1, &[], 1024, false);
+        let result = finalize(Some(Ok(())), 3, 1, &[], 1024, false);
         assert!(result.is_ok());
     }
 
     #[test]
     fn finalize_commit_failure() {
         let err = anyhow::anyhow!("catalog connection refused");
-        let result = finalize_ingest(Some(Err(err)), 3, 0, &[], 1024, false);
+        let result = finalize(Some(Err(err)), 3, 0, &[], 1024, false);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("metadata commit"));
     }
 
     #[test]
     fn finalize_no_commit() {
-        let result = finalize_ingest(None, 0, 5, &[], 0, false);
+        let result = finalize(None, 0, 5, &[], 0, false);
         assert!(result.is_ok());
     }
 
     #[test]
     fn finalize_partial_processing_failure() {
         let errors = vec!["unreadable.txt: permission denied".to_string()];
-        let result = finalize_ingest(Some(Ok(())), 2, 0, &errors, 1024, false);
+        let result = finalize(Some(Ok(())), 2, 0, &errors, 1024, false);
 
         assert!(result.is_err());
         assert!(result
@@ -723,7 +744,7 @@ mod tests {
             "unreadable-a.txt: permission denied".to_string(),
             "unreadable-b.txt: permission denied".to_string(),
         ];
-        let result = finalize_ingest(None, 0, 0, &errors, 0, false);
+        let result = finalize(None, 0, 0, &errors, 0, false);
 
         assert!(result.is_err());
         assert!(result
@@ -735,12 +756,28 @@ mod tests {
     #[test]
     fn finalize_dry_run_processing_failure() {
         let errors = vec!["unreadable.txt: permission denied".to_string()];
-        let result = finalize_ingest(None, 0, 0, &errors, 0, true);
+        let result = finalize(None, 0, 0, &errors, 0, true);
 
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
             .contains("ingest preview incomplete: 1 file(s) failed"));
+    }
+
+    #[test]
+    fn finalize_json_commit_failure_still_exits_nonzero() {
+        let err = anyhow::anyhow!("catalog connection refused");
+        let result = finalize_with_format(
+            Some(Err(err)),
+            3,
+            0,
+            &[],
+            1024,
+            false,
+            IngestOutputFormat::Json,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("metadata commit"));
     }
 }
