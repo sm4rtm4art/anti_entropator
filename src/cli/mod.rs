@@ -160,6 +160,20 @@ pub struct IngestArgs {
     /// Dry run - show what would be done without uploading
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Output format
+    #[arg(long, value_enum, default_value = "human")]
+    pub format: IngestOutputFormat,
+}
+
+/// Output format for ingest summaries.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum IngestOutputFormat {
+    /// Human-readable operator output
+    #[default]
+    Human,
+    /// One JSON document on stdout
+    Json,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug, Default)]

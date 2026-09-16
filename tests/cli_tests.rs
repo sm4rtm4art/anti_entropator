@@ -293,7 +293,8 @@ fn ingest_help_shows_options() -> Result<()> {
         .stdout(predicate::str::contains("Ingest files"))
         .stdout(predicate::str::contains("--dry-run"))
         .stdout(predicate::str::contains("--types"))
-        .stdout(predicate::str::contains("--max-size"));
+        .stdout(predicate::str::contains("--max-size"))
+        .stdout(predicate::str::contains("--format"));
     Ok(())
 }
 
@@ -380,6 +381,107 @@ fn ingest_partial_errors_exit_nonzero() -> Result<()> {
 
     std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o644))?;
     drop(result);
+    Ok(())
+}
+
+#[test]
+fn ingest_dry_run_json_is_valid_summary() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("test.txt"), "content")?;
+
+    let output = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--dry-run", "--format", "json"])
+        .output()?;
+
+    assert!(output.status.success());
+    let json_str = String::from_utf8(output.stdout)?;
+    let json: serde_json::Value = serde_json::from_str(&json_str)?;
+
+    assert_eq!(json["format_version"].as_u64(), Some(1));
+    assert_eq!(json["mode"].as_str(), Some("dry_run"));
+    assert_eq!(json["status"].as_str(), Some("success"));
+    assert_eq!(json["candidates"].as_u64(), Some(1));
+    assert_eq!(json["uploaded"].as_u64(), Some(1));
+    assert_eq!(json["already_exists"].as_u64(), Some(0));
+    assert_eq!(json["failed"].as_u64(), Some(0));
+    assert_eq!(json["bytes"].as_u64(), Some(7));
+    assert_eq!(json["catalog_commit"].as_str(), Some("not_attempted"));
+    assert_eq!(json["errors"].as_array().map(|e| e.len()), Some(0));
+    assert!(
+        !json_str.contains("Would upload"),
+        "JSON stdout must not include the human report: {json_str}"
+    );
+    Ok(())
+}
+
+#[test]
+fn ingest_json_empty_directory_emits_success_summary() -> Result<()> {
+    let temp = tempdir()?;
+
+    let output = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--dry-run", "--format", "json"])
+        .output()?;
+
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["status"].as_str(), Some("success"));
+    assert_eq!(json["candidates"].as_u64(), Some(0));
+    assert_eq!(json["uploaded"].as_u64(), Some(0));
+    assert_eq!(json["failed"].as_u64(), Some(0));
+    Ok(())
+}
+
+#[test]
+#[cfg(unix)]
+fn ingest_partial_errors_json_exits_nonzero() -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("readable.txt"), b"hello")?;
+    let blocked = temp.path().join("unreadable.txt");
+    std::fs::write(&blocked, b"blocked")?;
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o000))?;
+
+    let output = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--dry-run", "--format", "json"])
+        .output()?;
+
+    std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o644))?;
+
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("ingest preview incomplete: 1 file(s) failed"),
+        "stderr should keep the existing failure contract: {stderr}"
+    );
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["format_version"].as_u64(), Some(1));
+    assert_eq!(json["mode"].as_str(), Some("dry_run"));
+    assert_eq!(json["status"].as_str(), Some("incomplete"));
+    assert_eq!(json["candidates"].as_u64(), Some(2));
+    assert_eq!(json["failed"].as_u64(), Some(1));
+    assert_eq!(json["catalog_commit"].as_str(), Some("not_attempted"));
+    Ok(())
+}
+
+#[test]
+fn ingest_rejects_unsupported_format() -> Result<()> {
+    let temp = tempdir()?;
+
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--dry-run", "--format", "table"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid value 'table'"));
     Ok(())
 }
 
