@@ -1,6 +1,12 @@
 # Roadmap to v0.3.0
 
-> **Goal (v0.3.0):** Stabilize the lakehouse pipeline, **unify storage behind one I/O boundary**, add **maintenance primitives**, and make the ingest pipeline **bounded and observable** (single engine; see M4).
+> **Goal (v0.3.0, re-scoped 2026-09-17):** a **correct local lakehouse for
+> file ingest and query**: one I/O boundary (OpenDAL), ingest that is
+> idempotent and honest about failure (ADR-009 observation semantics, durable
+> run identity), a binary that contains only implemented commands, and CI /
+> release gates proven on a real tag. Maintenance primitives and bounded
+> pipeline concurrency move to **v0.4.0**; interactive SQL, duplicate
+> workflow, and branch merge to **v0.5.0+**.
 
 ---
 
@@ -82,6 +88,32 @@
   stack resolves to `quick-xml >= 0.41`; the medium transitive `thrift` alert
   remains assigned to the dependency-major evaluation.
 
+### Status update (2026-09-17) — release re-scope
+
+- **Why:** the success criteria below required maintenance commands and a
+  second orchestration engine for `v0.3.0`, while the active plan had already
+  deferred both and ADR-007 was found to name a crate that does not do what
+  the ADR assumed. The contract and the plan disagreed; this entry makes the
+  contract honest and reachable.
+- **v0.3.0 now means:** S6A correctness slices 3 (streaming, mutation-safe
+  CAS upload with ADR-009 observation semantics) and 4 (durable run journal;
+  interrupted or partial runs never exit 0) on top of what already ships.
+- **Moved to v0.4.0:** M3 maintenance (`expire`, `vacuum`, `optimize plan`),
+  M3 query UX (output formats, filters, pagination), M4 bounded stage
+  concurrency and per-stage tracing. Reason: `vacuum` needs ADR-009 run
+  identity to define "live reference" safely; concurrency is built inside the
+  slice-3 pipeline and is not release-blocking.
+- **Moved to v0.5.0+:** interactive SQL, duplicate workflow, ingest branch
+  merge. Their placeholder subcommands were removed from the binary
+  (2026-09-17); duplicate content is answerable today with one `GROUP BY`
+  query (see the manual).
+- **ADR-007 superseded** (dataflow-rs dropped; single engine). ADR-001..005
+  received a verified-facts pass. RustFS stays on `1.0.0-beta.2`: the 1.0.0
+  GA image fails store init on an existing beta.2 data directory (evidence in
+  `docs/security/docker-hardening-review.md`).
+- Dated status entries above are kept as written; they are history, not
+  current claims.
+
 ### Completed (M1 -- Unified Storage, 2026-03-14)
 
 - Replaced `aws-sdk-s3` + `aws-config` with OpenDAL for all S3 I/O
@@ -96,7 +128,12 @@
 - Added [ADR-006](adr/ADR-006-opendal-unified-io.md) (OpenDAL) and [ADR-007](adr/ADR-007-dataflow-rs-orchestration.md) (dataflow-rs; superseded 2026-09-17)
 - Full end-to-end verified: `init` -> `ingest` (with Iceberg commit) -> `query` (DataFusion reads Parquet from RustFS)
 
-### Test Coverage (as of 2026-02-21)
+### Test Coverage (historical snapshot, 2026-02-21)
+
+> Since 2026-06-24 CI enforces the `v0.3.0` floor with
+> `cargo llvm-cov --fail-under-lines 50` on main and scheduled runs; the
+> per-module numbers below are the pre-stabilization baseline and are not
+> maintained by hand.
 
 | Module             | Line Coverage | Status               |
 | ------------------ | ------------- | -------------------- |
@@ -197,13 +234,14 @@ flowchart LR
 
 **Goal:** Establish testing patterns and reach **≥ 45%** coverage early (so refactors stay safe).
 
-- Add integration test for full Ingest → Query flow using `testcontainers-rs`.
-  - Postgres container for Lakekeeper backend.
-  - **Prefer RustFS container** for S3 (if feasible).
-  - If RustFS container is not feasible yet: use MinIO as a **test-only compatibility harness**.
-- Add unit tests for `writer.rs` functions (`files_to_batch`, `create_file_io`).
+- ~~Add integration test for full Ingest → Query flow.~~ **Done** as the
+  Docker-gated `ingest_then_query_flow` CLI test against the Compose stack
+  (RustFS + Lakekeeper + Postgres), run with `--ignored`. `testcontainers-rs`
+  was not adopted; MinIO is not used anywhere (rejected stack, see
+  `.cursor/rules/project-architecture.mdc`).
+- ~~Add unit tests for `writer.rs` functions (`files_to_batch`, `create_file_io`).~~ **Done**
 - ~~Add unit tests for `config/mod.rs` (pure parsing, easy win).~~ **Done**
-- Add unit tests for `lakehouse/schema.rs` (schema building).
+- ~~Add unit tests for `lakehouse/schema.rs` (schema building).~~ **Done**
 - Expand unit tests for `ingest/mod.rs`, `scan/mod.rs`, `storage/mod.rs`, and `domain/file_info.rs`. **In progress**
 - ~~Set up `cargo-llvm-cov` in CI workflow.~~ **Done**
 - Add test fixtures (sample files for scan tests).
@@ -211,7 +249,11 @@ flowchart LR
 
 ---
 
-### M3: Query & Maintenance (prevent bloat + safe cleanup)
+### M3: Query & Maintenance (prevent bloat + safe cleanup) — **moved to v0.4.0**
+
+> Re-scoped 2026-09-17. `vacuum` needs ADR-009 run identity to define a live
+> reference safely, so M3 follows the v0.3.0 correctness slices instead of
+> gating them. Content kept as the v0.4.0 design.
 
 **Goal:** Make `query` more useful and add lifecycle tasks to prevent catalog/object-store drift.
 
@@ -246,7 +288,11 @@ flowchart LR
 
 ---
 
-### M4: Pipeline Concurrency & Observability (single engine)
+### M4: Pipeline Concurrency & Observability (single engine) — **moved to v0.4.0**
+
+> Re-scoped 2026-09-17. The stage wiring is built during S6A slice 3 (v0.3.0);
+> the tracing spans, pipeline event schema, and tuning of concurrency limits
+> are v0.4.0 work.
 
 **Goal:** Bounded, observable stage concurrency in the one procedural
 pipeline. No second execution engine.
@@ -307,15 +353,52 @@ pipeline. No second execution engine.
 
 ---
 
-## Success Criteria for v0.3.0
+## Success Criteria for v0.3.0 (re-scoped 2026-09-17)
 
-1. **Test coverage ≥ 50%** (up from 37%).
-2. **Unified Storage:** Core I/O exclusively uses OpenDAL; DataFusion reads through `object_store_opendal`.
-3. **Maintenance:** `maintenance expire` + `maintenance vacuum` exist with strict safety flags (`--dry-run`, `--apply`, `--older-than`).
-4. **Pipeline:** ingest stages run with bounded concurrency and per-stage `tracing` spans (single engine; ADR-007 superseded).
-5. **CI passes** with `cargo test`, `cargo clippy`, `cargo fmt --check`.
+Each criterion names its evidence. A criterion without evidence is not met.
 
-> Execution note: S1-S4 are prerequisites for M3/M4 implementation work, and S5 must complete before tagging `v0.3.0`; all success criteria above remain required.
+1. **Unified storage** — all object-store I/O through OpenDAL; DataFusion via
+   `object_store_opendal`, iceberg-rs via `iceberg-storage-opendal`; one
+   `LakehouseConfig` source. _Evidence:_ ADR-006 Current State; no
+   `aws-sdk-s3` in `Cargo.lock`. **Met.**
+2. **Honest CLI** — every subcommand in the binary is implemented and tested;
+   `--help` lists nothing else; `ingest --dry-run` is a connected preview;
+   partial or complete failures exit non-zero in every mode. _Evidence:_
+   `tests/cli_tests.rs` (`placeholder_commands_are_not_advertised_or_accepted`,
+   `ingest_*` failure and mode tests). **Met** (2026-09-17).
+3. **Ingest correctness (ADR-009 slice 3)** — identical bytes at different
+   paths produce one observation per path; changed bytes at the same path
+   produce a new observation; re-running an unchanged ingest appends nothing;
+   upload streams with a bounded memory footprint and does not corrupt a blob
+   when the source file changes mid-read. _Evidence:_ unit tests for the
+   transition table plus the Docker-gated e2e extended with a duplicate-path
+   and a changed-file case. **Open — S6A slice 3.**
+4. **Recovery (ADR-009 slice 4, minimum)** — every ingest run has a durable
+   `run_id`; an interrupted or partially failed run is never reported as
+   success and its state is identifiable afterwards. _Evidence:_
+   failure-injection test (kill between upload and commit) proving non-zero
+   exit and a journal entry. **Open — S6A slice 4.**
+5. **Quality gates** — `cargo fmt --check`, `clippy -D warnings`, tests,
+   `cargo audit` (documented ignores only), coverage floor `≥ 50%` enforced by
+   `--fail-under-lines 50`. _Evidence:_ green `ci.yml` on `main`. **Met**,
+   re-verified per PR.
+6. **Release path proven on a real tag** — the `v0.3.0` tag runs the release
+   workflow end to end (quality gates, container verify + Trivy fixable-only
+   policy, GHCR publish, GitHub release). _Evidence:_ the tag's workflow run.
+   **Open — happens at tagging;** the dispatch dry run is already evidenced in
+   ADR-008.
+7. **Docs match behavior** — README command table, manual, and ADR-001..009
+   describe what ships; planned work is labeled planned. _Evidence:_ the
+   2026-09-17 audit PRs. **Met**, re-verified per PR.
+
+Deferred out of `v0.3.0` (see the 2026-09-17 status entry): maintenance
+`expire`/`vacuum`/`optimize plan`, query output formats and pagination,
+per-stage tracing and concurrency tuning (all v0.4.0); interactive SQL,
+duplicate workflow, branch merge (v0.5.0+).
+
+> Execution note: criteria 3 and 4 are the remaining release-blocking work;
+> they are S6A slices 3 and 4 in the local plan. Tag `v0.3.0` when 1–5 and 7
+> are met; criterion 6 is satisfied by the tag itself.
 
 ---
 
@@ -325,12 +408,16 @@ pipeline. No second execution engine.
 | -------- | ------------------------------------------------ | ------ | ----------- | -------------------------------------------------------- |
 | ~~P0~~   | ~~Replace `aws-sdk-s3` core paths with OpenDAL~~ | ~~Medium~~ | **Done** | Completed 2026-03-14                                     |
 | ~~P0~~   | ~~Bridge DataFusion via `object_store_opendal`~~  | ~~Small~~  | **Done** | Registered under `s3://` URL scheme                      |
-| P0       | S1 correctness queue (ingest filters, SQL rewrite, ingest counters) | Medium | **Next** | Defined in local stabilization plan; must land before M3/M4 resume |
-| P1       | Integration test: Ingest -> Query (containers)   | Medium | **Next**    | Builds on stable OpenDAL boundary and S1 correctness fixes |
-| P1       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | Pending     | Required for `v0.3.0` success criteria                    |
-| P2       | Bounded tokio stages + per-stage spans (M4)      | Medium | Pending     | Folded into S6A item 3; dataflow-rs dropped (ADR-007 superseded) |
-| ~~P2~~   | ~~S5 CI/CD hardening (Trivy + multi-arch path)~~ | ~~Medium~~ | **Done** | S5 closed; residual multi-arch/Trivy enforcement deferred; S6 next |
-| P2       | Add `optimize plan` (report-only)                | Small  | Pending     |                                                          |
+| ~~P0~~   | ~~S1 correctness queue (ingest filters, SQL rewrite, ingest counters)~~ | ~~Medium~~ | **Done** | S1–S6 closed 2026-09-13; S6A slices 1, 2a–2d merged 2026-09-17 |
+| ~~P1~~   | ~~Integration test: Ingest -> Query (containers)~~ | ~~Medium~~ | **Done** | Docker-gated `ingest_then_query_flow` against the Compose stack |
+| P0       | S6A slice 3: streaming, mutation-safe CAS upload + ADR-009 observation semantics | Large | **Next** | Release-blocking (criterion 3); bounded tokio stage wiring built here |
+| P0       | S6A slice 4: durable run journal, non-success on interruption | Medium | Pending | Release-blocking (criterion 4) |
+| P1       | Tag `v0.3.0`; release workflow evidence on the tag | Small | Pending | Criterion 6 |
+| P2       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | v0.4.0      | Needs ADR-009 run identity for "live reference"          |
+| P2       | Per-stage `tracing` spans, pipeline event schema (M4) | Medium | v0.4.0 | dataflow-rs dropped (ADR-007 superseded)                 |
+| ~~P2~~   | ~~S5 CI/CD hardening (Trivy + multi-arch path)~~ | ~~Medium~~ | **Done** | S5 closed; residual multi-arch/Trivy enforcement deferred |
+| P2       | Add `optimize plan` (report-only)                | Small  | v0.4.0      |                                                          |
+| P3       | RustFS `1.0.0` upgrade path for existing data dirs | Small | Blocked | GA fails store init on beta.2 data dir; see hardening review |
 | P2       | Refactor `files_to_batch` into helpers           | Small  | Deferred    | Already clean with `BatchColumnsBuilder`                 |
 
 ---
