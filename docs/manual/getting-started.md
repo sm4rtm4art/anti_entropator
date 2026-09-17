@@ -80,20 +80,30 @@ The command is idempotent - run it multiple times safely. The project ID is stor
 ### 4. Ingest Files
 
 ```bash
-# Preview what would be ingested
+# Offline preview: list candidates without contacting the lakehouse
 anti_entropator ingest ~/Downloads --dry-run
 
-# Machine-readable preview (one JSON document on stdout)
-anti_entropator ingest ~/Downloads --dry-run --format json
+# Connected preview: check which objects already exist, upload nothing
+anti_entropator ingest ~/Downloads --plan
 
-# Actually ingest (uploads to object storage)
+# Machine-readable summary (one JSON document on stdout) works in every mode
+anti_entropator ingest ~/Downloads --plan --format json
+
+# Actually ingest (uploads to object storage + commits to the catalog)
 anti_entropator ingest ~/Downloads
 ```
 
-`--format json` writes a versioned summary (`format_version`, counts, `status`, `catalog_commit`) to stdout.
+Ingest has three modes; `--dry-run` and `--plan` are mutually exclusive:
+
+| Mode | Contacts lakehouse | Checks existing objects | Uploads / commits |
+|---|---|---|---|
+| `--dry-run` | no | no — every candidate is reported as "would upload" | no |
+| `--plan` | yes (fails if unreachable) | yes — reports `already_exists` accurately | no |
+| default | yes | yes | yes |
+
+`--format json` writes a versioned summary (`format_version`, `mode`, counts, `status`, `catalog_commit`) to stdout.
 Human output remains the default.
-`--dry-run` is still an offline candidate preview: it does not check existing objects in the store.
-Partial and complete ingest failures still exit non-zero; JSON mode keeps that exit status and prints the summary before the error on stderr.
+Partial and complete failures exit non-zero in every mode; JSON mode keeps that exit status and prints the summary before the error on stderr.
 
 ### 5. Query Your Catalog
 

@@ -292,6 +292,7 @@ fn ingest_help_shows_options() -> Result<()> {
         .success()
         .stdout(predicate::str::contains("Ingest files"))
         .stdout(predicate::str::contains("--dry-run"))
+        .stdout(predicate::str::contains("--plan"))
         .stdout(predicate::str::contains("--types"))
         .stdout(predicate::str::contains("--max-size"))
         .stdout(predicate::str::contains("--format"));
@@ -381,6 +382,83 @@ fn ingest_partial_errors_exit_nonzero() -> Result<()> {
 
     std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o644))?;
     drop(result);
+    Ok(())
+}
+
+/// An endpoint on a closed local port: connection refused, no Docker required.
+const UNREACHABLE_S3_ENDPOINT: &str = "http://127.0.0.1:9";
+
+#[test]
+fn ingest_dry_run_reports_store_not_checked() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("test.txt"), "content")?;
+
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .arg("--dry-run")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Mode:    dry-run (offline preview)",
+        ))
+        .stdout(predicate::str::contains(
+            "Already in store: not checked (offline preview)",
+        ))
+        .stdout(predicate::str::contains(
+            "Remove --dry-run to actually ingest",
+        ));
+    Ok(())
+}
+
+#[test]
+fn ingest_dry_run_never_contacts_the_store() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("test.txt"), "content")?;
+
+    // If dry-run touched the network this would fail with a connection error.
+    cmd()?
+        .env("ANTI_ENTROPATOR_S3_ENDPOINT", UNREACHABLE_S3_ENDPOINT)
+        .arg("ingest")
+        .arg(temp.path())
+        .arg("--dry-run")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Would upload:    1 files"));
+    Ok(())
+}
+
+#[test]
+fn ingest_plan_fails_closed_when_store_unreachable() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("test.txt"), "content")?;
+
+    cmd()?
+        .env("ANTI_ENTROPATOR_S3_ENDPOINT", UNREACHABLE_S3_ENDPOINT)
+        .arg("ingest")
+        .arg(temp.path())
+        .arg("--plan")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "Mode:    plan (connected preview)",
+        ))
+        .stderr(predicate::str::contains("Cannot connect to lakehouse"))
+        .stdout(predicate::str::contains("Would upload").not());
+    Ok(())
+}
+
+#[test]
+fn ingest_plan_and_dry_run_are_mutually_exclusive() -> Result<()> {
+    let temp = tempdir()?;
+
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--plan", "--dry-run"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("cannot be used with"));
     Ok(())
 }
 
@@ -573,7 +651,21 @@ fn ingest_then_query_flow() -> Result<()> {
         .success()
         .stdout(predicate::str::contains("| 2        |"));
 
-    // 5. Re-ingest -- no new uploads (idempotent)
+    // 5. Connected plan -- sees both blobs in the store, uploads nothing
+    let plan = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--plan", "--format", "json"])
+        .output()?;
+    assert!(plan.status.success());
+    let plan_json: serde_json::Value = serde_json::from_slice(&plan.stdout)?;
+    assert_eq!(plan_json["mode"].as_str(), Some("plan"));
+    assert_eq!(plan_json["candidates"].as_u64(), Some(2));
+    assert_eq!(plan_json["uploaded"].as_u64(), Some(0));
+    assert_eq!(plan_json["already_exists"].as_u64(), Some(2));
+    assert_eq!(plan_json["catalog_commit"].as_str(), Some("not_attempted"));
+
+    // 6. Re-ingest -- no new uploads (idempotent)
     cmd()?
         .arg("ingest")
         .arg(temp.path())
@@ -581,7 +673,7 @@ fn ingest_then_query_flow() -> Result<()> {
         .success()
         .stdout(predicate::str::contains("Uploaded:        0"));
 
-    // 6. Query again -- still exactly 2 rows (no duplicates)
+    // 7. Query again -- still exactly 2 rows (no duplicates)
     cmd()?
         .arg("query")
         .arg(&query)
