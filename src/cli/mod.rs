@@ -67,20 +67,11 @@ pub enum Commands {
     /// Ingest files into the lakehouse (upload to RustFS + commit to Iceberg via Lakekeeper)
     Ingest(IngestArgs),
 
-    /// Interactive SQL REPL (planned, not yet implemented)
-    Sql,
-
     /// Execute a one-shot SQL query
     Query {
         /// The SQL query to execute
         sql: String,
     },
-
-    /// Find and report duplicate files (planned, not yet implemented)
-    Duplicates,
-
-    /// Merge an ingest branch into main (planned, not yet implemented)
-    Merge,
 }
 
 #[derive(Parser, Debug)]

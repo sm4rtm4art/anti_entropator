@@ -107,8 +107,7 @@ Partial and complete failures exit non-zero in every mode; JSON mode keeps that 
 
 ### 5. Query Your Catalog
 
-> **Note:** `query` is implemented as a one-shot command.
-> `sql` exits with an error indicating the interactive REPL is planned but not yet implemented.
+> **Note:** `query` is a one-shot command; there is no interactive SQL mode.
 >
 > Lakekeeper registers Iceberg table `file_catalog` (namespace
 > `anti_entropator`). The `query` command rewrites `FROM files` /
@@ -122,24 +121,8 @@ anti_entropator query "SELECT category, COUNT(*) FROM files GROUP BY category"
 # Same query with the canonical Iceberg table reference
 anti_entropator query "SELECT category, COUNT(*) FROM iceberg.anti_entropator.file_catalog GROUP BY category"
 
-# Interactive SQL REPL (placeholder)
-anti_entropator sql
-```
-
-### 6. Find Duplicates (Placeholder)
-
-> **Note:** The `duplicates` command is a placeholder and does not execute duplicate handling yet.
-
-```bash
-anti_entropator duplicates
-```
-
-### 7. Merge Branches (Placeholder)
-
-> **Note:** The `merge` command is currently a placeholder command.
-
-```bash
-anti_entropator merge
+# Duplicate content today: group by hash in SQL
+anti_entropator query "SELECT content_hash, COUNT(*) AS copies FROM iceberg.anti_entropator.file_catalog GROUP BY content_hash HAVING COUNT(*) > 1"
 ```
 
 ## Command Reference
@@ -153,11 +136,9 @@ anti_entropator merge
 | `scan <path>`    | ✅      | Enrich metadata without uploading            |
 | `ingest <path>`  | ✅      | Upload files & commit metadata to Iceberg    |
 | `query <sql>`    | ✅      | Execute one-shot SQL via DataFusion (basic)  |
-| `sql`              | 🚧      | Interactive SQL REPL (planned, not yet implemented)      |
-| `duplicates`       | 🚧      | Duplicate finder workflow (planned, not yet implemented) |
-| `merge`            | 🚧      | Ingest branch merge workflow (planned, not yet implemented) |
 
-**Legend:** ✅ Implemented | 🚧 Planned (not yet implemented)
+Every command in the binary is implemented. Interactive SQL, a duplicate
+workflow, and branch merge are roadmap items and do not exist as commands yet.
 
 ## Environment Variables
 

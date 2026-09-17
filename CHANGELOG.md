@@ -47,8 +47,8 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   silently disabling the size limit.
 - SQL shorthand rewriting is restricted to table references instead of global
   text replacement.
-- Placeholder `sql`, `duplicates`, and `merge` workflows fail explicitly
-  instead of reporting success.
+- Placeholder `sql`, `duplicates`, and `merge` workflows first failed
+  explicitly instead of reporting success, then were removed (see Removed).
 - Lakekeeper catalog and query setup share project-aware configuration and the
   required `X-Project-Id` behavior.
 - Documentation, CLI status, security profiles, and delivery claims were
@@ -56,6 +56,13 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
 - README landing-page narrative updated to reflect the current local-first
   scope, planned work, and Makefile quick start.
 - CI caches and runner cleanup were bounded to reduce cross-job disk pressure.
+
+### Removed
+
+- The `sql`, `duplicates`, and `merge` placeholder subcommands. They only
+  exited non-zero with "not yet implemented"; the binary now contains
+  implemented commands only and rejects these names as unknown. The features
+  stay on the roadmap.
 
 ### Security
 
@@ -84,9 +91,8 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
 
 ### Planned
 
-- Interactive `sql` workflow beyond the current placeholder command.
-- `duplicates` implementation beyond the current placeholder command.
-- `merge` implementation beyond the current placeholder command.
+- Interactive SQL, duplicate management, and ingest branch merge workflows
+  (roadmap; no commands exist for them).
 
 ## [0.2.0] - 2026-03-14
 
