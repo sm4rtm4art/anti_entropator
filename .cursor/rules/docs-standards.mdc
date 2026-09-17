@@ -95,6 +95,15 @@ Current State, Consequences, Alternatives, References). Preserve historical
 decisions; add current-state notes for stale commands, schema, ports, or tables.
 Do not silently rewrite history into inaccurate current-state docs.
 
+Every ADR carries a `Status:` line (`accepted`, `accepted, not yet
+implemented`, `superseded on <date>`) and a dated `Current State` section.
+External facts (licenses, maintenance status, crate versions, links) must be
+verified on the date written and dated in the text. Do not cite GitHub star
+counts, download numbers, or vendor benchmarks; they rot and are not evidence.
+Schemas live in code; an ADR points to the module, it does not duplicate the
+field list. ADR-007's dead link and wrongly identified crate are the reference
+failure this rule prevents.
+
 ## Rust In Markdown
 
 - Avoid `.unwrap()` in examples; prefer `?` with `anyhow::Result`.

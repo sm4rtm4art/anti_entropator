@@ -1,5 +1,7 @@
 # ADR-005: Apache DataFusion as Query Engine
 
+Status: **accepted, implemented** for one-shot `query`.
+
 ## Context
 
 We need a SQL query engine to:
@@ -7,7 +9,7 @@ We need a SQL query engine to:
 - Query the Iceberg file catalog
 - Find duplicates via GROUP BY queries
 - Generate reports and analytics
-- Provide an interactive SQL REPL
+- Serve as the engine behind any later interactive SQL surface
 
 ## Decision
 
@@ -21,7 +23,8 @@ We will use **Apache DataFusion** as the query engine.
 - **Apache Arrow**: Columnar memory format for efficient analytics
 - **SQL support**: Full SQL dialect for complex queries
 - **Embeddable**: Runs in-process, no separate service needed
-- **DataFrame API**: Programmatic query building (relevant for user's dataframe-api work)
+- **DataFrame API**: Programmatic query building available for future
+  non-SQL commands (e.g. duplicate grouping)
 - **Parquet native**: Excellent Parquet read performance
 
 ### Negative
@@ -29,6 +32,16 @@ We will use **Apache DataFusion** as the query engine.
 - **Iceberg integration**: Direct Iceberg table provider still maturing
 - **Memory usage**: Arrow buffers can be memory-intensive for large scans
 - **No distributed execution**: Single-node only (fine for local lakehouse)
+
+## Current State (2026-09-17)
+
+- `query` runs one SQL statement per invocation over
+  `iceberg.anti_entropator.file_catalog` using `iceberg-datafusion` for the
+  catalog provider and `object_store_opendal` for Parquet reads (ADR-006).
+- The `FROM files` / `JOIN files` shorthand is rewritten by the CLI to the
+  qualified name; nothing else is rewritten.
+- An interactive SQL REPL is not implemented. Output is a printed record
+  batch; format options (JSON/CSV) are roadmap work.
 
 ## Example Queries
 
