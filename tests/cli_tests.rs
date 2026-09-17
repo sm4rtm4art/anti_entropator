@@ -292,6 +292,7 @@ fn ingest_help_shows_options() -> Result<()> {
         .success()
         .stdout(predicate::str::contains("Ingest files"))
         .stdout(predicate::str::contains("--dry-run"))
+        .stdout(predicate::str::contains("--offline"))
         .stdout(predicate::str::contains("--types"))
         .stdout(predicate::str::contains("--max-size"))
         .stdout(predicate::str::contains("--format"));
@@ -301,7 +302,7 @@ fn ingest_help_shows_options() -> Result<()> {
 #[test]
 fn ingest_nonexistent_path_fails() -> Result<()> {
     cmd()?
-        .args(["ingest", "/nonexistent/path", "--dry-run"])
+        .args(["ingest", "/nonexistent/path", "--dry-run", "--offline"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("does not exist"));
@@ -316,7 +317,7 @@ fn ingest_dry_run_does_not_upload() -> Result<()> {
     cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .arg("--dry-run")
+        .args(["--dry-run", "--offline"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Would upload"))
@@ -332,7 +333,7 @@ fn ingest_rejects_invalid_max_size() -> Result<()> {
     cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .args(["--max-size", "100TB", "--dry-run"])
+        .args(["--max-size", "100TB", "--dry-run", "--offline"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid size '100TB'"))
@@ -349,7 +350,7 @@ fn ingest_max_size_filters_files() -> Result<()> {
     cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .args(["--max-size", "1KB", "--dry-run"])
+        .args(["--max-size", "1KB", "--dry-run", "--offline"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Found 1 files to ingest"))
@@ -371,7 +372,7 @@ fn ingest_partial_errors_exit_nonzero() -> Result<()> {
     let result = cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .arg("--dry-run")
+        .args(["--dry-run", "--offline"])
         .assert()
         .failure()
         .stdout(predicate::str::contains("Errors:          1 files"))
@@ -384,6 +385,85 @@ fn ingest_partial_errors_exit_nonzero() -> Result<()> {
     Ok(())
 }
 
+/// An endpoint on a closed local port: connection refused, no Docker required.
+const UNREACHABLE_S3_ENDPOINT: &str = "http://127.0.0.1:9";
+
+#[test]
+fn ingest_offline_dry_run_reports_store_not_checked() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("test.txt"), "content")?;
+
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--dry-run", "--offline"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Mode:    dry-run, offline (store not checked)",
+        ))
+        .stdout(predicate::str::contains(
+            "Already in store: not checked (--offline)",
+        ))
+        .stdout(predicate::str::contains(
+            "Remove --dry-run --offline to actually ingest",
+        ));
+    Ok(())
+}
+
+#[test]
+fn ingest_offline_dry_run_never_contacts_the_store() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("test.txt"), "content")?;
+
+    // If --offline touched the network this would fail with a connection error.
+    cmd()?
+        .env("ANTI_ENTROPATOR_S3_ENDPOINT", UNREACHABLE_S3_ENDPOINT)
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--dry-run", "--offline"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Would upload:    1 files"));
+    Ok(())
+}
+
+#[test]
+fn ingest_dry_run_fails_closed_when_store_unreachable() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("test.txt"), "content")?;
+
+    // Plain --dry-run is a connected preview: it must not silently degrade to
+    // an offline "everything is new" answer.
+    cmd()?
+        .env("ANTI_ENTROPATOR_S3_ENDPOINT", UNREACHABLE_S3_ENDPOINT)
+        .arg("ingest")
+        .arg(temp.path())
+        .arg("--dry-run")
+        .assert()
+        .failure()
+        .stdout(predicate::str::contains(
+            "Mode:    dry-run (store checked, nothing written)",
+        ))
+        .stderr(predicate::str::contains("Cannot connect to lakehouse"))
+        .stdout(predicate::str::contains("Would upload").not());
+    Ok(())
+}
+
+#[test]
+fn ingest_offline_requires_dry_run() -> Result<()> {
+    let temp = tempdir()?;
+
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .arg("--offline")
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("--dry-run"));
+    Ok(())
+}
+
 #[test]
 fn ingest_dry_run_json_is_valid_summary() -> Result<()> {
     let temp = tempdir()?;
@@ -392,7 +472,7 @@ fn ingest_dry_run_json_is_valid_summary() -> Result<()> {
     let output = cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .args(["--dry-run", "--format", "json"])
+        .args(["--dry-run", "--offline", "--format", "json"])
         .output()?;
 
     assert!(output.status.success());
@@ -400,7 +480,7 @@ fn ingest_dry_run_json_is_valid_summary() -> Result<()> {
     let json: serde_json::Value = serde_json::from_str(&json_str)?;
 
     assert_eq!(json["format_version"].as_u64(), Some(1));
-    assert_eq!(json["mode"].as_str(), Some("dry_run"));
+    assert_eq!(json["mode"].as_str(), Some("dry_run_offline"));
     assert_eq!(json["status"].as_str(), Some("success"));
     assert_eq!(json["candidates"].as_u64(), Some(1));
     assert_eq!(json["uploaded"].as_u64(), Some(1));
@@ -423,7 +503,7 @@ fn ingest_json_empty_directory_emits_success_summary() -> Result<()> {
     let output = cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .args(["--dry-run", "--format", "json"])
+        .args(["--dry-run", "--offline", "--format", "json"])
         .output()?;
 
     assert!(output.status.success());
@@ -449,7 +529,7 @@ fn ingest_partial_errors_json_exits_nonzero() -> Result<()> {
     let output = cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .args(["--dry-run", "--format", "json"])
+        .args(["--dry-run", "--offline", "--format", "json"])
         .output()?;
 
     std::fs::set_permissions(&blocked, std::fs::Permissions::from_mode(0o644))?;
@@ -463,7 +543,7 @@ fn ingest_partial_errors_json_exits_nonzero() -> Result<()> {
 
     let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
     assert_eq!(json["format_version"].as_u64(), Some(1));
-    assert_eq!(json["mode"].as_str(), Some("dry_run"));
+    assert_eq!(json["mode"].as_str(), Some("dry_run_offline"));
     assert_eq!(json["status"].as_str(), Some("incomplete"));
     assert_eq!(json["candidates"].as_u64(), Some(2));
     assert_eq!(json["failed"].as_u64(), Some(1));
@@ -478,7 +558,7 @@ fn ingest_rejects_unsupported_format() -> Result<()> {
     cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .args(["--dry-run", "--format", "table"])
+        .args(["--dry-run", "--offline", "--format", "table"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("invalid value 'table'"));
@@ -573,7 +653,21 @@ fn ingest_then_query_flow() -> Result<()> {
         .success()
         .stdout(predicate::str::contains("| 2        |"));
 
-    // 5. Re-ingest -- no new uploads (idempotent)
+    // 5. Connected dry-run -- sees both blobs in the store, uploads nothing
+    let plan = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--dry-run", "--format", "json"])
+        .output()?;
+    assert!(plan.status.success());
+    let plan_json: serde_json::Value = serde_json::from_slice(&plan.stdout)?;
+    assert_eq!(plan_json["mode"].as_str(), Some("dry_run"));
+    assert_eq!(plan_json["candidates"].as_u64(), Some(2));
+    assert_eq!(plan_json["uploaded"].as_u64(), Some(0));
+    assert_eq!(plan_json["already_exists"].as_u64(), Some(2));
+    assert_eq!(plan_json["catalog_commit"].as_str(), Some("not_attempted"));
+
+    // 6. Re-ingest -- no new uploads (idempotent)
     cmd()?
         .arg("ingest")
         .arg(temp.path())
@@ -581,7 +675,7 @@ fn ingest_then_query_flow() -> Result<()> {
         .success()
         .stdout(predicate::str::contains("Uploaded:        0"));
 
-    // 6. Query again -- still exactly 2 rows (no duplicates)
+    // 7. Query again -- still exactly 2 rows (no duplicates)
     cmd()?
         .arg("query")
         .arg(&query)

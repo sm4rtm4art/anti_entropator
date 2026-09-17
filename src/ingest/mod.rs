@@ -16,7 +16,8 @@ use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use opendal::Operator;
 use output::{
-    catalog_commit_from_result, outcome_error, print_human_report, print_json_report, IngestSummary,
+    catalog_commit_from_result, outcome_error, print_human_report, print_json_report, IngestMode,
+    IngestSummary,
 };
 use std::collections::HashSet;
 use std::path::Path;
@@ -24,7 +25,9 @@ use walkdir::WalkDir;
 
 /// Result of processing a single file during ingest.
 enum IngestOutcome {
+    /// A new object: uploaded in ingest mode, or "would upload" in preview modes.
     Uploaded(Box<FileInfo>),
+    /// The content-addressed object already exists in the store.
     AlreadyExists,
 }
 
@@ -42,6 +45,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     let config = LakehouseConfig::default();
     let json_output = args.format == IngestOutputFormat::Json;
+    let mode = IngestMode::from_flags(args.dry_run, args.offline);
 
     if !json_output {
         println!();
@@ -57,12 +61,12 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         println!();
         println!("  Source:  {}", path.display());
         println!("  Target:  {}", config.warehouse);
-        println!("  Dry run: {}", if args.dry_run { "yes" } else { "no" });
+        println!("  Mode:    {}", mode.label());
         println!();
     }
 
-    // Check lakehouse connectivity first (unless dry-run)
-    if !args.dry_run {
+    // Check lakehouse connectivity first (skipped only by --dry-run --offline)
+    if mode.is_connected() {
         if !json_output {
             print!("  Checking lakehouse connectivity... ");
         }
@@ -92,15 +96,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     if files.is_empty() {
         return finalize_ingest(
-            IngestSummary::build(
-                args.dry_run,
-                0,
-                0,
-                0,
-                0,
-                &[],
-                catalog_commit_from_result(&None),
-            ),
+            IngestSummary::build(mode, 0, 0, 0, 0, &[], catalog_commit_from_result(&None)),
             None,
             args.format,
         );
@@ -127,8 +123,8 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     let mut errors = Vec::new();
     let mut total_bytes = 0u64;
 
-    // Create OpenDAL operator (only if not dry-run)
-    let operator = if !args.dry_run {
+    // Create OpenDAL operator (needed for existence checks and uploads)
+    let operator = if mode.is_connected() {
         Some(storage::create_operator(&config)?)
     } else {
         None
@@ -143,7 +139,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
             .to_string();
         pb.set_message(file_name.clone());
 
-        match process_file(file_path, &path, &config, operator.as_ref(), args.dry_run).await {
+        match process_file(file_path, &path, &config, operator.as_ref(), mode).await {
             Ok(IngestOutcome::Uploaded(info)) => {
                 uploaded_count += 1;
                 total_bytes += info.size_bytes;
@@ -160,8 +156,8 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     pb.finish_and_clear();
 
-    // Commit to Iceberg if not dry-run and there are new uploads
-    let commit_result = if !args.dry_run && !uploaded_files.is_empty() {
+    // Commit to Iceberg only in ingest mode and only when something was uploaded
+    let commit_result = if mode.writes() && !uploaded_files.is_empty() {
         if !json_output {
             print!("  Committing metadata to Iceberg catalog... ");
         }
@@ -186,7 +182,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     let catalog_commit = catalog_commit_from_result(&commit_result);
     finalize_ingest(
         IngestSummary::build(
-            args.dry_run,
+            mode,
             files.len() as u64,
             uploaded_count,
             exists_count,
@@ -323,13 +319,15 @@ fn collect_files(path: &Path, args: &IngestArgs) -> Result<Vec<std::path::PathBu
     Ok(files)
 }
 
-/// Process a single file: scan, hash, upload, return outcome.
+/// Process a single file: scan, hash, then depending on `mode` stop
+/// (`--dry-run --offline`), check existence only (`--dry-run`), or check and
+/// upload (ingest).
 async fn process_file(
     path: &Path,
     root_path: &Path,
     config: &LakehouseConfig,
     operator: Option<&Operator>,
-    dry_run: bool,
+    mode: IngestMode,
 ) -> Result<IngestOutcome> {
     // 1. Scan file for initial metadata
     let mut info = scan_file(path).await?;
@@ -358,7 +356,8 @@ async fn process_file(
     let object_uri = format!("s3://{}/{}", config.bucket, object_key);
     info.object_uri = Some(object_uri);
 
-    if dry_run {
+    if !mode.is_connected() {
+        // --dry-run --offline: no store access, so every candidate is "would upload".
         return Ok(IngestOutcome::Uploaded(Box::new(info)));
     }
 
@@ -372,6 +371,11 @@ async fn process_file(
 
     if exists {
         return Ok(IngestOutcome::AlreadyExists);
+    }
+
+    if !mode.writes() {
+        // --dry-run: existence is known, but nothing is uploaded.
+        return Ok(IngestOutcome::Uploaded(Box::new(info)));
     }
 
     // 5. Upload file
@@ -403,6 +407,7 @@ mod tests {
             max_size: None,
             limit: None,
             dry_run: true,
+            offline: true,
             format: IngestOutputFormat::Human,
         }
     }
@@ -413,7 +418,7 @@ mod tests {
         exists_count: u64,
         errors: &[String],
         total_bytes: u64,
-        dry_run: bool,
+        mode: IngestMode,
     ) -> Result<()> {
         finalize_with_format(
             commit_result,
@@ -421,7 +426,7 @@ mod tests {
             exists_count,
             errors,
             total_bytes,
-            dry_run,
+            mode,
             IngestOutputFormat::Human,
         )
     }
@@ -432,14 +437,14 @@ mod tests {
         exists_count: u64,
         errors: &[String],
         total_bytes: u64,
-        dry_run: bool,
+        mode: IngestMode,
         format: IngestOutputFormat,
     ) -> Result<()> {
         let candidates = uploaded_count + exists_count + errors.len() as u64;
         let catalog_commit = catalog_commit_from_result(&commit_result);
         finalize_ingest(
             IngestSummary::build(
-                dry_run,
+                mode,
                 candidates,
                 uploaded_count,
                 exists_count,
@@ -708,28 +713,28 @@ mod tests {
 
     #[test]
     fn finalize_commit_success() {
-        let result = finalize(Some(Ok(())), 3, 1, &[], 1024, false);
+        let result = finalize(Some(Ok(())), 3, 1, &[], 1024, IngestMode::Ingest);
         assert!(result.is_ok());
     }
 
     #[test]
     fn finalize_commit_failure() {
         let err = anyhow::anyhow!("catalog connection refused");
-        let result = finalize(Some(Err(err)), 3, 0, &[], 1024, false);
+        let result = finalize(Some(Err(err)), 3, 0, &[], 1024, IngestMode::Ingest);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("metadata commit"));
     }
 
     #[test]
     fn finalize_no_commit() {
-        let result = finalize(None, 0, 5, &[], 0, false);
+        let result = finalize(None, 0, 5, &[], 0, IngestMode::Ingest);
         assert!(result.is_ok());
     }
 
     #[test]
     fn finalize_partial_processing_failure() {
         let errors = vec!["unreadable.txt: permission denied".to_string()];
-        let result = finalize(Some(Ok(())), 2, 0, &errors, 1024, false);
+        let result = finalize(Some(Ok(())), 2, 0, &errors, 1024, IngestMode::Ingest);
 
         assert!(result.is_err());
         assert!(result
@@ -744,7 +749,7 @@ mod tests {
             "unreadable-a.txt: permission denied".to_string(),
             "unreadable-b.txt: permission denied".to_string(),
         ];
-        let result = finalize(None, 0, 0, &errors, 0, false);
+        let result = finalize(None, 0, 0, &errors, 0, IngestMode::Ingest);
 
         assert!(result.is_err());
         assert!(result
@@ -756,7 +761,7 @@ mod tests {
     #[test]
     fn finalize_dry_run_processing_failure() {
         let errors = vec!["unreadable.txt: permission denied".to_string()];
-        let result = finalize(None, 0, 0, &errors, 0, true);
+        let result = finalize(None, 0, 0, &errors, 0, IngestMode::DryRunOffline);
 
         assert!(result.is_err());
         assert!(result
@@ -774,10 +779,28 @@ mod tests {
             0,
             &[],
             1024,
-            false,
+            IngestMode::Ingest,
             IngestOutputFormat::Json,
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("metadata commit"));
+    }
+
+    #[test]
+    fn finalize_connected_dry_run_processing_failure() {
+        let errors = vec!["unreadable.txt: permission denied".to_string()];
+        let result = finalize(None, 1, 2, &errors, 0, IngestMode::DryRun);
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("ingest preview incomplete: 1 file(s) failed"));
+    }
+
+    #[test]
+    fn finalize_connected_dry_run_success_without_commit_is_ok() {
+        let result = finalize(None, 1, 2, &[], 12, IngestMode::DryRun);
+        assert!(result.is_ok());
     }
 }

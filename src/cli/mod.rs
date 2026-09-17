@@ -157,9 +157,15 @@ pub struct IngestArgs {
     #[arg(long)]
     pub limit: Option<usize>,
 
-    /// Dry run - show what would be done without uploading
+    /// Preview: check connectivity and which objects already exist in the
+    /// store, but never upload or commit. Fails if the lakehouse is unreachable.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// With --dry-run: skip the lakehouse entirely. Every candidate is reported
+    /// as "would upload" because existing objects are not checked.
+    #[arg(long, requires = "dry_run")]
+    pub offline: bool,
 
     /// Output format
     #[arg(long, value_enum, default_value = "human")]
