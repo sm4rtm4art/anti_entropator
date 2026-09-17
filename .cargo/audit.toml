@@ -11,19 +11,24 @@ ignore = [
     # Same dependency path and same fix as 0195; ignored together.
     #
     # Why ignored (temporary):
-    # - Transitive via reqsign 0.16.5 -> quick-xml 0.37.5 and
-    #   opendal 0.55 -> quick-xml 0.38.4
-    # - opendal 0.55 pins reqsign ^0.16.5; patched reqsign 0.20.2 (and
-    #   quick-xml >= 0.41) needs leaving that OpenDAL line
-    # - OpenDAL majors are already Dependabot-ignored pending
-    #   DataFusion / object_store compatibility
+    # - Transitive via opendal-core 0.57 -> quick-xml 0.39.4 (the S3 signing
+    #   path already resolves reqsign-aws-v4 3.3 -> quick-xml 0.41.0).
+    # - iceberg-storage-opendal 0.10.1 requires opendal ^0.57; opendal 0.58
+    #   is the first line on quick-xml ^0.41. Bumping opendal alone would add a
+    #   second opendal copy and leave the vulnerable 0.39.4 in the tree.
+    # - Exposure is limited, not zero: the affected parser only consumes S3
+    #   XML responses from the operator's configured object store (local
+    #   RustFS by default), so it needs a hostile or compromised endpoint.
     #
-    # This is not a fix. Remove these ignores when the OpenDAL / reqsign
-    # stack resolves to quick-xml >= 0.41, then re-run cargo audit.
+    # Exit criteria (verified 2026-09-17 against the upstream 0.11.x branch):
+    # - iceberg 0.11.0 (rc.2 at the time of writing) moves to opendal 0.58.
+    #   Bump iceberg* 0.11, opendal 0.58, object_store_opendal 0.58.0,
+    #   datafusion 54 together, re-run `cargo audit`, then delete both ignores.
     #
-    # Revalidated 2026-09-13 during S6: Cargo.lock still resolves reqsign
-    # 0.16.5 and quick-xml 0.37.5 / 0.38.4. Review again during the compatible
-    # OpenDAL stack-major evaluation and before the v0.3.0 release tag.
+    # Related but not a cargo-audit finding: the Dependabot alert for
+    # transitive `thrift 0.17` (GHSA-2f9f-gq7v-9h6m, moderate) via parquet 58
+    # has no RUSTSEC id. parquet 59 dropped the thrift crate; that arrives with
+    # iceberg 0.12 (arrow/parquet 59, datafusion 55). Tracked in CHANGELOG.
     "RUSTSEC-2026-0195",
     "RUSTSEC-2026-0194",
 ]
