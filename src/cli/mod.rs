@@ -157,16 +157,15 @@ pub struct IngestArgs {
     #[arg(long)]
     pub limit: Option<usize>,
 
-    /// Offline preview: list candidate files without contacting the lakehouse.
-    /// Every candidate is reported as "would upload"; existing objects are not
-    /// checked. Mutually exclusive with --plan.
-    #[arg(long, conflicts_with = "plan")]
+    /// Preview: check connectivity and which objects already exist in the
+    /// store, but never upload or commit. Fails if the lakehouse is unreachable.
+    #[arg(long)]
     pub dry_run: bool,
 
-    /// Connected preview: check connectivity and which objects already exist in
-    /// the store, but never upload or commit. Mutually exclusive with --dry-run.
-    #[arg(long, conflicts_with = "dry_run")]
-    pub plan: bool,
+    /// With --dry-run: skip the lakehouse entirely. Every candidate is reported
+    /// as "would upload" because existing objects are not checked.
+    #[arg(long, requires = "dry_run")]
+    pub offline: bool,
 
     /// Output format
     #[arg(long, value_enum, default_value = "human")]

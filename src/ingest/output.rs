@@ -14,32 +14,32 @@ pub const INGEST_SUMMARY_FORMAT_VERSION: u32 = 1;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IngestMode {
-    /// Offline candidate preview: no network, no existence checks.
+    /// `--dry-run --offline`: candidate preview with no network and no
+    /// existence checks.
+    DryRunOffline,
+    /// `--dry-run`: connected preview with connectivity and existence checks,
+    /// no writes or commits.
     DryRun,
-    /// Connected preview: connectivity and existence checks, no writes or commits.
-    Plan,
     /// Full ingest: upload new objects and commit catalog metadata.
     Ingest,
 }
 
 impl IngestMode {
-    /// Map the mutually exclusive CLI flags onto a mode.
+    /// Map the CLI flags onto a mode.
     ///
-    /// clap enforces that `dry_run` and `plan` are never both set; `dry_run`
-    /// wins here only so the mapping stays total.
-    pub fn from_flags(dry_run: bool, plan: bool) -> Self {
-        if dry_run {
-            Self::DryRun
-        } else if plan {
-            Self::Plan
-        } else {
-            Self::Ingest
+    /// clap enforces `--offline` requires `--dry-run`; an `offline` without
+    /// `dry_run` is treated as a plain ingest only so the mapping stays total.
+    pub fn from_flags(dry_run: bool, offline: bool) -> Self {
+        match (dry_run, offline) {
+            (false, _) => Self::Ingest,
+            (true, true) => Self::DryRunOffline,
+            (true, false) => Self::DryRun,
         }
     }
 
     /// True when the lakehouse is contacted (connectivity + existence checks).
     pub fn is_connected(self) -> bool {
-        !matches!(self, Self::DryRun)
+        !matches!(self, Self::DryRunOffline)
     }
 
     /// True when objects are uploaded and metadata is committed.
@@ -50,27 +50,18 @@ impl IngestMode {
     /// Operator-facing label for the run header.
     pub fn label(self) -> &'static str {
         match self {
-            Self::DryRun => "dry-run (offline preview)",
-            Self::Plan => "plan (connected preview)",
+            Self::DryRunOffline => "dry-run, offline (store not checked)",
+            Self::DryRun => "dry-run (store checked, nothing written)",
             Self::Ingest => "ingest",
         }
     }
 
-    /// Flag that switches this preview mode off; `None` for a real ingest.
-    fn preview_flag(self) -> Option<&'static str> {
+    /// Flags that switch this preview mode off; `None` for a real ingest.
+    fn preview_flags(self) -> Option<&'static str> {
         match self {
+            Self::DryRunOffline => Some("--dry-run --offline"),
             Self::DryRun => Some("--dry-run"),
-            Self::Plan => Some("--plan"),
             Self::Ingest => None,
-        }
-    }
-
-    /// Noun used in preview failure messages.
-    fn preview_noun(self) -> &'static str {
-        match self {
-            Self::DryRun => "preview",
-            Self::Plan => "plan",
-            Self::Ingest => "ingest",
         }
     }
 }
@@ -175,7 +166,7 @@ pub fn print_human_report(summary: &IngestSummary) {
     if summary.mode.is_connected() {
         println!("  Already in store: {} files", summary.already_exists);
     } else {
-        println!("  Already in store: not checked (offline preview)");
+        println!("  Already in store: not checked (--offline)");
     }
     println!("  Errors:          {} files", summary.failed);
     println!();
@@ -193,14 +184,14 @@ pub fn print_human_report(summary: &IngestSummary) {
 
     match summary.status {
         IngestStatus::Success | IngestStatus::Incomplete if !summary.mode.writes() => {
-            let flag = summary
+            let flags = summary
                 .mode
-                .preview_flag()
-                .expect("preview modes always have a flag");
+                .preview_flags()
+                .expect("preview modes always have flags");
             println!(
                 "{}",
                 style(format!(
-                    "  Preview only - no files were uploaded. Remove {flag} to actually ingest."
+                    "  Dry run - no files were uploaded. Remove {flags} to actually ingest."
                 ))
                 .dim()
             );
@@ -243,8 +234,7 @@ pub fn outcome_error(summary: &IngestSummary, commit_result: Option<Result<()>>)
                 ))
             } else {
                 Err(anyhow::anyhow!(
-                    "ingest {} incomplete: {} file(s) failed",
-                    summary.mode.preview_noun(),
+                    "ingest preview incomplete: {} file(s) failed",
                     summary.failed
                 ))
             }
@@ -447,29 +437,34 @@ mod tests {
 
     #[test]
     fn mode_from_flags_maps_each_flag() {
+        assert_eq!(
+            IngestMode::from_flags(true, true),
+            IngestMode::DryRunOffline
+        );
         assert_eq!(IngestMode::from_flags(true, false), IngestMode::DryRun);
-        assert_eq!(IngestMode::from_flags(false, true), IngestMode::Plan);
         assert_eq!(IngestMode::from_flags(false, false), IngestMode::Ingest);
+        // clap forbids this combination; the mapping still stays total.
+        assert_eq!(IngestMode::from_flags(false, true), IngestMode::Ingest);
     }
 
     #[test]
     fn mode_capabilities_are_ordered() {
-        // dry-run: offline, no writes
-        assert!(!IngestMode::DryRun.is_connected());
+        // dry-run --offline: no network, no writes
+        assert!(!IngestMode::DryRunOffline.is_connected());
+        assert!(!IngestMode::DryRunOffline.writes());
+        // dry-run: connected, no writes
+        assert!(IngestMode::DryRun.is_connected());
         assert!(!IngestMode::DryRun.writes());
-        // plan: connected, no writes
-        assert!(IngestMode::Plan.is_connected());
-        assert!(!IngestMode::Plan.writes());
         // ingest: connected and writes
         assert!(IngestMode::Ingest.is_connected());
         assert!(IngestMode::Ingest.writes());
     }
 
     #[test]
-    fn mode_serializes_snake_case_including_plan() {
+    fn mode_serializes_snake_case_for_every_variant() {
         for (mode, expected) in [
+            (IngestMode::DryRunOffline, "dry_run_offline"),
             (IngestMode::DryRun, "dry_run"),
-            (IngestMode::Plan, "plan"),
             (IngestMode::Ingest, "ingest"),
         ] {
             let summary =
@@ -480,9 +475,9 @@ mod tests {
     }
 
     #[test]
-    fn plan_summary_keeps_existing_counts_and_never_commits() {
+    fn connected_dry_run_summary_keeps_existing_counts_and_never_commits() {
         let summary = IngestSummary::build(
-            IngestMode::Plan,
+            IngestMode::DryRun,
             3,
             1,
             2,
@@ -490,7 +485,7 @@ mod tests {
             &[],
             CatalogCommitStatus::NotAttempted,
         );
-        assert_eq!(summary.mode, IngestMode::Plan);
+        assert_eq!(summary.mode, IngestMode::DryRun);
         assert_eq!(summary.status, IngestStatus::Success);
         assert_eq!(summary.uploaded, 1);
         assert_eq!(summary.already_exists, 2);
@@ -498,10 +493,10 @@ mod tests {
     }
 
     #[test]
-    fn outcome_error_reports_plan_failure_with_plan_wording() {
+    fn outcome_error_reports_offline_preview_failure() {
         let errors = sample_errors();
         let summary = IngestSummary::build(
-            IngestMode::Plan,
+            IngestMode::DryRunOffline,
             1,
             0,
             0,
@@ -512,6 +507,6 @@ mod tests {
         let err = outcome_error(&summary, None).unwrap_err();
         assert!(err
             .to_string()
-            .contains("ingest plan incomplete: 1 file(s) failed"));
+            .contains("ingest preview incomplete: 1 file(s) failed"));
     }
 }

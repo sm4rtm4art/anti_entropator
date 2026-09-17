@@ -61,8 +61,8 @@ cargo run -- doctor
 docker compose up -d
 cargo run -- init
 cargo run -- scan <path>
-cargo run -- ingest <path> --dry-run # offline preview, store not checked
-cargo run -- ingest <path> --plan    # connected preview, no uploads/commits
+cargo run -- ingest <path> --dry-run           # checks store, writes nothing
+cargo run -- ingest <path> --dry-run --offline # no network, store not checked
 cargo run -- ingest <path>
 # Canonical Iceberg table (preferred in docs / agent examples):
 cargo run -- query "SELECT * FROM iceberg.anti_entropator.file_catalog LIMIT 10"

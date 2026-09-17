@@ -45,7 +45,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     let config = LakehouseConfig::default();
     let json_output = args.format == IngestOutputFormat::Json;
-    let mode = IngestMode::from_flags(args.dry_run, args.plan);
+    let mode = IngestMode::from_flags(args.dry_run, args.offline);
 
     if !json_output {
         println!();
@@ -65,7 +65,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         println!();
     }
 
-    // Check lakehouse connectivity first (skipped only by the offline dry-run)
+    // Check lakehouse connectivity first (skipped only by --dry-run --offline)
     if mode.is_connected() {
         if !json_output {
             print!("  Checking lakehouse connectivity... ");
@@ -319,8 +319,9 @@ fn collect_files(path: &Path, args: &IngestArgs) -> Result<Vec<std::path::PathBu
     Ok(files)
 }
 
-/// Process a single file: scan, hash, then depending on `mode` stop (dry-run),
-/// check existence only (plan), or check and upload (ingest).
+/// Process a single file: scan, hash, then depending on `mode` stop
+/// (`--dry-run --offline`), check existence only (`--dry-run`), or check and
+/// upload (ingest).
 async fn process_file(
     path: &Path,
     root_path: &Path,
@@ -356,7 +357,7 @@ async fn process_file(
     info.object_uri = Some(object_uri);
 
     if !mode.is_connected() {
-        // Offline dry-run: no store access, so every candidate is "would upload".
+        // --dry-run --offline: no store access, so every candidate is "would upload".
         return Ok(IngestOutcome::Uploaded(Box::new(info)));
     }
 
@@ -373,7 +374,7 @@ async fn process_file(
     }
 
     if !mode.writes() {
-        // Connected plan: existence is known, but nothing is uploaded.
+        // --dry-run: existence is known, but nothing is uploaded.
         return Ok(IngestOutcome::Uploaded(Box::new(info)));
     }
 
@@ -406,7 +407,7 @@ mod tests {
             max_size: None,
             limit: None,
             dry_run: true,
-            plan: false,
+            offline: true,
             format: IngestOutputFormat::Human,
         }
     }
@@ -760,7 +761,7 @@ mod tests {
     #[test]
     fn finalize_dry_run_processing_failure() {
         let errors = vec!["unreadable.txt: permission denied".to_string()];
-        let result = finalize(None, 0, 0, &errors, 0, IngestMode::DryRun);
+        let result = finalize(None, 0, 0, &errors, 0, IngestMode::DryRunOffline);
 
         assert!(result.is_err());
         assert!(result
@@ -786,20 +787,20 @@ mod tests {
     }
 
     #[test]
-    fn finalize_plan_processing_failure() {
+    fn finalize_connected_dry_run_processing_failure() {
         let errors = vec!["unreadable.txt: permission denied".to_string()];
-        let result = finalize(None, 1, 2, &errors, 0, IngestMode::Plan);
+        let result = finalize(None, 1, 2, &errors, 0, IngestMode::DryRun);
 
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("ingest plan incomplete: 1 file(s) failed"));
+            .contains("ingest preview incomplete: 1 file(s) failed"));
     }
 
     #[test]
-    fn finalize_plan_success_without_commit_is_ok() {
-        let result = finalize(None, 1, 2, &[], 12, IngestMode::Plan);
+    fn finalize_connected_dry_run_success_without_commit_is_ok() {
+        let result = finalize(None, 1, 2, &[], 12, IngestMode::DryRun);
         assert!(result.is_ok());
     }
 }

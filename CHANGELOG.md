@@ -31,10 +31,11 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
 - ADR-009 defines `file_catalog` as an append-only file observation log with
   explicit blob, observation, and ingest-run semantics (design accepted, not
   yet implemented).
-- `ingest --plan`: connected preview that checks connectivity and which
-  objects already exist without uploading or committing. `--dry-run` remains
-  the offline preview and now states that the store was not checked; the two
-  flags are mutually exclusive. The JSON summary `mode` gains the value `plan`.
+- `ingest --dry-run` is now a connected preview: it checks connectivity and
+  which objects already exist, uploads nothing, commits nothing, and fails if
+  the lakehouse is unreachable. `ingest --dry-run --offline` restores the
+  previous no-network behavior and states that the store was not checked. The
+  JSON summary `mode` values are `dry_run`, `dry_run_offline`, and `ingest`.
 
 ### Changed
 
