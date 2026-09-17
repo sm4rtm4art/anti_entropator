@@ -55,14 +55,21 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   synchronized for the public local-first scope.
 - README landing-page narrative updated to reflect the current local-first
   scope, planned work, and Makefile quick start.
+- ADR-001 to ADR-005 gained `Status` lines and dated `Current State` sections;
+  stale or unverifiable claims were corrected or removed (ADR-002 vendor
+  benchmark and star count, MinIO now recorded as archived; ADR-003 duplicated
+  schema replaced by a pointer to `src/lakehouse/schema.rs`, table recorded
+  as unpartitioned, crate version corrected; ADR-004 "planned" labels on
+  shipped commit/query steps removed). Decisions are unchanged.
 - CI caches and runner cleanup were bounded to reduce cross-job disk pressure.
 
 ### Removed
 
-- The `sql`, `duplicates`, and `merge` placeholder subcommands. They only
-  exited non-zero with "not yet implemented"; the binary now contains
-  implemented commands only and rejects these names as unknown. The features
-  stay on the roadmap.
+- ADR-007 (`dataflow-rs` as an optional second ingest engine behind
+  `--engine`) is superseded: the crate published under that name is a
+  JSONLogic rules engine, not a DAG executor, and the ADR's reference link is
+  dead. Roadmap M4 now delivers bounded stage concurrency and per-stage tracing
+  inside the single procedural pipeline. Nothing shipped was removed.
 
 ### Security
 
@@ -79,8 +86,8 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
 
 - Ingest row-grain, mutation safety, durable recovery, and reconciliation are
   tracked in `.local/followup-v0.3-stabilization-plan.md`.
-- Iceberg `expire`/`vacuum` maintenance and `dataflow-rs` orchestration remain
-  required roadmap work and are not shipped.
+- Iceberg `expire`/`vacuum` maintenance and bounded ingest stage concurrency
+  (M4) remain required roadmap work and are not shipped.
 - Active multi-architecture publication, distroless promotion, and
   SBOM/provenance enforcement remain gated follow-ups.
 - `RUSTSEC-2026-0195` and `RUSTSEC-2026-0194` remain temporarily ignored while
