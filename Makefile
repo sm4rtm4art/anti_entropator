@@ -30,8 +30,8 @@ help:
 
 setup:
 	@test -f .env || cp env.example .env
-	@mkdir -p data/rustfs logs/rustfs data/postgres
-	@chown -R 10001:10001 data/rustfs logs/rustfs || true
+	@mkdir -p logs/rustfs data/postgres
+	@chown -R 10001:10001 logs/rustfs || true
 	@echo "Prepared local directories."
 	@echo "Review .env and replace all CHANGE_ME values before starting services."
 

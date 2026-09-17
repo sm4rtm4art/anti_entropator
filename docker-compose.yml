@@ -14,10 +14,15 @@
 #   - Ports are bound to ${ANTI_BIND_HOST:-127.0.0.1} by default (local-only).
 #   - Do not set ANTI_BIND_HOST=0.0.0.0 without a reviewed deployment profile.
 #
-# Note: RustFS runs as non-root user (UID 10001).
-# Volume directories must have correct permissions:
-#   mkdir -p data/rustfs logs/rustfs data/postgres
-#   chown -R 10001:10001 data/rustfs logs/rustfs
+# Storage note:
+#   - RustFS data lives in the named volume `rustfs-data`, not a bind mount.
+#     RustFS 1.0.0 requires a direct-attached POSIX filesystem; Docker Desktop
+#     bind mounts (FUSE/virtiofs on macOS) fail its durable-rename path with
+#     EBADF (verified 2026-09-17). Named volumes are ext4 inside the VM.
+#   - Postgres keeps a bind mount at ./data/postgres; RustFS logs at ./logs/rustfs.
+#   - RustFS runs as UID 10001; the named volume inherits image ownership, so
+#     only the log directory needs `chown -R 10001:10001 logs/rustfs`.
+#   - Reset everything: `docker compose down -v && rm -rf data/postgres`.
 
 name: anti_entropator
 
@@ -29,27 +34,30 @@ x-lakekeeper-db: &lakekeeper-db
 services:
   # S3-compatible object storage
   rustfs:
-    image: rustfs/rustfs:1.0.0-beta.2
+    image: rustfs/rustfs:1.0.0
     ports:
       - "${ANTI_BIND_HOST:-127.0.0.1}:${RUSTFS_API_PORT:-8200}:9000" # S3 API (Organized port)
       - "${ANTI_BIND_HOST:-127.0.0.1}:${RUSTFS_CONSOLE_PORT:-8210}:9001" # Web Console (Organized port)
     volumes:
-      - ./data/rustfs:/data
+      - rustfs-data:/data
       - ./logs/rustfs:/logs
     environment:
       # RustFS uses ACCESS_KEY/SECRET_KEY variable names.
       RUSTFS_ACCESS_KEY: ${RUSTFS_ACCESS_KEY:?set_in_.env}
       RUSTFS_SECRET_KEY: ${RUSTFS_SECRET_KEY:?set_in_.env}
     healthcheck:
-      # RustFS exposes /health for readiness checks.
+      # /health is liveness only: it returned 200 while 1.0.0 was stuck in a
+      # store-init restart loop (2026-09-17). /health/ready reflects storage
+      # quorum and is what S3 clients need; it exists on 1.0.0-beta.2 and 1.0.0.
       test:
         [
           "CMD-SHELL",
-          'CODE=$$(curl -s -o /dev/null -w ''%{http_code}'' http://localhost:9000/health); [ "$$CODE" = "200" ]',
+          'CODE=$$(curl -s -o /dev/null -w ''%{http_code}'' http://localhost:9000/health/ready); [ "$$CODE" = "200" ]',
         ]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 20s
     restart: unless-stopped
 
   # Postgres backend for Lakekeeper catalog
@@ -112,6 +120,9 @@ services:
       retries: 3
       start_period: 5s
     restart: unless-stopped
+
+volumes:
+  rustfs-data:
 
 networks:
   default:
