@@ -14,10 +14,9 @@ flowchart LR
         REPL["💬  SQL REPL (planned)"]
     end
 
-    subgraph OR["🔀  Orchestration"]
+    subgraph OR["🔁  Ingest Pipeline"]
         direction TB
-        PROC["🔁  Procedural (current)"]
-        DFRS["🌊  dataflow-rs (planned)"]
+        PROC["Scan → Hash → Upload → Commit (sequential today)"]
     end
 
     subgraph CP["⚡  Compute"]
@@ -47,14 +46,14 @@ flowchart LR
 
     PROC -->|"raw bytes"| IO
     PROC -->|"commit snapshot"| ICE
-    DFRS -.->|"planned"| IO
-    DFRS -.->|"planned"| ICE
 
     DF -->|"read / write"| IO
     ICE -->|manifests| IO
 ```
 
-> **Note:** The dual-engine orchestration (procedural + dataflow-rs) is planned for v0.3.0 M4.
+> **Note:** There is one ingest engine. Bounded stage concurrency and per-stage
+> tracing are roadmap M4; the dual-engine dataflow-rs plan was dropped
+> ([ADR-007](../adr/ADR-007-dataflow-rs-orchestration.md), superseded 2026-09-17).
 > The unified OpenDAL I/O boundary is implemented (M1 complete).
 > This project is local-first; shared or public deployment requires additional security controls.
 > See [Roadmap v0.3.0](../ROADMAP-v0.3.0.md) for milestone status.
@@ -79,12 +78,16 @@ flowchart LR
 - **duplicates**: Placeholder command for duplicate management workflow
 - **merge**: Placeholder command for ingest branch merge workflow
 
-### Orchestration Layer (v0.3.0)
+### Pipeline Layer (v0.3.0)
 
-- **Procedural engine**: Current sequential pipeline (only engine shipped today)
-- **dataflow-rs engine**: **Planned** optional DAG orchestration (see
-  [ADR-007](../adr/ADR-007-dataflow-rs-orchestration.md)). No `--engine`
-  CLI flag is exposed yet; do not treat dataflow as available.
+- **Single procedural engine**: `Scan → Hash → Upload → Commit`, sequential
+  per file today.
+- **Planned (M4)**: the same stages connected by bounded `tokio` channels with
+  per-stage concurrency limits and `tracing` spans, built alongside the S6A
+  streaming-upload rewrite. There is no `--engine` flag; ADR-007's
+  dataflow-rs second engine was
+  [superseded](../adr/ADR-007-dataflow-rs-orchestration.md) because the crate
+  is a JSONLogic rules engine, not a DAG executor.
 
 ### I/O Layer
 

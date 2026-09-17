@@ -59,8 +59,10 @@
   remove when OpenDAL/`reqsign` resolve to `quick-xml >= 0.41` (S6 re-validates).
 - Dependabot `thrift` advisory stays open — transitive via Parquet/DataFusion;
   no in-range bump; revisit with a stack-major evaluation.
-- **dataflow-rs** remains in v0.3 scope (M4 / ADR-007) but is **not shipped**;
-  ingest is procedural only today (`--engine` not available yet).
+- **dataflow-rs is off the table** (ADR-007 superseded 2026-09-17: the crate
+  is a JSONLogic rules engine, not a DAG executor). M4 stage concurrency and
+  observability are delivered inside the single procedural engine with
+  `tokio` stages; there is no `--engine` flag and none is planned.
 - Query identity reminder: Iceberg table is `file_catalog`; `FROM files` is CLI
   sugar rewritten by `query` to `iceberg.anti_entropator.file_catalog`.
 
@@ -91,7 +93,7 @@
 - Remaining direct catalog REST helper coverage for `X-Project-Id` is tracked in S1 stabilization queue and is not considered complete until those paths are fixed and tested.
 - Added storage contract tests (write/read/exists/list/delete against memory backend)
 - Aligned `lakekeeper-migrate` image to `latest-main` to fix schema mismatch
-- Added [ADR-006](adr/ADR-006-opendal-unified-io.md) (OpenDAL) and [ADR-007](adr/ADR-007-dataflow-rs-orchestration.md) (dataflow-rs)
+- Added [ADR-006](adr/ADR-006-opendal-unified-io.md) (OpenDAL) and [ADR-007](adr/ADR-007-dataflow-rs-orchestration.md) (dataflow-rs; superseded 2026-09-17)
 - Full end-to-end verified: `init` -> `ingest` (with Iceberg commit) -> `query` (DataFusion reads Parquet from RustFS)
 
 ### Test Coverage (as of 2026-02-21)
@@ -126,13 +128,10 @@ flowchart LR
         REPL["💬  SQL REPL"]:::ui
     end
 
-    %% ── Column 2 · Routing ───────────────────────────────────────────────────
-    subgraph OR["🔀  Orchestration"]
+    %% ── Column 2 · Pipeline ──────────────────────────────────────────────────
+    subgraph OR["🔁  Ingest Pipeline"]
         direction TB
-        SWITCH{{"⚙️  --engine"}}:::router
-        PROC["🔁  Procedural"]:::ui
-        DFRS["🌊  dataflow-rs"]:::ui
-        SWITCH --> PROC & DFRS
+        PROC["Scan → Hash → Upload → Commit\nbounded tokio stages"]:::ui
     end
 
     %% ── Column 3 · Compute ───────────────────────────────────────────────────
@@ -154,12 +153,12 @@ flowchart LR
     end
 
     %% ── Flow ─────────────────────────────────────────────────────────────────
-    CLI -->|ingest / scan| SWITCH
+    CLI -->|ingest / scan| PROC
     CLI -->|query| DF
     REPL --> DF
 
-    PROC & DFRS -->|raw bytes| IO
-    PROC & DFRS -->|commit snapshot| ICE
+    PROC -->|raw bytes| IO
+    PROC -->|commit snapshot| ICE
 
     DF -->|read / write| IO
     ICE -->|manifests| IO
@@ -247,23 +246,29 @@ flowchart LR
 
 ---
 
-### M4: Orchestration & Observability (incremental DAG adoption)
+### M4: Pipeline Concurrency & Observability (single engine)
 
-**Goal:** Introduce DAG-based orchestration without blocking release stability.
+**Goal:** Bounded, observable stage concurrency in the one procedural
+pipeline. No second execution engine.
 
-#### Strategy: Dual Engine (safe rollout)
+> Amended 2026-09-17: ADR-007 (dataflow-rs, dual engine, `--engine`) is
+> superseded. The named crate is a JSONLogic rules engine, not a DAG executor.
+> See the ADR for evidence.
 
-- Keep procedural pipeline as default.
-- Introduce dataflow-rs pipeline behind:
-  - `--engine procedural|dataflow` OR
-  - feature flag `--features orchestration`.
+#### Strategy
+
+- `Scan → Hash → Upload → Commit` stay as stages of the single pipeline,
+  connected by bounded `tokio::sync::mpsc` channels with explicit per-stage
+  concurrency limits (`JoinSet` / `Semaphore`).
+- The stage wiring is built during the S6A item 3 upload rewrite (streaming
+  hash, temp-then-finalize, byte/concurrency budgets), so M4 stops being a
+  separate engine project and becomes the observability layer on top of it.
 
 #### Tasks
 
-- Integrate `dataflow-rs` as an optional execution engine:
-  - Scan → Hash → Upload → Commit as a DAG.
+- Bounded stage channels and concurrency limits (lands with S6A item 3).
 - Add structured spans (`tracing`) per stage (supports flamegraphs).
-- Add `indicatif` progress bars (multi-thread friendly).
+- Keep `indicatif` progress bars multi-thread friendly.
 - Add a single “pipeline event” schema (start/stop/error counters) for consistent logging/metrics.
 
 ---
@@ -272,7 +277,7 @@ flowchart LR
 
 **Goal:** Prepare for release and improve contributor experience.
 
-- Update README with new architecture (procedural + dataflow engine, unified IO).
+- Update README with the current architecture (single staged pipeline, unified IO).
 - Document all CLI commands with examples.
 - Add troubleshooting section (common errors).
 - **Add “maintenance safety” docs:** Explicitly define the design semantics of `vacuum` (live references) and `expire`.
@@ -307,7 +312,7 @@ flowchart LR
 1. **Test coverage ≥ 50%** (up from 37%).
 2. **Unified Storage:** Core I/O exclusively uses OpenDAL; DataFusion reads through `object_store_opendal`.
 3. **Maintenance:** `maintenance expire` + `maintenance vacuum` exist with strict safety flags (`--dry-run`, `--apply`, `--older-than`).
-4. **Orchestration:** dataflow-rs engine available **without removing** procedural ingest.
+4. **Pipeline:** ingest stages run with bounded concurrency and per-stage `tracing` spans (single engine; ADR-007 superseded).
 5. **CI passes** with `cargo test`, `cargo clippy`, `cargo fmt --check`.
 
 > Execution note: S1-S4 are prerequisites for M3/M4 implementation work, and S5 must complete before tagging `v0.3.0`; all success criteria above remain required.
@@ -323,7 +328,7 @@ flowchart LR
 | P0       | S1 correctness queue (ingest filters, SQL rewrite, ingest counters) | Medium | **Next** | Defined in local stabilization plan; must land before M3/M4 resume |
 | P1       | Integration test: Ingest -> Query (containers)   | Medium | **Next**    | Builds on stable OpenDAL boundary and S1 correctness fixes |
 | P1       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | Pending     | Required for `v0.3.0` success criteria                    |
-| P2       | Introduce dataflow-rs engine behind flag/switch  | Large  | Pending     | In v0.3 scope; not shipped yet (procedural only today)   |
+| P2       | Bounded tokio stages + per-stage spans (M4)      | Medium | Pending     | Folded into S6A item 3; dataflow-rs dropped (ADR-007 superseded) |
 | ~~P2~~   | ~~S5 CI/CD hardening (Trivy + multi-arch path)~~ | ~~Medium~~ | **Done** | S5 closed; residual multi-arch/Trivy enforcement deferred; S6 next |
 | P2       | Add `optimize plan` (report-only)                | Small  | Pending     |                                                          |
 | P2       | Refactor `files_to_batch` into helpers           | Small  | Deferred    | Already clean with `BatchColumnsBuilder`                 |

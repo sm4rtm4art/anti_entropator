@@ -1,8 +1,61 @@
 # ADR-007: dataflow-rs as Optional Orchestration Engine
 
-Status: **decided, not yet implemented.** The `--engine` flag and dataflow
-path are not available in the CLI today; the procedural pipeline is the only
-shipped engine.
+Status: **superseded on 2026-09-17; never implemented.** No `--engine` flag or
+dataflow path was ever shipped; the procedural pipeline is the only engine.
+
+## Supersession (2026-09-17)
+
+### Why
+
+This ADR chose `dataflow-rs` as a DAG execution engine for the
+`Scan → Hash → Upload → Commit` byte pipeline, assuming typed edges, stage
+parallelism, and backpressure. Verification before starting M4 showed the
+assumption does not hold:
+
+- The reference link below (`github.com/dataflow-rs/dataflow-rs`) returns
+  HTTP 404.
+- The only crate named `dataflow-rs` on crates.io (3.x, repository
+  `GoPlasmatic/dataflow-rs`) describes itself as "a lightweight rules engine
+  for building IFTTT-style automation ... JSONLogic conditions, execute
+  actions, and chain workflows". It evaluates JSON messages against rule
+  chains. It is not a general streaming or DAG executor and has no typed
+  byte-stream edges or bounded stage concurrency.
+
+Adopting a JSON rules engine for a file-streaming pipeline would add a
+dependency, a second code path, and a dual-engine test surface without
+delivering the capability this ADR wanted.
+
+### Replacement decision
+
+The M4 goals stand; the mechanism changes:
+
+- **Stage concurrency and bounds** are delivered inside the procedural engine
+  using `tokio` primitives (bounded `mpsc` channels between stages, `JoinSet`
+  or `Semaphore` for per-stage concurrency limits). This is built as part of
+  the S6A item 3 upload rewrite, which already requires streaming hash,
+  temp-then-finalize writes, and explicit byte/concurrency budgets.
+- **Observability** is delivered with `tracing` spans per stage and one
+  pipeline-event schema (start/stop/error counters), independent of any
+  engine.
+- **No `--engine` flag.** There is one engine. Roadmap, README, and rules that
+  mention a dual-engine strategy are amended in the same change as this note.
+- A DAG library is reconsidered only if the pipeline grows past four stages
+  and the `tokio`-stage design shows concrete limits. That would be a new ADR
+  with a verified crate, not a revival of this one.
+
+### Consequences of superseding
+
+- Positive: no new dependency; no dual-engine equivalence testing; M4 work
+  merges into the S6A correctness track instead of following it.
+- Negative: stage wiring is hand-written; adding a stage means editing the
+  pipeline rather than adding a node. Acceptable at four stages.
+
+The original text is kept below as the historical record of the decision and
+its reasoning.
+
+---
+
+## Original decision (historical, 2026-03)
 
 ## Context
 
@@ -15,6 +68,8 @@ The current ingest pipeline is a sequential (procedural) flow: traverse → hash
 We want to introduce DAG-based orchestration without destabilizing the working pipeline.
 
 ## Decision
+
+_(Superseded — see above. Retained verbatim.)_
 
 We will integrate **dataflow-rs** as an optional execution engine, planned to
 be available behind `--engine dataflow` (or a feature flag
@@ -54,5 +109,10 @@ This allows side-by-side comparison and safe rollout without blocking releases.
 
 ## References
 
-- [dataflow-rs](https://github.com/dataflow-rs/dataflow-rs)
+- [dataflow-rs](https://github.com/dataflow-rs/dataflow-rs) — original link;
+  returns 404 as of 2026-09-17
+- [`dataflow-rs` on crates.io](https://crates.io/crates/dataflow-rs) — the
+  JSONLogic rules engine actually published under that name
 - [Roadmap v0.3.0 - M4](../ROADMAP-v0.3.0.md)
+- [ADR-009: File Observation and Ingest State Model](ADR-009-file-observation-and-ingest-state-model.md)
+  — the correctness track that now carries the stage-concurrency work

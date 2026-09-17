@@ -63,8 +63,9 @@ alwaysApply: false
 ## Architecture And Diagrams
 
 - Label diagrams `current`, `target`, or `current with planned elements`.
-- Do not put `dataflow-rs`, `--engine`, maintenance commands, or full SQL REPL
-  in current-state diagrams unless marked planned.
+- Do not put bounded stage concurrency, maintenance commands, or full SQL REPL
+  in current-state diagrams unless marked planned. Do not put `dataflow-rs` or
+  `--engine` in any diagram; ADR-007 is superseded.
 - Keep OpenDAL, Lakekeeper, RustFS, DataFusion, Iceberg, and Postgres roles
   consistent with `.cursor/rules/project-architecture.mdc`.
 - Prefer short-label Mermaid for multi-step flows.

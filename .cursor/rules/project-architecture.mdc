@@ -18,7 +18,7 @@ Phase: **v0.3 stabilization**.
 | Catalog DB | Postgres (Lakekeeper backend only) | SQLite; CLI/query must not use Postgres |
 | Local orchestration | Docker Compose | Kubernetes; bare `docker run` as docs default |
 | SQL queries | DataFusion (over Iceberg) | Direct Postgres queries |
-| Pipeline engine | Procedural (current) | `dataflow-rs`, `--engine` (not shipped) |
+| Pipeline engine | Single procedural engine; bounded `tokio` stages planned (M4) | `dataflow-rs` (ADR-007 superseded: it is a JSONLogic rules engine), `--engine`, any second engine |
 
 ## Lakehouse identity
 
@@ -43,7 +43,8 @@ Allowed adapters over that operator: `object_store_opendal`,
 ## Hard Stops
 
 - Do not add MinIO, Nessie, JVM deps, or Kubernetes guidance for v0.3.
-- Do not present planned features as implemented (`dataflow-rs`, SQL REPL, etc.).
+- Do not present planned features as implemented (bounded stage concurrency, SQL REPL, etc.).
+- Do not reintroduce `dataflow-rs` or a dual-engine `--engine` switch; ADR-007 is superseded.
 - Do not bypass OpenDAL for object-store read, write, list, head, or delete.
 
 ## Allowed HTTP boundaries
