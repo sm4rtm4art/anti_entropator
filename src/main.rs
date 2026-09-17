@@ -22,9 +22,10 @@ use cli::{Cli, Commands};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
+    // Initialize tracing. Diagnostics go to stderr so stdout stays reserved for
+    // command output; `--format json` consumers parse stdout as one document.
     tracing_subscriber::registry()
-        .with(fmt::layer())
+        .with(fmt::layer().with_writer(std::io::stderr))
         .with(EnvFilter::from_default_env().add_directive("anti_entropator=info".parse()?))
         .init();
 

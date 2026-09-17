@@ -90,6 +90,11 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     // Collect files to ingest
     let files = collect_files(&path, &args)?;
+    tracing::info!(
+        candidates = files.len(),
+        mode = mode.label(),
+        "Collected ingest candidates"
+    );
     if !json_output {
         println!("  Found {} files to ingest", files.len());
     }

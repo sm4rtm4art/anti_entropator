@@ -57,6 +57,14 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   scope, planned work, and Makefile quick start.
 - CI caches and runner cleanup were bounded to reduce cross-job disk pressure.
 
+### Fixed
+
+- `ingest --format json` printed three Iceberg-writer progress lines to stdout
+  ahead of the JSON document whenever an upload and commit happened, so the
+  machine-readable summary was unparseable on the success path. Tracing
+  diagnostics now go to stderr for every command and the writer reports
+  through `tracing` instead of `println!`.
+
 ### Removed
 
 - ADR-007 (`dataflow-rs` as an optional second ingest engine behind
