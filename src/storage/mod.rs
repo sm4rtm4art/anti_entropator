@@ -1,8 +1,10 @@
-//! Unified storage I/O boundary via OpenDAL.
+//! Application-managed storage I/O boundary via OpenDAL.
 //!
-//! Every storage operation (read, write, list, head, delete) goes through
-//! the [`Operator`] returned by [`create_operator`]. This is the single
-//! I/O boundary described in ADR-006.
+//! Ingest and DataFusion object access use the [`Operator`] returned by
+//! [`create_operator`]. Iceberg catalog and writer access use
+//! `iceberg-storage-opendal` with the same [`LakehouseConfig`] fields through
+//! their own `StorageFactory` and `FileIO` construction path. ADR-006 defines
+//! the shared OpenDAL boundary and documents this distinction.
 
 use crate::lakehouse::LakehouseConfig;
 use anyhow::{Context, Result};
@@ -10,8 +12,8 @@ use opendal::{services::S3, Operator};
 
 /// Build an OpenDAL [`Operator`] configured for the project's S3-compatible store.
 ///
-/// All modules (`ingest`, `lakehouse`, `query`) should use this factory
-/// instead of constructing their own storage clients.
+/// Application-managed blob I/O (`ingest` and `query` through DataFusion)
+/// should use this factory instead of constructing another storage client.
 pub fn create_operator(config: &LakehouseConfig) -> Result<Operator> {
     let builder = S3::default()
         .endpoint(&config.s3_endpoint)

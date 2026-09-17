@@ -26,8 +26,9 @@ profile says otherwise.
 
 | Need | Source |
 |---|---|
-| Active execution plan | `.local/v0.3-stabilization-plan.md` |
-| Documentation cleanup lane | `.local/v0.3-doc-plan.md` |
+| Active execution plan | `.local/followup-v0.3-stabilization-plan.md` |
+| Closed S1-S6 stabilization record | `.local/v0.3-stabilization-plan.md` |
+| Archived documentation cleanup record | `.local/v0.3-doc-plan.md` |
 | Release contract | `docs/ROADMAP-v0.3.0.md` |
 | Architecture guard rails | `.cursor/rules/project-architecture.mdc` |
 | Rust standards | `.cursor/rules/rust-standards.mdc` |

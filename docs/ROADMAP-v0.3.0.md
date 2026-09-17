@@ -64,6 +64,22 @@
 - Query identity reminder: Iceberg table is `file_catalog`; `FROM files` is CLI
   sugar rewritten by `query` to `iceberg.anti_entropator.file_catalog`.
 
+### Status update (2026-09-13)
+
+- The S1-S6 stabilization execution plan is complete and archived. A fresh
+  Docker-backed `init` → `ingest` → `query` test passed, and Lakekeeper exposed
+  the expected `anti-entropator` project and warehouse.
+- This does **not** complete v0.3.0. S6A ingest correctness/recovery is the next
+  active execution plan and blocks M3 destructive maintenance and M4
+  orchestration.
+- ADR-006 now describes the implemented storage boundary accurately:
+  application/DataFusion and Iceberg use separate OpenDAL construction paths
+  fed by the same `LakehouseConfig`.
+- `RUSTSEC-2026-0221` was cleared by updating transitive `event-listener` to
+  5.4.2. The `quick-xml` ignores remain accepted until a compatible OpenDAL
+  stack resolves to `quick-xml >= 0.41`; the medium transitive `thrift` alert
+  remains assigned to the dependency-major evaluation.
+
 ### Completed (M1 -- Unified Storage, 2026-03-14)
 
 - Replaced `aws-sdk-s3` + `aws-config` with OpenDAL for all S3 I/O
@@ -168,7 +184,10 @@ flowchart LR
 
 - ~~Remove `aws-sdk-s3` from core paths (uploads + reads) -- route through OpenDAL operator.~~ **Done**
 - ~~Integrate `object_store_opendal` (register custom URL scheme in DataFusion's `RuntimeEnv`).~~ **Done**
-- ~~Ensure Iceberg-rs and Anti-Entropator share one storage config source (single "Operator factory").~~ **Done** (`src/storage/mod.rs`)
+- ~~Ensure Iceberg-rs and Anti-Entropator share one storage config source while
+  using their supported OpenDAL adapters.~~ **Done** (`LakehouseConfig`;
+  application/DataFusion use `storage::create_operator`, Iceberg uses
+  `iceberg-storage-opendal`)
 - ~~Add a storage contract test suite (list/head/get/put/delete semantics against local backend).~~ **Done** (4 tests against OpenDAL memory backend)
 - Refactor `files_to_batch` in `writer.rs` -- _Deferred: already clean with `BatchColumnsBuilder` pattern._
 - Define typed errors (`CatalogError`, `StorageError`, `ScanError`, `IngestError`). _Deferred to M2._

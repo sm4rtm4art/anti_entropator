@@ -18,7 +18,7 @@ Please do not open a public issue for potential vulnerabilities.
 
 Use one of these channels instead:
 
-1. GitHub private vulnerability reporting (preferred, if available):
+1. GitHub private vulnerability reporting (preferred and enabled):
    - `https://github.com/sm4rtm4art/anti_entropator/security/advisories/new`
 2. If private reporting is unavailable, open an issue with minimal details and request a private follow-up.
 
@@ -35,8 +35,8 @@ Include:
 - Use non-default credentials and strong encryption keys in `.env`.
 - Do not commit secrets (`.env`, tokens, credentials, private keys).
 - Do not expose secrets through workflow logs, artifacts, or release assets.
-- Keep dependency checks, CodeQL code scanning, and secret scanning enabled for
-  the public repository.
+- Keep dependency checks, Zizmor workflow analysis, and secret scanning enabled
+  for the public repository.
 
 ## Current Security Controls
 
@@ -46,8 +46,9 @@ Enforced today:
 - Local compose ports bind to `127.0.0.1`.
 - Compose requires critical secret variables (`${VAR:?}`).
 - Dependency vulnerability checks run via `cargo audit` in CI.
-- CodeQL code scanning and GitHub secret scanning are enabled in repository
-  settings.
+- Zizmor uploads workflow findings to GitHub code scanning; GitHub secret
+  scanning and push protection are enabled in repository settings. CodeQL
+  default setup is not configured.
 - Security-sensitive repository surfaces are covered by `.github/CODEOWNERS`;
   branch or ruleset configuration should require CODEOWNER review for those
   paths.

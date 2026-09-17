@@ -14,11 +14,29 @@ We will use **Apache OpenDAL** as the single I/O abstraction for all storage ope
 - DataFusion accesses storage via the `object_store_opendal` adapter registered in `RuntimeEnv`.
 - `aws-sdk-s3` is removed from core paths.
 
+## Current State
+
+As of 2026-09, OpenDAL is the shared object-storage boundary, but the
+application and iceberg-rs do not consume one literal `Operator` factory:
+
+- Ingest and DataFusion object access use the `opendal::Operator` returned by
+  `storage::create_operator`.
+- Iceberg catalog and writer access use `iceberg-storage-opendal` through
+  `OpenDalStorageFactory` and `FileIO`.
+- Both construction paths derive endpoint, region, bucket, and credentials from
+  `LakehouseConfig`, but the Iceberg path maps those values into `s3.*`
+  properties separately.
+
+The invariant is therefore one OpenDAL-based I/O boundary and one configuration
+source, not one shared `Operator` instance or factory. Future configuration
+changes must keep both mappings aligned.
+
 ## Consequences
 
 ### Positive
 
-- **Single config source**: One "Operator factory" shared by Anti-Entropator, DataFusion, and iceberg-rs.
+- **Single config source**: `LakehouseConfig` supplies storage settings to
+  Anti-Entropator, DataFusion, and iceberg-rs.
 - **Backend-agnostic**: OpenDAL supports S3, GCS, Azure, local filesystem, and 40+ services via the same API. Enables future multi-cloud without code changes.
 - **Testable**: Storage contract tests can run against `opendal::services::Memory` or `Fs` backend without containers.
 - **Apache project**: Active governance, Rust-native, same ecosystem as DataFusion and Iceberg.
@@ -28,6 +46,9 @@ We will use **Apache OpenDAL** as the single I/O abstraction for all storage ope
 - **Migration effort**: All existing `aws-sdk-s3` call sites must be refactored.
 - **Additional adapter layer**: `object_store_opendal` adds a thin bridge between DataFusion's `ObjectStore` trait and OpenDAL.
 - **Newer integration**: `object_store_opendal` is less battle-tested than the native `object_store` S3 backend.
+- **Two construction mappings**: Application/DataFusion and Iceberg build their
+  OpenDAL-backed clients through different APIs, so configuration parity must
+  be reviewed when storage settings change.
 
 ## Alternatives Considered
 

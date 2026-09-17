@@ -21,8 +21,9 @@ ignore = [
     # This is not a fix. Remove these ignores when the OpenDAL / reqsign
     # stack resolves to quick-xml >= 0.41, then re-run cargo audit.
     #
-    # Canonical planning note: S6 in .local/v0.3-stabilization-plan.md
-    # Review by: S6 release-readiness sweep (re-validate or delete)
+    # Revalidated 2026-09-13 during S6: Cargo.lock still resolves reqsign
+    # 0.16.5 and quick-xml 0.37.5 / 0.38.4. Review again during the compatible
+    # OpenDAL stack-major evaluation and before the v0.3.0 release tag.
     "RUSTSEC-2026-0195",
     "RUSTSEC-2026-0194",
 ]
