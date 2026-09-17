@@ -565,37 +565,7 @@ fn ingest_rejects_unsupported_format() -> Result<()> {
     Ok(())
 }
 
-// ==================== Unimplemented Commands Tests ====================
-
-#[test]
-fn sql_help_shows_options() -> Result<()> {
-    cmd()?
-        .args(["sql", "--help"])
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("not yet implemented"));
-    Ok(())
-}
-
-#[test]
-fn sql_command_exits_nonzero() -> Result<()> {
-    cmd()?
-        .arg("sql")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("not yet implemented"));
-    Ok(())
-}
-
-#[test]
-fn merge_command_exits_nonzero() -> Result<()> {
-    cmd()?
-        .arg("merge")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("not yet implemented"));
-    Ok(())
-}
+// ==================== Query Command Tests ====================
 
 #[test]
 fn query_help_shows_options() -> Result<()> {
@@ -607,13 +577,28 @@ fn query_help_shows_options() -> Result<()> {
     Ok(())
 }
 
+// ==================== Removed Placeholder Commands ====================
+
+/// `sql`, `duplicates`, and `merge` were placeholder subcommands that only
+/// exited non-zero. They are removed from the binary until implemented; the
+/// CLI must reject them as unknown rather than advertise them in `--help`.
 #[test]
-fn duplicates_command_exits_nonzero() -> Result<()> {
+fn placeholder_commands_are_not_advertised_or_accepted() -> Result<()> {
+    for name in ["sql", "duplicates", "merge"] {
+        cmd()?
+            .arg(name)
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("unrecognized subcommand"));
+    }
+
     cmd()?
-        .arg("duplicates")
+        .arg("--help")
         .assert()
-        .failure()
-        .stderr(predicate::str::contains("not yet implemented"));
+        .success()
+        .stdout(predicate::str::contains("\n  sql").not())
+        .stdout(predicate::str::contains("\n  duplicates").not())
+        .stdout(predicate::str::contains("\n  merge").not());
     Ok(())
 }
 

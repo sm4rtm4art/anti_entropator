@@ -70,8 +70,9 @@ cargo run -- query "SELECT * FROM iceberg.anti_entropator.file_catalog LIMIT 10"
 cargo run -- query "SELECT * FROM files LIMIT 10"
 ```
 
-`sql`, `duplicates`, and `merge` are placeholder workflows until their runtime
-behavior and exit semantics are implemented and tested.
+Interactive SQL, duplicate management, and branch merge are roadmap items and
+are **not** in the binary. Do not add placeholder subcommands; a command exists
+only when its behavior, tests, and docs exist.
 
 ## Boundaries
 

@@ -74,9 +74,9 @@ flowchart LR
 - **scan**: Enrich file metadata without uploading
 - **ingest**: Upload to RustFS + commit to Iceberg via Lakekeeper
 - **query**: Execute one-shot SQL via DataFusion
-- **sql**: Placeholder command for the future interactive SQL REPL
-- **duplicates**: Placeholder command for duplicate management workflow
-- **merge**: Placeholder command for ingest branch merge workflow
+
+Not in the binary (roadmap): interactive SQL, duplicate management workflow,
+ingest branch merge, Iceberg maintenance.
 
 ### Pipeline Layer (v0.3.0)
 

@@ -22,10 +22,11 @@ anti_entropator query   "SELECT category, COUNT(*) FROM iceberg.anti_entropator.
 ```
 
 > **Status — early public preview (v0.3 stabilization, updated 2026-09).**
-> The `profile → scan → ingest → query` path works end to end today. `sql`,
-> `duplicates`, and `merge` are declared placeholders and exit non-zero rather
-> than pretending to succeed. The S1-S6 stabilization track is complete; ingest
-> correctness/recovery and the remaining roadmap features are still open.
+> The `profile → scan → ingest → query` path works end to end today. The
+> binary contains only implemented commands; interactive SQL, duplicate
+> management, and branch merge are roadmap items, not stubs. The S1-S6
+> stabilization track is complete; ingest correctness/recovery and the
+> remaining roadmap features are still open.
 
 ---
 
@@ -55,9 +56,10 @@ every claim about them honest.
 | `scan`       | Ready   | Metadata enrichment without uploading anything.                   |
 | `ingest`     | Ready   | Upload to object storage and commit metadata to Iceberg.          |
 | `query`      | Ready   | One-shot SQL over the catalog via DataFusion.                     |
-| `sql`        | Planned | Interactive SQL REPL. Placeholder; exits non-zero.                |
-| `duplicates` | Planned | Duplicate management workflow. Placeholder; exits non-zero.       |
-| `merge`      | Planned | Ingest branch merge workflow. Placeholder; exits non-zero.        |
+
+Planned and **not in the binary**: interactive SQL, duplicate management,
+ingest branch merge, Iceberg maintenance (`expire`, `vacuum`). See the
+[roadmap](docs/ROADMAP-v0.3.0.md).
 
 What the ready path gives you:
 
