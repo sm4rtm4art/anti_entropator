@@ -1,6 +1,7 @@
 # ADR-009: File Observation and Ingest State Model
 
-Status: **accepted design, not yet implemented.**
+Status: **accepted design, partially implemented** (slice 1 and the blob half
+of slice 3 shipped; see Current State).
 
 ## Context
 
@@ -114,19 +115,39 @@ outcome and CLI exit status remain non-success.
 
 ## Current State
 
-This ADR defines target v0.3 behavior.
-The current implementation does not yet provide the additional observation
-fields, run journal, lease, deletion observations, current-state query helper,
-or recovery protocol.
-It also still returns early when a CAS object exists.
-
-Implementation must land in small slices:
+This ADR defines target v0.3 behavior. Implementation lands in small slices:
 
 1. Add and test the observation/run domain types and additive schema fields.
+   **Shipped.** `file_catalog` has five optional columns with stable field ids
+   21-25: `source_id`, `relative_path`, `run_id` (uuid), `observation_status`
+   (`present` | `deleted`), `observed_at`. `init` adds them to tables created
+   before this change via Iceberg schema evolution and is idempotent; the
+   writer refuses to commit into a table that lacks them. The row `id` is a
+   UUIDv5 over `(source_id, relative_path, content_hash, status)`, so the
+   identifier field is a natural idempotency key. `source_id` defaults to the
+   canonical absolute path of the ingest root; moving the root therefore
+   starts a new source until an override flag exists.
 2. Persist run identity and lifecycle transitions.
+   **Partial.** Every run has a `run_id`; it is stamped on each committed row
+   and reported in the human and JSON summaries. No run journal, lease, or
+   lifecycle states yet.
 3. Separate blob existence from observation creation.
+   **Blob half shipped.** Uploads stream the file, re-hash the bytes in
+   flight, and materialize the object only through a conditional
+   `if_not_exists` write; a mid-upload change aborts the write (nothing is
+   stored) and the file is rescanned and retried once. Existing blobs are
+   verified against local size and, when present, `sha256` user metadata;
+   mismatches are per-file errors, never overwrites. New blobs carry `sha256`
+   and `size` metadata. **Still open:** an existing blob still ends
+   processing with no observation row for that path; this depends on the
+   unchanged-suppression rule in slice 4 and lands with it.
 4. Add unchanged/change/delete/rename behavior and current-state queries.
+   Not started.
 5. Add restart, partial-failure, and conflict tests.
+   Not started.
+
+Rows committed before slice 1 have `NULL` in the observation columns and a
+random `id`; they remain readable and are not rewritten.
 
 ## Consequences
 

@@ -3,7 +3,9 @@
 //! Handles conversion of FileInfo to Arrow RecordBatches and committing to Iceberg.
 
 use crate::domain::FileInfo;
-use crate::lakehouse::schema::{build_file_catalog_schema, FILE_CATALOG_TABLE, NAMESPACE};
+use crate::lakehouse::schema::{
+    build_file_catalog_schema, verify_table_schema, FILE_CATALOG_TABLE, NAMESPACE,
+};
 use crate::lakehouse::{build_rest_catalog, s3_storage_factory, LakehouseConfig};
 use anyhow::{Context, Result};
 use arrow::array::{
@@ -34,9 +36,11 @@ pub async fn commit_files(files: Vec<FileInfo>, config: &LakehouseConfig) -> Res
     // 1. Convert to Arrow Batch
     let batch = files_to_batch(&files)?;
 
-    // 2. Initialize Catalog & Load Table
+    // 2. Initialize Catalog & Load Table. The batch was built from the code
+    //    schema; refuse to write into a table that has not been upgraded.
     let catalog = init_catalog(config).await?;
     let table = load_table(&catalog).await?;
+    verify_table_schema(table.metadata().current_schema())?;
 
     // 3. Write Data File (Parquet) to S3
     let data_files = write_parquet_file(&table, &batch, config).await?;
@@ -70,7 +74,7 @@ async fn init_catalog(config: &LakehouseConfig) -> Result<RestCatalog> {
 }
 
 /// Load the target table from the catalog
-async fn load_table(catalog: &RestCatalog) -> Result<Table> {
+pub(crate) async fn load_table(catalog: &RestCatalog) -> Result<Table> {
     let table_id = TableIdent::from_strs(vec![NAMESPACE, FILE_CATALOG_TABLE])?;
     catalog
         .load_table(&table_id)
@@ -175,6 +179,12 @@ struct BatchColumnsBuilder {
     duplicate_ofs: FixedSizeBinaryBuilder,
     parent_dirs: Vec<String>,
     group_ids: FixedSizeBinaryBuilder,
+    // ADR-009 observation columns (21-25)
+    source_ids: Vec<Option<String>>,
+    relative_paths: Vec<Option<String>>,
+    run_ids: FixedSizeBinaryBuilder,
+    observation_statuses: Vec<Option<String>>,
+    observed_ats: Vec<Option<i64>>,
 }
 
 impl BatchColumnsBuilder {
@@ -201,6 +211,11 @@ impl BatchColumnsBuilder {
             duplicate_ofs: FixedSizeBinaryBuilder::with_capacity(capacity, 16),
             parent_dirs: Vec::with_capacity(capacity),
             group_ids: FixedSizeBinaryBuilder::with_capacity(capacity, 16),
+            source_ids: Vec::with_capacity(capacity),
+            relative_paths: Vec::with_capacity(capacity),
+            run_ids: FixedSizeBinaryBuilder::with_capacity(capacity, 16),
+            observation_statuses: Vec::with_capacity(capacity),
+            observed_ats: Vec::with_capacity(capacity),
         }
     }
 
@@ -242,6 +257,17 @@ impl BatchColumnsBuilder {
             None => self.group_ids.append_null(),
         }
 
+        self.source_ids.push(f.source_id.clone());
+        self.relative_paths.push(f.relative_path.clone());
+        match f.run_id {
+            Some(rid) => self.run_ids.append_value(rid.as_bytes())?,
+            None => self.run_ids.append_null(),
+        }
+        self.observation_statuses
+            .push(f.observation_status.map(|s| s.as_str().to_string()));
+        self.observed_ats
+            .push(f.observed_at.map(|dt| dt.timestamp_micros()));
+
         Ok(())
     }
 
@@ -272,6 +298,12 @@ impl BatchColumnsBuilder {
             Arc::new(self.duplicate_ofs.finish()) as ArrayRef,
             Arc::new(StringArray::from(self.parent_dirs)) as ArrayRef,
             Arc::new(self.group_ids.finish()) as ArrayRef,
+            Arc::new(StringArray::from(self.source_ids)) as ArrayRef,
+            Arc::new(StringArray::from(self.relative_paths)) as ArrayRef,
+            Arc::new(self.run_ids.finish()) as ArrayRef,
+            Arc::new(StringArray::from(self.observation_statuses)) as ArrayRef,
+            Arc::new(TimestampMicrosecondArray::from(self.observed_ats).with_timezone("+00:00"))
+                as ArrayRef,
         ]
     }
 }
@@ -301,28 +333,18 @@ mod tests {
 
     /// Create a minimal FileInfo for testing
     fn make_test_file_info(name: &str) -> FileInfo {
-        FileInfo {
-            id: Uuid::new_v4(),
-            source_path: PathBuf::from(format!("/test/{}", name)),
-            filename: name.to_string(),
-            extension: "txt".to_string(),
-            mime_type: Some("text/plain".to_string()),
-            category: FileCategory::Document,
-            size_bytes: 1024,
-            content_hash: None,
-            partial_hash: None,
-            created_at: Some(Utc::now()),
-            modified_at: Some(Utc::now()),
-            scanned_at: Utc::now(),
-            object_uri: None,
-            ingested_at: None,
-            suggested_name: None,
-            name_reason: None,
-            is_duplicate: false,
-            duplicate_of: None,
-            parent_dir: "test".to_string(),
-            group_id: None,
-        }
+        let info = FileInfo::new(
+            PathBuf::from(format!("/test/{}", name)),
+            name.to_string(),
+            ".txt".to_string(),
+            1024,
+            Some(Utc::now()),
+            Some(Utc::now()),
+        )
+        .with_mime_type("text/plain".to_string())
+        .with_parent_dir("test".to_string());
+        assert_eq!(info.category, FileCategory::Document);
+        info
     }
 
     #[test]
@@ -341,7 +363,70 @@ mod tests {
         assert!(result.is_ok());
         let batch = result.unwrap();
         assert_eq!(batch.num_rows(), 1);
-        assert_eq!(batch.num_columns(), 20); // 20 columns in schema
+        assert_eq!(batch.num_columns(), crate::lakehouse::schema::FIELD_COUNT);
+    }
+
+    #[test]
+    fn files_to_batch_round_trips_observation_columns() {
+        use crate::domain::{ContentHash, ObservationStatus};
+        use arrow::array::{Array, FixedSizeBinaryArray, StringArray, TimestampMicrosecondArray};
+
+        let run_id = Uuid::new_v4();
+        let observed_at = Utc::now();
+        let observed = make_test_file_info("obs.txt")
+            .with_content_hash(ContentHash::new("deadbeef".to_string()))
+            .with_observation(
+                "/root".to_string(),
+                "sub/obs.txt".to_string(),
+                run_id,
+                ObservationStatus::Present,
+                observed_at,
+            );
+        let legacy = make_test_file_info("legacy.txt");
+
+        let batch = files_to_batch(&[observed.clone(), legacy]).unwrap();
+        let col = |name: &str| batch.column_by_name(name).unwrap();
+
+        let source_ids = col("source_id")
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert_eq!(source_ids.value(0), "/root");
+        assert!(source_ids.is_null(1));
+
+        let rel = col("relative_path")
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert_eq!(rel.value(0), "sub/obs.txt");
+
+        let run_ids = col("run_id")
+            .as_any()
+            .downcast_ref::<FixedSizeBinaryArray>()
+            .unwrap();
+        assert_eq!(run_ids.value(0), run_id.as_bytes());
+        assert!(run_ids.is_null(1));
+
+        let statuses = col("observation_status")
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        assert_eq!(statuses.value(0), "present");
+        assert!(statuses.is_null(1));
+
+        let ats = col("observed_at")
+            .as_any()
+            .downcast_ref::<TimestampMicrosecondArray>()
+            .unwrap();
+        assert_eq!(ats.value(0), observed_at.timestamp_micros());
+        assert!(ats.is_null(1));
+
+        // The deterministic observation id lands in the identifier column.
+        let ids = col("id")
+            .as_any()
+            .downcast_ref::<FixedSizeBinaryArray>()
+            .unwrap();
+        assert_eq!(ids.value(0), observed.id.as_bytes());
     }
 
     #[test]

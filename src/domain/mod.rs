@@ -3,12 +3,14 @@
 //! These types ensure compile-time guarantees about data validity.
 
 pub mod file_info;
+pub mod observation;
 pub mod stats;
 
 #[cfg(test)]
 mod tests;
 
 pub use file_info::FileInfo;
+pub use observation::ObservationStatus;
 
 /// A content hash (SHA-256)
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

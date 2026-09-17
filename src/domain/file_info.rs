@@ -1,5 +1,6 @@
 //! File information types
 
+use super::observation::{observation_id, ObservationStatus};
 use super::{ContentHash, FileCategory, PartialHash};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -68,6 +69,27 @@ pub struct FileInfo {
 
     /// Group ID for related files (fuzzy duplicates, different formats)
     pub group_id: Option<Uuid>,
+
+    // ── ADR-009 observation fields (catalog columns 21-25, all optional) ──
+    /// Stable identifier of the ingest root this observation belongs to.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<String>,
+
+    /// Path relative to the ingest root, `/`-separated.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relative_path: Option<String>,
+
+    /// Ingest run that produced this observation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<Uuid>,
+
+    /// Whether the path was observed present or deleted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observation_status: Option<ObservationStatus>,
+
+    /// When the observation was made.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_at: Option<DateTime<Utc>>,
 }
 
 impl FileInfo {
@@ -103,7 +125,38 @@ impl FileInfo {
             duplicate_of: None,
             parent_dir: String::new(),
             group_id: None,
+            source_id: None,
+            relative_path: None,
+            run_id: None,
+            observation_status: None,
+            observed_at: None,
         }
+    }
+
+    /// Attach the ADR-009 observation identity and derive the deterministic
+    /// row `id` from `(source_id, relative_path, content_hash, status)`.
+    ///
+    /// Call after the content hash is final; the `id` incorporates it.
+    pub fn with_observation(
+        mut self,
+        source_id: String,
+        relative_path: String,
+        run_id: Uuid,
+        status: ObservationStatus,
+        observed_at: DateTime<Utc>,
+    ) -> Self {
+        self.id = observation_id(
+            &source_id,
+            &relative_path,
+            self.content_hash.as_ref().map(|h| h.0.as_str()),
+            status,
+        );
+        self.source_id = Some(source_id);
+        self.relative_path = Some(relative_path);
+        self.run_id = Some(run_id);
+        self.observation_status = Some(status);
+        self.observed_at = Some(observed_at);
+        self
     }
 
     /// Update category based on MIME type
@@ -338,6 +391,64 @@ mod tests {
         assert!(info.is_duplicate);
         assert_eq!(info.duplicate_of, Some(dup_id));
         assert_eq!(info.suggested_name.unwrap(), "better.png");
+    }
+
+    // ── with_observation ──
+
+    #[test]
+    fn with_observation_sets_fields_and_deterministic_id() {
+        let run = Uuid::new_v4();
+        let at = Utc::now();
+        let a = make_info()
+            .with_content_hash(ContentHash::new("h1".to_string()))
+            .with_observation(
+                "/src".to_string(),
+                "photo.jpg".to_string(),
+                run,
+                ObservationStatus::Present,
+                at,
+            );
+        let b = make_info()
+            .with_content_hash(ContentHash::new("h1".to_string()))
+            .with_observation(
+                "/src".to_string(),
+                "photo.jpg".to_string(),
+                Uuid::new_v4(), // a different run must not change the id
+                ObservationStatus::Present,
+                Utc::now(),
+            );
+
+        assert_eq!(a.id, b.id);
+        assert_eq!(a.source_id.as_deref(), Some("/src"));
+        assert_eq!(a.relative_path.as_deref(), Some("photo.jpg"));
+        assert_eq!(a.run_id, Some(run));
+        assert_eq!(a.observation_status, Some(ObservationStatus::Present));
+        assert_eq!(a.observed_at, Some(at));
+    }
+
+    #[test]
+    fn with_observation_id_depends_on_content_hash() {
+        let obs = |hash: &str| {
+            make_info()
+                .with_content_hash(ContentHash::new(hash.to_string()))
+                .with_observation(
+                    "/src".to_string(),
+                    "photo.jpg".to_string(),
+                    Uuid::nil(),
+                    ObservationStatus::Present,
+                    Utc::now(),
+                )
+                .id
+        };
+        assert_ne!(obs("h1"), obs("h2"));
+    }
+
+    #[test]
+    fn observation_fields_are_omitted_from_json_when_unset() {
+        let json = serde_json::to_value(make_info()).unwrap();
+        assert!(json.get("source_id").is_none());
+        assert!(json.get("run_id").is_none());
+        assert!(json.get("observation_status").is_none());
     }
 
     // ── FileEntry ──
