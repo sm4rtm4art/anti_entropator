@@ -102,11 +102,17 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   (M4) remain required roadmap work and are not shipped.
 - Active multi-architecture publication, distroless promotion, and
   SBOM/provenance enforcement remain gated follow-ups.
-- `RUSTSEC-2026-0195` and `RUSTSEC-2026-0194` remain temporarily ignored while
-  OpenDAL 0.55 resolves to vulnerable `quick-xml` versions; remove the ignores
-  after a compatible stack upgrade.
-- The transitive Apache Thrift advisory remains open pending a compatible
-  Arrow/Parquet/DataFusion stack upgrade.
+- `RUSTSEC-2026-0195` and `RUSTSEC-2026-0194` remain temporarily ignored:
+  `opendal-core 0.57` resolves `quick-xml 0.39.4`, and `iceberg-storage-opendal
+  0.10.1` pins `opendal ^0.57`. Exit: the `iceberg 0.11` stack bump (`opendal
+  0.58`, `datafusion 54`), then delete the ignores in `.cargo/audit.toml`.
+- The transitive `thrift 0.17` advisory (GHSA-2f9f-gq7v-9h6m, Dependabot only,
+  no RUSTSEC id) remains open: `parquet 58` requires `thrift ^0.17`. Exit: the
+  `iceberg 0.12` stack bump (`arrow`/`parquet 59`, `datafusion 55`); `parquet
+  59` has no `thrift` dependency. The `paste` unmaintained warning
+  (`RUSTSEC-2024-0436`, via `datafusion-common 53`) clears with `datafusion
+  54`. Verified 2026-09-17 by resolving and auditing a scratch lockfile against
+  upstream `iceberg-rust` `main`: zero findings.
 
 ### Planned
 
