@@ -55,6 +55,12 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   synchronized for the public local-first scope.
 - README landing-page narrative updated to reflect the current local-first
   scope, planned work, and Makefile quick start.
+- ADR-001 to ADR-005 gained `Status` lines and dated `Current State` sections;
+  stale or unverifiable claims were corrected or removed (ADR-002 vendor
+  benchmark and star count, MinIO now recorded as archived; ADR-003 duplicated
+  schema replaced by a pointer to `src/lakehouse/schema.rs`, table recorded
+  as unpartitioned, crate version corrected; ADR-004 "planned" labels on
+  shipped commit/query steps removed). Decisions are unchanged.
 - CI caches and runner cleanup were bounded to reduce cross-job disk pressure.
 
 ### Removed
