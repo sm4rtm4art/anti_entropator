@@ -39,6 +39,12 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
 
 ### Changed
 
+- Compose: RustFS `1.0.0-beta.2` → `1.0.0`; RustFS data moved from the
+  `./data/rustfs` bind mount to the named volume `rustfs-data` (1.0.0 does
+  not support Docker Desktop bind mounts and fails writes with `EBADF`); the
+  RustFS healthcheck probes `/health/ready` instead of the liveness-only
+  `/health`. **Breaking for existing local stacks:** there is no in-place
+  migration; see the manual's upgrade section for the reset and re-ingest.
 - Include/exclude ingest filters use their documented glob semantics.
 - Ingest summaries distinguish uploaded and existing objects, and partial
   processing failures, including a failed catalog commit after upload, exit

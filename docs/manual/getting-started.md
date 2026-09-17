@@ -50,9 +50,9 @@ cp env.example .env
 
 # Edit .env and replace all CHANGE_ME values first
 
-# Create data directories with correct permissions
-mkdir -p data/rustfs logs/rustfs data/postgres
-chown -R 10001:10001 data/rustfs logs/rustfs
+# Create local directories (RustFS data lives in a named Docker volume)
+mkdir -p logs/rustfs data/postgres
+chown -R 10001:10001 logs/rustfs
 
 # Start services
 docker compose up -d
@@ -196,13 +196,34 @@ docker compose up -d rustfs
 docker compose logs rustfs
 ```
 
-### Permission denied on RustFS volumes
+### Permission denied on the RustFS log directory
 
 RustFS runs as UID 10001:
 
 ```bash
-chown -R 10001:10001 data/rustfs logs/rustfs
+chown -R 10001:10001 logs/rustfs
 ```
+
+### Upgrading from RustFS `1.0.0-beta.2` (bind mount) to `1.0.0` (named volume)
+
+RustFS 1.0.0 does not start on a `1.0.0-beta.2` data directory and does not
+support Docker Desktop bind mounts (it logs `Unsupported filesystem type ...
+(FUSE)` and fails writes with `Bad file descriptor`). The stack therefore
+moved RustFS data to the named volume `rustfs-data`. There is no in-place
+migration; the catalog in Postgres references objects by path, so both must be
+reset together:
+
+```bash
+docker compose down
+rm -rf data/rustfs data/postgres   # local lakehouse contents are discarded
+docker compose up -d
+anti_entropator init                # recreates bucket, project, warehouse, table
+anti_entropator ingest <path>       # re-ingest from your source directories
+```
+
+Source files are never modified by ingest, so a re-ingest rebuilds the
+lakehouse from them. A full reset later is `docker compose down -v` plus
+`rm -rf data/postgres`.
 
 ### External tools not detected
 
