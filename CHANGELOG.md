@@ -61,7 +61,7 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
 
 - `ingest --format json` printed three Iceberg-writer progress lines to stdout
   ahead of the JSON document whenever an upload and commit happened, so the
-  machine-readable summary was unparseable on the success path. Tracing
+  machine-readable summary was unparsable on the success path. Tracing
   diagnostics now go to stderr for every command and the writer reports
   through `tracing` instead of `println!`.
 
