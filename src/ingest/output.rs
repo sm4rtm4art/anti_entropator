@@ -7,8 +7,12 @@
 use anyhow::{Context, Result};
 use console::style;
 use serde::Serialize;
+use uuid::Uuid;
 
-pub const INGEST_SUMMARY_FORMAT_VERSION: u32 = 1;
+/// Version history:
+/// - 1: initial summary.
+/// - 2: added `run_id` (ADR-009 run identity).
+pub const INGEST_SUMMARY_FORMAT_VERSION: u32 = 2;
 
 /// How an ingest invocation is allowed to interact with the lakehouse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -86,6 +90,8 @@ pub enum CatalogCommitStatus {
 pub struct IngestSummary {
     pub format_version: u32,
     pub mode: IngestMode,
+    /// Identity of this ingest attempt; every row it commits carries it.
+    pub run_id: Uuid,
     pub status: IngestStatus,
     pub candidates: u64,
     pub uploaded: u64,
@@ -97,8 +103,10 @@ pub struct IngestSummary {
 }
 
 impl IngestSummary {
+    #[allow(clippy::too_many_arguments)] // Mirrors the summary's fields one-to-one.
     pub fn build(
         mode: IngestMode,
+        run_id: Uuid,
         candidates: u64,
         uploaded: u64,
         already_exists: u64,
@@ -118,6 +126,7 @@ impl IngestSummary {
         Self {
             format_version: INGEST_SUMMARY_FORMAT_VERSION,
             mode,
+            run_id,
             status,
             candidates,
             uploaded,
@@ -169,6 +178,7 @@ pub fn print_human_report(summary: &IngestSummary) {
         println!("  Already in store: not checked (--offline)");
     }
     println!("  Errors:          {} files", summary.failed);
+    println!("  Run:             {}", summary.run_id);
     println!();
 
     if !summary.errors.is_empty() {
@@ -202,7 +212,9 @@ pub fn print_human_report(summary: &IngestSummary) {
             println!();
             println!("  Next steps:");
             println!("    1. Run `anti_entropator query` to explore your catalog");
-            println!("    2. Run `anti_entropator duplicates` to find duplicate files");
+            println!(
+                "    2. Group duplicate content: SELECT content_hash, COUNT(*) FROM files GROUP BY content_hash HAVING COUNT(*) > 1"
+            );
             println!();
         }
         IngestStatus::Incomplete => {
@@ -255,6 +267,7 @@ mod tests {
     fn summary_success_status() {
         let summary = IngestSummary::build(
             IngestMode::Ingest,
+            Uuid::nil(),
             4,
             3,
             1,
@@ -262,8 +275,9 @@ mod tests {
             &[],
             CatalogCommitStatus::Succeeded,
         );
-        assert_eq!(summary.format_version, 1);
+        assert_eq!(summary.format_version, 2);
         assert_eq!(summary.mode, IngestMode::Ingest);
+        assert_eq!(summary.run_id, Uuid::nil());
         assert_eq!(summary.status, IngestStatus::Success);
         assert_eq!(summary.candidates, 4);
         assert_eq!(summary.uploaded, 3);
@@ -278,6 +292,7 @@ mod tests {
         let errors = sample_errors();
         let summary = IngestSummary::build(
             IngestMode::Ingest,
+            Uuid::nil(),
             3,
             2,
             0,
@@ -295,6 +310,7 @@ mod tests {
         let errors = sample_errors();
         let summary = IngestSummary::build(
             IngestMode::Ingest,
+            Uuid::nil(),
             3,
             3,
             0,
@@ -311,6 +327,7 @@ mod tests {
     fn summary_dry_run_does_not_attempt_commit() {
         let summary = IngestSummary::build(
             IngestMode::DryRun,
+            Uuid::nil(),
             1,
             1,
             0,
@@ -343,6 +360,7 @@ mod tests {
     fn summary_serializes_stable_snake_case_keys() {
         let summary = IngestSummary::build(
             IngestMode::DryRun,
+            Uuid::nil(),
             2,
             1,
             0,
@@ -352,8 +370,9 @@ mod tests {
         );
         let json = serde_json::to_value(&summary).unwrap();
 
-        assert_eq!(json["format_version"], 1);
+        assert_eq!(json["format_version"], 2);
         assert_eq!(json["mode"], "dry_run");
+        assert_eq!(json["run_id"], "00000000-0000-0000-0000-000000000000");
         assert_eq!(json["status"], "incomplete");
         assert_eq!(json["candidates"], 2);
         assert_eq!(json["uploaded"], 1);
@@ -368,6 +387,7 @@ mod tests {
     fn outcome_error_preserves_commit_failure() {
         let summary = IngestSummary::build(
             IngestMode::Ingest,
+            Uuid::nil(),
             3,
             3,
             0,
@@ -388,6 +408,7 @@ mod tests {
         let errors = sample_errors();
         let summary = IngestSummary::build(
             IngestMode::Ingest,
+            Uuid::nil(),
             3,
             2,
             0,
@@ -406,6 +427,7 @@ mod tests {
         let errors = sample_errors();
         let summary = IngestSummary::build(
             IngestMode::DryRun,
+            Uuid::nil(),
             1,
             0,
             0,
@@ -423,6 +445,7 @@ mod tests {
     fn outcome_error_success_is_ok() {
         let summary = IngestSummary::build(
             IngestMode::Ingest,
+            Uuid::nil(),
             3,
             3,
             0,
@@ -467,8 +490,16 @@ mod tests {
             (IngestMode::DryRun, "dry_run"),
             (IngestMode::Ingest, "ingest"),
         ] {
-            let summary =
-                IngestSummary::build(mode, 0, 0, 0, 0, &[], CatalogCommitStatus::NotAttempted);
+            let summary = IngestSummary::build(
+                mode,
+                Uuid::nil(),
+                0,
+                0,
+                0,
+                0,
+                &[],
+                CatalogCommitStatus::NotAttempted,
+            );
             let json = serde_json::to_value(&summary).unwrap();
             assert_eq!(json["mode"], expected);
         }
@@ -478,6 +509,7 @@ mod tests {
     fn connected_dry_run_summary_keeps_existing_counts_and_never_commits() {
         let summary = IngestSummary::build(
             IngestMode::DryRun,
+            Uuid::nil(),
             3,
             1,
             2,
@@ -497,6 +529,7 @@ mod tests {
         let errors = sample_errors();
         let summary = IngestSummary::build(
             IngestMode::DryRunOffline,
+            Uuid::nil(),
             1,
             0,
             0,

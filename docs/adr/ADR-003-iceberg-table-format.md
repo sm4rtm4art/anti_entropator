@@ -54,9 +54,14 @@ We will use **Apache Iceberg** as the table format for the file catalog.
   constants in `src/lakehouse/schema.rs`). Created by `init`, appended by
   `ingest`, read by `query` through DataFusion.
 - **The schema lives in code**: `build_file_catalog_schema()` in
-  `src/lakehouse/schema.rs` is the single source of truth (20 fields at the
-  time of writing; identifier field `id`). This ADR intentionally does not
-  duplicate the field list; an earlier version did and drifted.
+  `src/lakehouse/schema.rs` is the single source of truth (25 fields at the
+  time of writing: the original 20 plus the optional ADR-009 observation
+  columns with ids 21-25; identifier field `id`). This ADR intentionally does
+  not duplicate the field list; an earlier version did and drifted.
+- **Additive evolution is exercised**: `init` adds missing optional columns to
+  an existing table through the Iceberg `UpdateSchema` transaction
+  (`src/lakehouse/evolve.rs`) and verifies the resulting ids and types. The
+  writer refuses to commit into a table that lags behind the code schema.
 - Unpartitioned; no sort order.
 - The `is_duplicate` / `duplicate_of` columns predate ADR-009. Under ADR-009
   a row is an append-only file observation, and duplicate content is expressed

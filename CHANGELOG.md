@@ -29,8 +29,21 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   default runtime.
 - `ingest --format json` emits one machine-readable run summary on stdout.
 - ADR-009 defines `file_catalog` as an append-only file observation log with
-  explicit blob, observation, and ingest-run semantics (design accepted, not
-  yet implemented).
+  explicit blob, observation, and ingest-run semantics.
+- ADR-009 slice 1 and the blob half of slice 3: `file_catalog` gains five
+  optional observation columns (`source_id`, `relative_path`, `run_id`,
+  `observation_status`, `observed_at`; field ids 21-25). `init` adds them to
+  existing tables in place and is idempotent. Row `id` is now a deterministic
+  UUIDv5 over `(source_id, relative_path, content_hash, status)`. Every ingest
+  run has a `run_id`, shown in the human report and in the JSON summary
+  (`format_version` 2).
+- Mutation-safe CAS upload: files are streamed in bounded chunks (no
+  whole-file read), re-hashed in flight, and stored only through a conditional
+  `if_not_exists` write; a file that changes during upload is aborted (nothing
+  is stored), rescanned, and retried once. Existing blobs are verified by size
+  and, when present, `sha256` object metadata before being reported as
+  already stored; a mismatch is a per-file error, never an overwrite. New
+  blobs carry `sha256` and `size` metadata.
 - `ingest --dry-run` is now a connected preview: it checks connectivity and
   which objects already exist, uploads nothing, commits nothing, and fails if
   the lakehouse is unreachable. `ingest --dry-run --offline` restores the
@@ -45,6 +58,8 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   RustFS healthcheck probes `/health/ready` instead of the liveness-only
   `/health`. **Breaking for existing local stacks:** there is no in-place
   migration; see the manual's upgrade section for the reset and re-ingest.
+- Ingest into a table created before the observation columns now fails with
+  `run anti_entropator init to upgrade it` until `init` has been re-run once.
 - Include/exclude ingest filters use their documented glob semantics.
 - Ingest summaries distinguish uploaded and existing objects, and partial
   processing failures, including a failed catalog commit after upload, exit

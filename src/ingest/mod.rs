@@ -3,9 +3,11 @@
 //! Implements content-addressed storage with Iceberg catalog integration.
 
 mod output;
+mod upload;
 
 use crate::cli::{IngestArgs, IngestOutputFormat};
-use crate::domain::{ContentHash, FileCategory, FileInfo};
+use crate::domain::observation::normalize_relative_path;
+use crate::domain::{ContentHash, FileCategory, FileInfo, ObservationStatus};
 use crate::file_hash;
 use crate::lakehouse::{writer, LakehouseConfig};
 use crate::scan::scan_file;
@@ -21,6 +23,7 @@ use output::{
 };
 use std::collections::HashSet;
 use std::path::Path;
+use uuid::Uuid;
 use walkdir::WalkDir;
 
 /// Result of processing a single file during ingest.
@@ -46,6 +49,8 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     let config = LakehouseConfig::default();
     let json_output = args.format == IngestOutputFormat::Json;
     let mode = IngestMode::from_flags(args.dry_run, args.offline);
+    let ctx = RunContext::new(&path);
+    tracing::info!(run_id = %ctx.run_id, source_id = %ctx.source_id, mode = mode.label(), "Starting ingest run");
 
     if !json_output {
         println!();
@@ -62,6 +67,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         println!("  Source:  {}", path.display());
         println!("  Target:  {}", config.warehouse);
         println!("  Mode:    {}", mode.label());
+        println!("  Run:     {}", ctx.run_id);
         println!();
     }
 
@@ -101,7 +107,16 @@ pub async fn run(args: IngestArgs) -> Result<()> {
 
     if files.is_empty() {
         return finalize_ingest(
-            IngestSummary::build(mode, 0, 0, 0, 0, &[], catalog_commit_from_result(&None)),
+            IngestSummary::build(
+                mode,
+                ctx.run_id,
+                0,
+                0,
+                0,
+                0,
+                &[],
+                catalog_commit_from_result(&None),
+            ),
             None,
             args.format,
         );
@@ -144,7 +159,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
             .to_string();
         pb.set_message(file_name.clone());
 
-        match process_file(file_path, &path, &config, operator.as_ref(), mode).await {
+        match process_file(file_path, &path, &config, operator.as_ref(), mode, &ctx).await {
             Ok(IngestOutcome::Uploaded(info)) => {
                 uploaded_count += 1;
                 total_bytes += info.size_bytes;
@@ -188,6 +203,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     finalize_ingest(
         IngestSummary::build(
             mode,
+            ctx.run_id,
             files.len() as u64,
             uploaded_count,
             exists_count,
@@ -324,8 +340,31 @@ fn collect_files(path: &Path, args: &IngestArgs) -> Result<Vec<std::path::PathBu
     Ok(files)
 }
 
+/// Identity shared by every observation of one ingest run (ADR-009).
+#[derive(Debug, Clone)]
+struct RunContext {
+    /// Identifies this logical ingest attempt; stamped on every committed row.
+    run_id: Uuid,
+    /// Stable identifier of the ingest root. Slice 3a derives it from the
+    /// canonical root path; `--source` (slice 3b) will allow overriding it.
+    source_id: String,
+}
+
+impl RunContext {
+    fn new(root: &Path) -> Self {
+        Self {
+            run_id: Uuid::new_v4(),
+            source_id: root.to_string_lossy().into_owned(),
+        }
+    }
+}
+
+/// How many times a file whose bytes changed mid-upload is rescanned and
+/// retried before it is reported as a per-file error.
+const SOURCE_CHANGED_RETRIES: usize = 1;
+
 /// Process a single file: scan, hash, then depending on `mode` stop
-/// (`--dry-run --offline`), check existence only (`--dry-run`), or check and
+/// (`--dry-run --offline`), verify existence only (`--dry-run`), or verify and
 /// upload (ingest).
 async fn process_file(
     path: &Path,
@@ -333,33 +372,9 @@ async fn process_file(
     config: &LakehouseConfig,
     operator: Option<&Operator>,
     mode: IngestMode,
+    ctx: &RunContext,
 ) -> Result<IngestOutcome> {
-    // 1. Scan file for initial metadata
-    let mut info = scan_file(path).await?;
-
-    // 2. Set parent directory (relative to root)
-    if let Ok(relative) = path.strip_prefix(root_path) {
-        if let Some(parent) = relative.parent() {
-            info = info.with_parent_dir(parent.to_string_lossy().to_string());
-        }
-    }
-
-    // 3. Compute object key based on content hash
-    let hash = if let Some(ref h) = info.content_hash {
-        h.0.clone()
-    } else {
-        let hash_path = path.to_path_buf();
-        let h = tokio::task::spawn_blocking(move || file_hash::full_sha256(&hash_path))
-            .await
-            .context("Blocking hash task panicked")??;
-        info.content_hash = Some(ContentHash::new(h.clone()));
-        h
-    };
-
-    let content_hash = ContentHash::new(hash);
-    let object_key = content_hash.to_object_key();
-    let object_uri = format!("s3://{}/{}", config.bucket, object_key);
-    info.object_uri = Some(object_uri);
+    let mut info = prepare_file(path, root_path, config, ctx).await?;
 
     if !mode.is_connected() {
         // --dry-run --offline: no store access, so every candidate is "would upload".
@@ -368,33 +383,102 @@ async fn process_file(
 
     let op = operator.ok_or_else(|| anyhow::anyhow!("Storage operator not available"))?;
 
-    // 4. Check if object already exists
-    let exists = op
-        .exists(&object_key)
-        .await
-        .context("Failed to check object existence")?;
+    let mut attempts_left = SOURCE_CHANGED_RETRIES;
+    loop {
+        let hash = info
+            .content_hash
+            .clone()
+            .expect("prepare_file always sets the content hash");
 
-    if exists {
-        return Ok(IngestOutcome::AlreadyExists);
+        // Existing blobs are verified (size, and SHA-256 metadata when present),
+        // not merely checked for existence. A mismatch is a per-file error,
+        // never an overwrite.
+        match upload::verify_existing(op, &hash, info.size_bytes).await? {
+            upload::BlobVerdict::Missing => {}
+            upload::BlobVerdict::Verified | upload::BlobVerdict::Legacy => {
+                return Ok(IngestOutcome::AlreadyExists);
+            }
+        }
+
+        if !mode.writes() {
+            // --dry-run: existence is known, but nothing is uploaded.
+            return Ok(IngestOutcome::Uploaded(Box::new(info)));
+        }
+
+        match upload::upload_verified(op, path, &hash, info.size_bytes).await {
+            Ok(upload::UploadOutcome::Uploaded { .. }) => {
+                info.ingested_at = Some(Utc::now());
+                return Ok(IngestOutcome::Uploaded(Box::new(info)));
+            }
+            Ok(upload::UploadOutcome::AlreadyExists) => return Ok(IngestOutcome::AlreadyExists),
+            Err(e) if e.is::<upload::SourceChanged>() && attempts_left > 0 => {
+                attempts_left -= 1;
+                tracing::warn!(
+                    path = %path.display(),
+                    error = %e,
+                    "Source changed during upload; rescanning and retrying"
+                );
+                info = prepare_file(path, root_path, config, ctx).await?;
+            }
+            Err(e) => {
+                return Err(e).with_context(|| {
+                    format!(
+                        "upload failed after {} retr{}",
+                        SOURCE_CHANGED_RETRIES,
+                        if SOURCE_CHANGED_RETRIES == 1 {
+                            "y"
+                        } else {
+                            "ies"
+                        }
+                    )
+                });
+            }
+        }
     }
+}
 
-    if !mode.writes() {
-        // --dry-run: existence is known, but nothing is uploaded.
-        return Ok(IngestOutcome::Uploaded(Box::new(info)));
+/// Scan and hash one file and attach its observation identity. Pure with
+/// respect to the store; safe to call again after a `SourceChanged` retry.
+async fn prepare_file(
+    path: &Path,
+    root_path: &Path,
+    config: &LakehouseConfig,
+    ctx: &RunContext,
+) -> Result<FileInfo> {
+    // 1. Scan file for initial metadata
+    let mut info = scan_file(path).await?;
+
+    // 2. Path identity relative to the ingest root
+    let relative = path.strip_prefix(root_path).unwrap_or(path);
+    if let Some(parent) = relative.parent() {
+        info = info.with_parent_dir(parent.to_string_lossy().to_string());
     }
+    let relative_path = normalize_relative_path(relative);
 
-    // 5. Upload file
-    let bytes = tokio::fs::read(path)
-        .await
-        .with_context(|| format!("Failed to read file: {}", path.display()))?;
+    // 3. Content hash (scan_file only hashes small files inline)
+    if info.content_hash.is_none() {
+        let hash_path = path.to_path_buf();
+        let h = tokio::task::spawn_blocking(move || file_hash::full_sha256(&hash_path))
+            .await
+            .context("Blocking hash task panicked")??;
+        info.content_hash = Some(ContentHash::new(h));
+    }
+    let content_hash = info.content_hash.clone().expect("content hash set above");
 
-    op.write(&object_key, bytes)
-        .await
-        .context("Failed to upload to storage")?;
+    info.object_uri = Some(format!(
+        "s3://{}/{}",
+        config.bucket,
+        content_hash.to_object_key()
+    ));
 
-    info.ingested_at = Some(Utc::now());
-
-    Ok(IngestOutcome::Uploaded(Box::new(info)))
+    // 4. Observation identity; derives the deterministic row id from the hash.
+    Ok(info.with_observation(
+        ctx.source_id.clone(),
+        relative_path,
+        ctx.run_id,
+        ObservationStatus::Present,
+        Utc::now(),
+    ))
 }
 
 #[cfg(test)]
@@ -450,6 +534,7 @@ mod tests {
         finalize_ingest(
             IngestSummary::build(
                 mode,
+                Uuid::nil(),
                 candidates,
                 uploaded_count,
                 exists_count,
@@ -641,29 +726,16 @@ mod tests {
     // ── IngestOutcome tally tests ──
 
     fn make_test_info(name: &str, size: u64) -> FileInfo {
-        use crate::domain::FileCategory;
-        FileInfo {
-            id: uuid::Uuid::new_v4(),
-            source_path: std::path::PathBuf::from(format!("/test/{}", name)),
-            filename: name.to_string(),
-            extension: "txt".to_string(),
-            mime_type: None,
-            category: FileCategory::Document,
-            size_bytes: size,
-            content_hash: None,
-            partial_hash: None,
-            created_at: None,
-            modified_at: None,
-            scanned_at: chrono::Utc::now(),
-            object_uri: None,
-            ingested_at: Some(chrono::Utc::now()),
-            suggested_name: None,
-            name_reason: None,
-            is_duplicate: false,
-            duplicate_of: None,
-            parent_dir: String::new(),
-            group_id: None,
-        }
+        let mut info = FileInfo::new(
+            std::path::PathBuf::from(format!("/test/{}", name)),
+            name.to_string(),
+            ".txt".to_string(),
+            size,
+            None,
+            None,
+        );
+        info.ingested_at = Some(chrono::Utc::now());
+        info
     }
 
     /// Fold outcomes into counts and commit batch (pure, no I/O).

@@ -2,6 +2,7 @@
 //!
 //! Handles connectivity to RustFS and Lakekeeper, and initializes the warehouse.
 
+pub mod evolve;
 pub mod schema;
 pub mod writer;
 
@@ -361,6 +362,26 @@ pub async fn init() -> Result<()> {
                 println!("{}", style("already exists").yellow());
             }
         }
+        Err(e) => {
+            println!("{}", style(format!("error: {}", e)).red());
+            return Err(e);
+        }
+    }
+
+    // Tables created before the ADR-009 observation columns are upgraded in
+    // place; a current table is verified and left untouched.
+    print!("  Checking table schema... ");
+    match evolve::ensure_table_schema(&config).await {
+        Ok(added) if added.is_empty() => println!("{}", style("up to date").yellow()),
+        Ok(added) => println!(
+            "{}",
+            style(format!(
+                "added {} column(s): {}",
+                added.len(),
+                added.join(", ")
+            ))
+            .green()
+        ),
         Err(e) => {
             println!("{}", style(format!("error: {}", e)).red());
             return Err(e);

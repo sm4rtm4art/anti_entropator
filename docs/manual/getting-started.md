@@ -101,9 +101,29 @@ Ingest has three modes; `--offline` requires `--dry-run`:
 | `--dry-run --offline` | no | no — every candidate is reported as "would upload" | no | `dry_run_offline` |
 | default | yes | yes | yes | `ingest` |
 
-`--format json` writes a versioned summary (`format_version`, `mode`, counts, `status`, `catalog_commit`) to stdout.
+`--format json` writes a versioned summary (`format_version` 2: `mode`, `run_id`, counts, `status`, `catalog_commit`) to stdout.
 Human output remains the default.
 Partial and complete failures exit non-zero in every mode; JSON mode keeps that exit status and prints the summary before the error on stderr.
+
+How an upload is made safe (ADR-009):
+
+- Files are streamed in bounded chunks and re-hashed while they are sent; the
+  object is stored under `sha256/<aa>/<bb>/<hash>` only if the bytes still
+  match the hash from the scan. A file that changes mid-upload is aborted
+  (nothing is stored), rescanned, and retried once before it counts as a
+  per-file error.
+- An object that already exists is verified against the local file (size, and
+  the object's `sha256` metadata when present). A mismatch is reported as an
+  error for that file; the stored object is never overwritten.
+- Every run has a `run_id`. Rows committed by that run carry it together with
+  `source_id` (the canonical absolute path of the ingest root), `relative_path`,
+  `observation_status`, and `observed_at`. Moving the ingest root changes
+  `source_id`; an override flag is planned.
+
+Tables created before these columns existed are upgraded in place the next
+time you run `anti_entropator init`; until then `ingest` stops with
+`run anti_entropator init to upgrade it`. Older rows keep `NULL` in the new
+columns.
 
 ### 5. Query Your Catalog
 

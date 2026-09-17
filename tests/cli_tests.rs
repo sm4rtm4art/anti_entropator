@@ -479,10 +479,16 @@ fn ingest_dry_run_json_is_valid_summary() -> Result<()> {
     let json_str = String::from_utf8(output.stdout)?;
     let json: serde_json::Value = serde_json::from_str(&json_str)?;
 
-    assert_eq!(json["format_version"].as_u64(), Some(1));
+    assert_eq!(json["format_version"].as_u64(), Some(2));
     assert_eq!(json["mode"].as_str(), Some("dry_run_offline"));
     assert_eq!(json["status"].as_str(), Some("success"));
     assert_eq!(json["candidates"].as_u64(), Some(1));
+    // Every run carries an identity, previews included (ADR-009 run_id).
+    let run_id = json["run_id"].as_str().expect("run_id must be a string");
+    assert!(
+        uuid::Uuid::parse_str(run_id).is_ok(),
+        "run_id must be a UUID, got {run_id}"
+    );
     assert_eq!(json["uploaded"].as_u64(), Some(1));
     assert_eq!(json["already_exists"].as_u64(), Some(0));
     assert_eq!(json["failed"].as_u64(), Some(0));
@@ -574,7 +580,7 @@ fn ingest_partial_errors_json_exits_nonzero() -> Result<()> {
     );
 
     let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-    assert_eq!(json["format_version"].as_u64(), Some(1));
+    assert_eq!(json["format_version"].as_u64(), Some(2));
     assert_eq!(json["mode"].as_str(), Some("dry_run_offline"));
     assert_eq!(json["status"].as_str(), Some("incomplete"));
     assert_eq!(json["candidates"].as_u64(), Some(2));
@@ -639,18 +645,34 @@ fn placeholder_commands_are_not_advertised_or_accepted() -> Result<()> {
 #[test]
 #[ignore] // Requires: docker compose up -d && source .env
 fn ingest_then_query_flow() -> Result<()> {
-    // 1. Init (idempotent)
+    // 1. Init (idempotent). On a table created before the ADR-009 columns the
+    //    first call adds them; every later call must report the schema as
+    //    up to date without touching it.
     cmd()?.arg("init").assert().success();
+    cmd()?
+        .arg("init")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "Checking table schema... up to date",
+        ));
 
-    // 2. Create temp dir with unique marker filenames
+    // 2. Create temp dir with unique marker filenames. `big` exceeds the
+    //    upload part size so the conditional multipart path is exercised.
     let temp = tempdir()?;
     let marker = &uuid::Uuid::new_v4().to_string()[..8];
     let file_a = format!("s2b_{}_a.txt", marker);
     let file_b = format!("s2b_{}_b.txt", marker);
+    let file_big = format!("s2b_{}_big.bin", marker);
     std::fs::write(temp.path().join(&file_a), format!("hello-{marker}"))?;
     std::fs::write(temp.path().join(&file_b), format!("world-{marker}"))?;
+    let big: Vec<u8> = (0..(9 * 1024 * 1024usize))
+        .map(|i| (i as u32).wrapping_mul(2654435761) as u8)
+        .chain(marker.bytes())
+        .collect();
+    std::fs::write(temp.path().join(&file_big), &big)?;
 
-    // 3. Ingest with --format json -- should upload 2 files and commit.
+    // 3. Ingest with --format json -- should upload 3 files and commit.
     //    stdout must be exactly one JSON document even on the upload+commit
     //    path (the Iceberg writer used to print progress lines to stdout).
     let ingest = cmd()?
@@ -662,8 +684,12 @@ fn ingest_then_query_flow() -> Result<()> {
     let ingest_json: serde_json::Value = serde_json::from_slice(&ingest.stdout)
         .expect("ingest --format json stdout must be a single JSON document");
     assert_eq!(ingest_json["mode"].as_str(), Some("ingest"));
-    assert_eq!(ingest_json["uploaded"].as_u64(), Some(2));
+    assert_eq!(ingest_json["uploaded"].as_u64(), Some(3));
     assert_eq!(ingest_json["catalog_commit"].as_str(), Some("succeeded"));
+    let run_id = ingest_json["run_id"]
+        .as_str()
+        .expect("run_id in summary")
+        .to_string();
 
     // 4. Query with marker to isolate this run's rows
     let query = format!(
@@ -675,9 +701,24 @@ fn ingest_then_query_flow() -> Result<()> {
         .arg(&query)
         .assert()
         .success()
-        .stdout(predicate::str::contains("| 2        |"));
+        .stdout(predicate::str::contains("| 3        |"));
 
-    // 5. Connected dry-run -- sees both blobs in the store, uploads nothing
+    // 4b. Every committed row carries the run identity and the path identity
+    //     (ADR-009 observation columns), and the canonical source root.
+    let source_root = temp.path().canonicalize()?;
+    let run_id_hex = run_id.replace('-', "");
+    let by_run = format!(
+        "SELECT count(*) FROM files WHERE encode(run_id, 'hex') = '{run_id_hex}' AND observation_status = 'present' AND source_id = '{}' AND relative_path = filename",
+        source_root.display()
+    );
+    cmd()?
+        .arg("query")
+        .arg(&by_run)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("| 3        |"));
+
+    // 5. Connected dry-run -- verifies all blobs in the store, uploads nothing
     let plan = cmd()?
         .arg("ingest")
         .arg(temp.path())
@@ -686,9 +727,9 @@ fn ingest_then_query_flow() -> Result<()> {
     assert!(plan.status.success());
     let plan_json: serde_json::Value = serde_json::from_slice(&plan.stdout)?;
     assert_eq!(plan_json["mode"].as_str(), Some("dry_run"));
-    assert_eq!(plan_json["candidates"].as_u64(), Some(2));
+    assert_eq!(plan_json["candidates"].as_u64(), Some(3));
     assert_eq!(plan_json["uploaded"].as_u64(), Some(0));
-    assert_eq!(plan_json["already_exists"].as_u64(), Some(2));
+    assert_eq!(plan_json["already_exists"].as_u64(), Some(3));
     assert_eq!(plan_json["catalog_commit"].as_str(), Some("not_attempted"));
 
     // 6. Re-ingest -- no new uploads (idempotent)
@@ -699,13 +740,13 @@ fn ingest_then_query_flow() -> Result<()> {
         .success()
         .stdout(predicate::str::contains("Uploaded:        0"));
 
-    // 7. Query again -- still exactly 2 rows (no duplicates)
+    // 7. Query again -- still exactly 3 rows (no duplicates)
     cmd()?
         .arg("query")
         .arg(&query)
         .assert()
         .success()
-        .stdout(predicate::str::contains("| 2        |"));
+        .stdout(predicate::str::contains("| 3        |"));
 
     Ok(())
 }
