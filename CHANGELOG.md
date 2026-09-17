@@ -7,23 +7,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Maintenance Note
-
-- The changelog is intentionally being kept high-level during v0.3
-  stabilization. Detailed release notes will be reconciled at v0.3 closeout
-  from the roadmap, stabilization plan, merged PRs, and validation evidence.
+The S1-S6 stabilization track is represented below. This is not yet the v0.3.0
+release: ingest recovery/data-model work, maintenance primitives, and the
+optional orchestration engine remain open in the roadmap and follow-up plan.
 
 ### Added
 
 - Thin `Makefile` wrappers for common local setup, stack, CLI, and quality-check
   commands.
 - Docs/shell quality workflow configuration under `.config/lint/`.
+- One-shot DataFusion queries over
+  `iceberg.anti_entropator.file_catalog`, including the optional `files` CLI
+  shorthand.
+- Docker-backed `init` → `ingest` → `query` integration coverage that can be
+  run explicitly against the local Compose stack.
+- CI coverage enforcement at the v0.3 floor, Trivy filesystem/image evidence,
+  Zizmor workflow analysis, and release-gate checks.
+- A native-runner multi-architecture build rehearsal and an opt-in blue/green
+  delivery simulation.
+- An experimental distroless runtime target; Debian Bookworm remains the
+  default runtime.
+- `ingest --format json` emits one machine-readable run summary on stdout.
+- ADR-009 defines `file_catalog` as an append-only file observation log with
+  explicit blob, observation, and ingest-run semantics (design accepted, not
+  yet implemented).
 
 ### Changed
 
-- Documentation and command-status synchronization for public showcase stabilization.
+- Include/exclude ingest filters use their documented glob semantics.
+- Ingest summaries distinguish uploaded and existing objects, and partial
+  processing failures, including a failed catalog commit after upload, exit
+  non-zero.
+- `ingest --max-size` rejects invalid values at the CLI boundary instead of
+  silently disabling the size limit.
+- SQL shorthand rewriting is restricted to table references instead of global
+  text replacement.
+- Placeholder `sql`, `duplicates`, and `merge` workflows fail explicitly
+  instead of reporting success.
+- Lakekeeper catalog and query setup share project-aware configuration and the
+  required `X-Project-Id` behavior.
+- Documentation, CLI status, security profiles, and delivery claims were
+  synchronized for the public local-first scope.
 - README landing-page narrative updated to reflect the current local-first
-  scope, planned work, DBOS-inspired framing, and Makefile quick start.
+  scope, planned work, and Makefile quick start.
+- CI caches and runner cleanup were bounded to reduce cross-job disk pressure.
+
+### Security
+
+- Compose services remain localhost-bound and require explicit local
+  credentials.
+- GitHub Actions use least-privilege defaults, concurrency controls, pinned
+  third-party actions, audit checks, and staged Trivy enforcement.
+- Release publication is separated from container verification and guarded by
+  quality and security checks.
+- Updated transitive `event-listener` to 5.4.2 to resolve
+  `RUSTSEC-2026-0221`.
+
+### Deferred
+
+- Ingest row-grain, mutation safety, durable recovery, and reconciliation are
+  tracked in `.local/followup-v0.3-stabilization-plan.md`.
+- Iceberg `expire`/`vacuum` maintenance and `dataflow-rs` orchestration remain
+  required roadmap work and are not shipped.
+- Active multi-architecture publication, distroless promotion, and
+  SBOM/provenance enforcement remain gated follow-ups.
+- `RUSTSEC-2026-0195` and `RUSTSEC-2026-0194` remain temporarily ignored while
+  OpenDAL 0.55 resolves to vulnerable `quick-xml` versions; remove the ignores
+  after a compatible stack upgrade.
+- The transitive Apache Thrift advisory remains open pending a compatible
+  Arrow/Parquet/DataFusion stack upgrade.
 
 ### Planned
 

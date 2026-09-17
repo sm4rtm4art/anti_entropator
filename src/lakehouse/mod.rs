@@ -18,8 +18,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Shared S3 storage factory for Iceberg catalog operations.
-/// Used by both writer and query modules.
+/// Build the OpenDAL-backed S3 factory used by Iceberg catalog and writer I/O.
+///
+/// DataFusion query object access uses [`crate::storage::create_operator`]
+/// instead; both paths derive their settings from [`LakehouseConfig`].
 pub(crate) fn s3_storage_factory() -> Arc<dyn iceberg::io::StorageFactory> {
     Arc::new(OpenDalStorageFactory::S3 {
         customized_credential_load: None,

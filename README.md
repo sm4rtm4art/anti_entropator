@@ -21,11 +21,11 @@ anti_entropator ingest  ~/Downloads --include '*.pdf'
 anti_entropator query   "SELECT category, COUNT(*) FROM iceberg.anti_entropator.file_catalog GROUP BY category"
 ```
 
-> **Status — early public preview (v0.3 stabilization, updated 2026-07).**
+> **Status — early public preview (v0.3 stabilization, updated 2026-09).**
 > The `profile → scan → ingest → query` path works end to end today. `sql`,
 > `duplicates`, and `merge` are declared placeholders and exit non-zero rather
-> than pretending to succeed. Release hardening is being finished in small,
-> reviewable slices.
+> than pretending to succeed. The S1-S6 stabilization track is complete; ingest
+> correctness/recovery and the remaining roadmap features are still open.
 
 ---
 
@@ -123,10 +123,10 @@ flowchart LR
     ICE -->|manifests| IO
 ```
 
-Every object-store read, write, list, head, and delete goes through a single
-OpenDAL boundary — including DataFusion's, via `object_store_opendal`. That
-constraint is what keeps the writer and the query engine from drifting into two
-different views of storage.
+Every object-store read, write, list, head, and delete stays within the OpenDAL
+ecosystem. Ingest and DataFusion use the shared application `Operator`; Iceberg
+uses `iceberg-storage-opendal` through its own factory and `FileIO`, with both
+paths configured from `LakehouseConfig`.
 
 ### Technology choices
 
@@ -225,8 +225,8 @@ This is a showcase project, so the process is part of what is on display.
   PR-sized blocks — correctness fixes, test pyramid, secrets and auth
   hardening, technical-debt audit, CI/CD delivery — each with a named quality
   gate and recorded validation evidence before it merges.
-- **Tests are the release floor.** 222 unit tests and 32 CLI tests pass on every
-  change, plus two Docker-backed `init → ingest → query` tests run on demand
+- **Tests are the release floor.** Unit and CLI tests run on every change, and
+  one ignored Docker-backed `init → ingest → query` test can be run on demand
   against the local stack. CI fails the build below 50% line coverage.
 - **Everything checkable is checked automatically.** `cargo fmt`,
   `clippy -D warnings`, tests, coverage, `cargo audit`, Trivy filesystem and
@@ -244,6 +244,8 @@ This is a showcase project, so the process is part of what is on display.
 - **Deployment scope is a single-developer local demo** via Docker Compose.
   Compose services bind to `127.0.0.1` and the default credentials are
   development-only.
+- **Catalog rows retain absolute source paths** for the local-first workflow.
+  Review or redact that field before sharing catalog data or query output.
 - **CI publishes container images** for release and reference use. A shared or
   public deployment needs its own threat model, non-local auth, managed
   secrets, and network review — see [docs/security](docs/security/).

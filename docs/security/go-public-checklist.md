@@ -23,32 +23,33 @@ Use it in order, and treat each section as a small, testable milestone.
 - [x] Dependabot alerts: enabled (2026-05-05).
 - [x] Dependabot security updates: enabled (2026-05-05).
 - [x] Grouped security updates: enabled (2026-05-05).
-- [x] Enable GitHub code/security features when available:
-  - CodeQL code scanning: enabled in GitHub repository settings (2026-05-16).
-  - Secret scanning: enabled in GitHub repository settings (2026-05-16).
-  - Codecov integration: active on public PRs.
-  - Private vulnerability reporting: available after go-public; verify setting
-    before announcing a public vulnerability intake process.
-  - Push protection: keep enabled or verify before accepting external
-    contributions and before adding any deployment secrets.
+- [x] Review GitHub code/security features:
+  - Zizmor workflow analysis uploads GitHub code-scanning results; CodeQL
+    default setup is not configured (verified 2026-09-13).
+  - Secret scanning and push protection: enabled (verified 2026-09-13).
+  - Codecov integration: active (verified 2026-09-13).
+  - Private vulnerability reporting: enabled (2026-09-13).
 - [x] Add CODEOWNER coverage for security-sensitive surfaces:
   `.github/workflows/**`, `.github/dependabot.yml`, `.github/CODEOWNERS`,
   dependency manifests, container files, scripts, and security/deployment docs.
-- [ ] Require CODEOWNER review for those paths through GitHub branch protection
-  or repository rulesets.
-- [ ] Require the stable aggregate status checks through branch protection /
+- [x] Require CODEOWNER review for those paths through the active `main`
+  repository ruleset (verified 2026-09-13).
+- [x] Require the stable aggregate status checks through branch protection /
   rulesets: `CI Gate` (`ci.yml`) and `Security Gate` (`security.yml`). Require
   both stable gates rather than individual renameable jobs; confirm merges are
   blocked when either gate fails, and that docs/rules-only PRs (`*.md` /
   `*.mdc`) still report a green `CI Gate` (via the `changes` job with
   `predicate-quantifier: every`) instead of a never-reported check or a
-  false-positive Rust Quality run.
-- [ ] Review GitHub Actions failed-run behavior before going public:
+  false-positive Rust Quality run (verified 2026-09-13).
+- [x] Review GitHub Actions logs and retained output:
   - failed job logs do not print secrets or `.env` contents,
   - post-job cleanup logs do not expose token values,
   - cache keys/paths do not include secrets,
   - uploaded artifacts/release assets do not contain `.env` or local state.
-- [ ] Complete the S5-0 trust-gap reconciliation before S5 public-showcase
+  - S6 review of the latest successful CI/Security logs found no token, access
+    key, or private-key patterns; 347 artifact names contained no sensitive
+    markers (2026-09-13).
+- [x] Complete the S5-0 trust-gap reconciliation before S5 public-showcase
   closeout:
   - classify remaining checklist items as S5-closeout, release-blocking, or
     post-v0.3 debt,
@@ -211,10 +212,13 @@ Use it in order, and treat each section as a small, testable milestone.
   Reviewed 2026-05-05: CLI output shows file paths (expected). No tokens or
   credentials appear in stdout/stderr. CI runners are ephemeral (GitHub-hosted),
   no credential persistence between runs.
-- [ ] Review GitHub Actions workflow logs, artifacts, and release assets for
-  accidental sensitive path/token leakage. Check failed runs specifically --
-  error output may contain unmasked values that success paths never show.
-- [ ] Document data handling expectations for users in README/docs (S3-B scope).
+- [x] Review GitHub Actions workflow logs, artifacts, and release assets for
+  accidental sensitive path/token leakage. S6 checked the latest successful
+  CI/Security logs, retained artifact names, release assets, and cache keys;
+  no token, access-key, private-key, `.env`, or private-state marker was found
+  (2026-09-13).
+- [x] Document data handling expectations for users in README/docs.
+  README now warns that catalog rows retain absolute source paths.
 
 ## 6) Release-Day Runbook
 
@@ -232,25 +236,27 @@ When you are ready to make the repository public:
 4. [x] Confirm `SECURITY.md` and this checklist are up-to-date.
    Updated 2026-05-05: added "Current Security Controls" section, fixed
    overclaims, softened private reporting language.
-5. [ ] Merge hardening branch, then switch repository visibility.
-   Deferred until S5 completion and final review.
+5. [x] Repository visibility is public.
+   Security settings and the active `main` ruleset were revalidated during S6
+   on 2026-09-13.
 
 ## 7) Deployment Profile and Rollout Narrative
 
 - [x] Confirm target profile in [Deployment Security Profiles](deployment-profiles.md).
   Current profile: local demo. All docs aligned with local-first defaults.
-- [ ] If demonstrating deployments publicly, document the delivery model in
+- [x] If demonstrating deployments publicly, document the delivery model in
   [Blue-Green Delivery Model](../ci-cd/blue-green-delivery.md).
   Status: blue-green remains a local/GitHub-runner simulation. No persistent
   external deployment target exists yet.
-  Deferred until S5 or post-v0.3.
+  Implemented as a simulation in S5-C; production automation remains out of
+  scope.
 - [x] Confirm rollback steps are documented and tested at least once in a local simulation.
   Verified in S5-C Slice D (PR #117): helper rollback path documented in
   `docs/ci-cd/blue-green-delivery.md` and exercised in local dual-slot
   simulation evidence.
-- [ ] Confirm GitHub-runner deployment simulation is limited to ephemeral smoke
+- [x] Confirm GitHub-runner deployment simulation is limited to ephemeral smoke
   checks with generated non-secret values and small fixtures, not persistent
-  deployment credentials or local data dumps.
+  deployment credentials or local data dumps (S5-C Slice D, PR #117).
 - [x] Confirm hardening exceptions and follow-ups are tracked in
   [Docker and CI Hardening Review](docker-hardening-review.md).
   Exceptions documented: floating tags, disabled SBOM/provenance, Trivy

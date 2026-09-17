@@ -1,6 +1,7 @@
 # Docker and CI Hardening Review
 
-Review date: 2026-05-16.
+Review date: 2026-05-16. S6 settings and image versions revalidated
+2026-09-13.
 
 Scope:
 - `Dockerfile`
@@ -21,9 +22,9 @@ Scope:
   accidental `.env` files from the runner workspace after evidence is uploaded.
 - GitHub Actions in CI, release, and security workflows are pinned to full
   commit SHAs with tag/branch comments for reviewability.
-- CodeQL code scanning and GitHub secret scanning are enabled in repository
-  settings, while repo-tracked workflow security analysis now runs with
-  `zizmor` in `security.yml`.
+- Repo-tracked workflow security analysis runs with `zizmor` in `security.yml`
+  and uploads GitHub code-scanning results. GitHub secret scanning and push
+  protection are enabled; CodeQL default setup is not configured.
 - A dedicated `docs-shell.yml` workflow performs automated quality checks on non-Rust files, including typos/spelling (`typos`), Markdown formatting (`markdownlint-cli2`), Shell script syntax (`shellcheck`), and formatting (`shfmt`). This workflow uses pinned GitHub Actions and narrow path triggers to optimize CI resources.
 - `.github/CODEOWNERS` covers workflow, dependency, container, script, and
   security documentation changes so branch/ruleset settings can require focused
@@ -33,10 +34,10 @@ Scope:
 
 | Area | Current State | Risk | Follow-up |
 | ---- | ------------- | ---- | --------- |
-| Builder base image | `rust:1.96-bookworm` in `Dockerfile` | Release-tag drift over time | Consider digest pinning in S5-C release path |
+| Builder base image | `rust:1.98-bookworm` in `Dockerfile` | Release-tag drift over time | Consider digest pinning before release-grade publishing |
 | Runtime base image | Default runtime remains `debian:bookworm-slim` (`runtime` target). S5-D Slice B1 added `runtime-distroless` (`gcr.io/distroless/cc-debian12:nonroot`) as an experiment target in `Dockerfile`: image size dropped from `175829329` bytes (Bookworm) to `103617086` bytes (distroless), and Trivy HIGH/CRITICAL baseline dropped from `10` to `0` (fixable-only stayed `0` for both). Distroless `--help` smoke passed. A manual containerized `init` -> `ingest` -> `query` flow also passed on the delivery-slot network with persisted `HOME` config state and slot credentials from the running RustFS container. | `scripts/delivery-sim.sh` currently assumes `/bin/sh` (`--entrypoint /bin/sh`) and fails against distroless images. Local `buildx --platform linux/amd64` still fails in the Rust builder stage under QEMU with `rustc` SIGSEGV (same emulation class seen in earlier S5 evidence). | Keep Bookworm default for now; carry distroless as explicit S5-D target. Promote distroless only after the delivery smoke harness stops requiring `/bin/sh` and native runner evidence confirms amd64/arm64 behavior for the candidate target. |
 | RustFS image tag | `rustfs/rustfs:1.0.0-beta.2` | Beta release may change quickly | Re-evaluate stable tag availability each S5 cycle |
-| Lakekeeper image tag | `quay.io/lakekeeper/catalog:v0.12.3` | Release-tag drift over time | Consider digest pinning in S5-C release path |
+| Lakekeeper image tag | `quay.io/lakekeeper/catalog:v0.13.3` | Release-tag drift over time | Consider digest pinning before release-grade publishing |
 | Provenance and SBOM | Disabled in CI and release workflows | Reduced supply-chain attestability | Re-enable once GHCR compatibility issue is resolved |
 | Image vulnerability scan | Present in `security.yml`: PR uses `trivy fs`; main/schedule/manual use the shared `container-verify` image scan. Full HIGH/CRITICAL baseline remains report-only; fixable-only HIGH/CRITICAL is enforced; baseline and fixable-only JSON artifacts are uploaded with a GitHub summary. The release container path in `release.yml` is split into a dispatch-only `verify-container` job (`contents: read`, build + `container-verify`, no publish scope) and a tag-only `publish-container` job (`packages: write`): each builds one canonical image and runs `container-verify` (smoke + Trivy baseline + fixable-only enforcement) in-job; `publish-container` only then logs into GHCR and pushes re-tagged references of that same verified image (no rebuild between scan and push). `packages: write` is held only by the tag-gated publish job, so `workflow_dispatch` runs cannot publish. The **main-branch CI image publish** (`ci.yml` `container` job, `:latest`/`:sha`) is a separate path that is not yet image-scan gated. | PRs and the main-branch CI publish still do not scan the final runtime image | Keep baseline visibility; enforce fixable-only HIGH/CRITICAL for main/schedule/manual and the release-tag publish path; defer PR and main-branch runtime-image scanning to a later S5-C slice |
 | Rust toolchain workflow alignment | Workflows pin a reachable `dtolnay/rust-toolchain` stable-branch SHA; `rust-toolchain.toml` is `stable` + `rustfmt` + `clippy` | Low drift risk with current equivalent configuration | Keep SHA pin of current `stable` tip; re-pin when zizmor flags orphaned history (dtolnay force-updates `stable`) |
@@ -52,7 +53,7 @@ Scope:
 | Non-Rust file quality (Markdown, Shell) | No automated CI linting for shell scripts or Markdown documentation was previously active. | Typos, broken shell script syntax, or non-standard formatting can introduce noise or execution bugs. | Created `.github/workflows/docs-shell.yml` to run `typos`, `markdownlint-cli2`, `shellcheck`, and `shfmt -d` on narrow path triggers. All actions are fully pinned. |
 | GitHub deployment secrets | No repository-level deployment secrets are configured | Acceptable for current GHCR/local-simulation scope, but not sufficient for real external deployment | Keep current path secretless except `GITHUB_TOKEN`; require environment secrets or secret-manager integration before persistent deployment |
 | Runner cleanup | `ci.yml`, `release.yml`, and `security.yml` call `scripts/ci-cleanup.sh` with `if: always()` at the end of each job (including the reusable `rust-quality.yml` jobs and the stable `CI Gate`/`Security Gate` aggregators). Cleanup removes Trivy results, binary tarballs, and best-effort-removes locally built/loaded GHCR images and auth leftovers. | GitHub-hosted runners should be ephemeral, but future self-hosted runners and failed jobs can retain local workspace or Docker auth leftovers if cleanup is omitted | Keep cleanup best-effort, do not print token values, and upload intentional evidence artifacts before cleanup runs |
-| CodeQL and secret scanning | CodeQL code scanning and GitHub secret scanning are enabled in repository settings. | These controls are configured outside repo files, so reviewers cannot verify them from workflow YAML alone | Keep the setting documented here and in the go-public checklist; do not treat CodeQL as a replacement for audit, Trivy, or review |
+| Code scanning and secret scanning | Zizmor workflow analysis uploads code-scanning results. GitHub secret scanning and push protection are enabled; CodeQL default setup is not configured. | Repository settings and retained code-scanning alerts require periodic review outside workflow YAML | Keep the setting state documented here and in the go-public checklist; do not treat any single scanner as a replacement for audit, Trivy, or review |
 | Workflow token persistence | `actions/checkout` uses `persist-credentials: false` in CI, security, and release jobs. | A malicious step has less opportunity to reuse the checked-out repository's persisted Git credentials, but explicit job tokens still exist for actions that need them | Keep job permissions least-privilege and avoid broad write permissions outside publish/release jobs |
 | CODEOWNER review | `.github/CODEOWNERS` covers workflow, dependency, container, script, and security documentation changes. | CODEOWNERS only helps if GitHub branch protection or rulesets require review from code owners | Enable or verify CODEOWNER-required review in branch/ruleset settings |
 | Dependabot container coverage | Dependabot tracks `cargo`, `github-actions`, `docker`, and `docker-compose` ecosystems. | Automated updates can still be risky if grouped blindly or if upstream tags regress | Keep PR review focused on changelog, digest/scan evidence, and local/CI validation |
@@ -144,8 +145,8 @@ These exceptions and digest baselines should remain explicit until resolved.
   cleanup steps after evidence upload/release publication.
 - [x] `actions/checkout` uses `persist-credentials: false` in CI, security, and
   release jobs.
-- [x] CodeQL code scanning and GitHub secret scanning are enabled in repository
-  settings and documented as external GitHub controls.
+- [x] Zizmor workflow analysis, GitHub secret scanning, and push protection are
+  enabled; CodeQL default setup is documented as not configured.
 - [x] CODEOWNER coverage added for security-sensitive repo surfaces.
 - [ ] Require CODEOWNER review through GitHub branch protection or repository
   rulesets.
