@@ -496,6 +496,38 @@ fn ingest_dry_run_json_is_valid_summary() -> Result<()> {
     Ok(())
 }
 
+/// Tracing diagnostics must go to stderr so `--format json` stdout stays a
+/// single parseable document. The default `tracing_subscriber::fmt` writer is
+/// stdout; this test guards the explicit stderr routing in `main.rs`.
+#[test]
+fn ingest_json_stdout_stays_pure_when_tracing_is_enabled() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("test.txt"), "content")?;
+
+    let output = cmd()?
+        .env("RUST_LOG", "anti_entropator=info")
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--dry-run", "--offline", "--format", "json"])
+        .output()?;
+
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout)?;
+    let stderr = String::from_utf8(output.stderr)?;
+    let json: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("stdout is not one JSON document ({e}): {stdout}"));
+    assert_eq!(json["candidates"].as_u64(), Some(1));
+    assert!(
+        stderr.contains("Collected ingest candidates"),
+        "expected the tracing line on stderr, got: {stderr}"
+    );
+    assert!(
+        !stdout.contains("Collected ingest candidates"),
+        "tracing must not leak into stdout: {stdout}"
+    );
+    Ok(())
+}
+
 #[test]
 fn ingest_json_empty_directory_emits_success_summary() -> Result<()> {
     let temp = tempdir()?;
@@ -618,13 +650,20 @@ fn ingest_then_query_flow() -> Result<()> {
     std::fs::write(temp.path().join(&file_a), format!("hello-{marker}"))?;
     std::fs::write(temp.path().join(&file_b), format!("world-{marker}"))?;
 
-    // 3. Ingest -- should upload 2 files
-    cmd()?
+    // 3. Ingest with --format json -- should upload 2 files and commit.
+    //    stdout must be exactly one JSON document even on the upload+commit
+    //    path (the Iceberg writer used to print progress lines to stdout).
+    let ingest = cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Uploaded:        2"));
+        .args(["--format", "json"])
+        .output()?;
+    assert!(ingest.status.success());
+    let ingest_json: serde_json::Value = serde_json::from_slice(&ingest.stdout)
+        .expect("ingest --format json stdout must be a single JSON document");
+    assert_eq!(ingest_json["mode"].as_str(), Some("ingest"));
+    assert_eq!(ingest_json["uploaded"].as_u64(), Some(2));
+    assert_eq!(ingest_json["catalog_commit"].as_str(), Some("succeeded"));
 
     // 4. Query with marker to isolate this run's rows
     let query = format!(

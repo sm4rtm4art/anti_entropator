@@ -44,11 +44,10 @@ pub async fn commit_files(files: Vec<FileInfo>, config: &LakehouseConfig) -> Res
     // 4. Commit Transaction
     commit_transaction(&catalog, &table, data_files).await?;
 
-    println!(
-        "  Committed {} records to Iceberg table '{}.{}'...",
-        files.len(),
-        NAMESPACE,
-        FILE_CATALOG_TABLE
+    tracing::info!(
+        records = files.len(),
+        table = %format!("{NAMESPACE}.{FILE_CATALOG_TABLE}"),
+        "Committed records to Iceberg table"
     );
 
     Ok(())
@@ -61,9 +60,10 @@ pub async fn commit_files(files: Vec<FileInfo>, config: &LakehouseConfig) -> Res
 /// Note: Lakekeeper stores internal Docker endpoints in table configs,
 /// so we must override S3 settings to use the host-accessible endpoint.
 async fn init_catalog(config: &LakehouseConfig) -> Result<RestCatalog> {
-    println!(
-        "  Connecting to catalog at {} with warehouse {}",
-        config.catalog_endpoint, config.warehouse
+    tracing::info!(
+        endpoint = %config.catalog_endpoint,
+        warehouse = %config.warehouse,
+        "Connecting to catalog"
     );
 
     build_rest_catalog(config).await
@@ -115,9 +115,9 @@ async fn write_parquet_file(
 
     writer.write(batch).await?;
     let data_file_builders = writer.close().await?;
-    println!(
-        "  Parquet file written. Preparing transaction with {} data files...",
-        data_file_builders.len()
+    tracing::info!(
+        data_files = data_file_builders.len(),
+        "Parquet file written; preparing transaction"
     );
 
     let mut data_files = Vec::new();

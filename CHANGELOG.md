@@ -75,6 +75,14 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   `v0.5.0+`. Stale M2/backlog statuses corrected; the MinIO test-harness
   fallback was removed from M2.
 
+### Fixed
+
+- `ingest --format json` printed three Iceberg-writer progress lines to stdout
+  ahead of the JSON document whenever an upload and commit happened, so the
+  machine-readable summary was unparsable on the success path. Tracing
+  diagnostics now go to stderr for every command and the writer reports
+  through `tracing` instead of `println!`.
+
 ### Removed
 
 - ADR-007 (`dataflow-rs` as an optional second ingest engine behind
