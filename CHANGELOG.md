@@ -68,6 +68,12 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   as unpartitioned, crate version corrected; ADR-004 "planned" labels on
   shipped commit/query steps removed). Decisions are unchanged.
 - CI caches and runner cleanup were bounded to reduce cross-job disk pressure.
+- Roadmap `v0.3.0` re-scoped (2026-09-17): the release is a correct local
+  lakehouse for file ingest and query; success criteria now name their
+  evidence. Maintenance primitives, query UX, and pipeline concurrency tuning
+  moved to `v0.4.0`; interactive SQL, duplicate workflow, and branch merge to
+  `v0.5.0+`. Stale M2/backlog statuses corrected; the MinIO test-harness
+  fallback was removed from M2.
 
 ### Removed
 
