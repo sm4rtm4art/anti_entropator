@@ -7,6 +7,7 @@
 
 - [ ] Single-purpose PR
 - [ ] Docs updated if behavior changed
+- [ ] `CHANGELOG.md` `[Unreleased]` updated, or N/A because: <!-- reason -->
 - [ ] No planned-as-shipped claims
 
 ## Tracking

@@ -57,6 +57,14 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   scope, planned work, and Makefile quick start.
 - CI caches and runner cleanup were bounded to reduce cross-job disk pressure.
 
+### Removed
+
+- ADR-007 (`dataflow-rs` as an optional second ingest engine behind
+  `--engine`) is superseded: the crate published under that name is a
+  JSONLogic rules engine, not a DAG executor, and the ADR's reference link is
+  dead. Roadmap M4 now delivers bounded stage concurrency and per-stage tracing
+  inside the single procedural pipeline. Nothing shipped was removed.
+
 ### Security
 
 - Compose services remain localhost-bound and require explicit local
@@ -72,8 +80,8 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
 
 - Ingest row-grain, mutation safety, durable recovery, and reconciliation are
   tracked in `.local/followup-v0.3-stabilization-plan.md`.
-- Iceberg `expire`/`vacuum` maintenance and `dataflow-rs` orchestration remain
-  required roadmap work and are not shipped.
+- Iceberg `expire`/`vacuum` maintenance and bounded ingest stage concurrency
+  (M4) remain required roadmap work and are not shipped.
 - Active multi-architecture publication, distroless promotion, and
   SBOM/provenance enforcement remain gated follow-ups.
 - `RUSTSEC-2026-0195` and `RUSTSEC-2026-0194` remain temporarily ignored while
