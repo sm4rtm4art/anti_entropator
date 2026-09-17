@@ -72,6 +72,10 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
 
 - Ingest row-grain, mutation safety, durable recovery, and reconciliation are
   tracked in `.local/followup-v0.3-stabilization-plan.md`.
+- RustFS stays pinned to `1.0.0-beta.2`. The 1.0.0 GA image fails store init
+  on an existing beta.2 data directory (evidence in
+  `docs/security/docker-hardening-review.md`); the upgrade waits for a
+  confirmed migration path.
 - Iceberg `expire`/`vacuum` maintenance and `dataflow-rs` orchestration remain
   required roadmap work and are not shipped.
 - Active multi-architecture publication, distroless promotion, and
