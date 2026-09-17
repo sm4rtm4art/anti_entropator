@@ -1,6 +1,6 @@
 # Roadmap to v0.3.0
 
-> **Goal (v0.3.0):** Stabilize the lakehouse pipeline, **unify storage behind one I/O boundary**, add **maintenance primitives**, and introduce **event-driven orchestration (safely / incrementally)**.
+> **Goal (v0.3.0):** Stabilize the lakehouse pipeline, **unify storage behind one I/O boundary**, add **maintenance primitives**, and make the ingest pipeline **bounded and observable** (single engine; see M4).
 
 ---
 
