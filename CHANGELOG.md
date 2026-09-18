@@ -7,9 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-The S1-S6 stabilization track is represented below. This is not yet the v0.3.0
-release: ingest recovery/data-model work, maintenance primitives, and the
-optional orchestration engine remain open in the roadmap and follow-up plan.
+Nothing yet.
+
+## [0.3.0] - 2026-09-18
+
+A correct local lakehouse for file ingest and query. Ingest is idempotent
+(one observation per path per source, unchanged re-ingest appends nothing),
+mutation-safe (streamed, re-hashed, conditional CAS writes), bounded (worker
+pool + batched commits), and honest about failure (durable run journal;
+interrupted or partial runs never exit 0 and are reconciled by the next run).
+The binary contains only implemented commands. The S1-S6 stabilization track
+and the S6A correctness slices (ADR-009 slices 1, 3, 4a) are included below.
+Maintenance primitives, a single-writer lease, and deletion/rename
+observations are v0.4.0 work; interactive SQL, duplicate management, and
+branch merge are v0.5.0+.
 
 ### Added
 
@@ -235,6 +246,7 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
 - `duplicates` - Find and report duplicate files
 - Iceberg catalog commit integration
 
-[Unreleased]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sm4rtm4art/anti_entropator/releases/tag/v0.1.0
