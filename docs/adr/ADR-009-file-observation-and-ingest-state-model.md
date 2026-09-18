@@ -1,7 +1,7 @@
 # ADR-009: File Observation and Ingest State Model
 
 Status: **accepted design, partially implemented** (slices 1 and 3 shipped,
-slice 4 partial; see Current State).
+slices 2 and 4 partial, slice 5 started; see Current State).
 
 ## Context
 
@@ -136,8 +136,23 @@ This ADR defines target v0.3 behavior. Implementation lands in small slices:
    `id`.
 2. Persist run identity and lifecycle transitions.
    **Partial.** Every run has a `run_id`; it is stamped on each committed row
-   and reported in the human and JSON summaries. No run journal, lease, or
-   lifecycle states yet.
+   and reported in the human and JSON summaries. Writing runs keep a journal
+   at `_runs/<run_id>.json` (the reserved control prefix) and rewrite it on
+   every transition: `started`, `committing {batch}`, `batch_committed
+   {batch, rows}`, then `completed`, `incomplete {failed}`, or `commit_failed
+   {batch}`. The list above is the implemented subset of the state list in
+   this ADR: `planned`/`uploading`/`blobs written` are not journaled (blobs
+   are content-addressed and harmless without a row), and `interrupted` is
+   never written but inferred from a non-terminal last entry. A run that
+   cannot write `started` refuses to start; later journal write failures warn
+   and continue, so the journal can only under-report progress. The next run
+   for the same source appends `reconciled {rows_in_catalog}` to each open
+   predecessor (a `COUNT(*)` by `run_id`) and, when it completes,
+   `superseded_by {run_id}`. `runs list` / `runs show` expose the journals.
+   The retry rule "reuse `run_id`" above is not implemented: recovery is a
+   fresh run, which slice 4 makes idempotent. **Not started:** the
+   single-writer lease; two concurrent ingests of one source can
+   double-observe.
 3. Separate blob existence from observation creation.
    **Shipped.** Uploads stream the file, re-hash the bytes in flight, and
    materialize the object only through a conditional `if_not_exists` write; a
@@ -174,7 +189,12 @@ This ADR defines target v0.3 behavior. Implementation lands in small slices:
    mark anything deleted. The current-state reduction is internal to ingest;
    the manual shows the equivalent SQL.
 5. Add restart, partial-failure, and conflict tests.
-   Not started.
+   **Partial.** Commit-failure injection is unit-tested through the
+   `BatchCommitter` seam. A Docker-gated test SIGKILLs the CLI after its
+   first batch commit and asserts non-zero exit, an open journal, the
+   catalog count for the run, and that the recovery run reconciles,
+   re-observes only the uncommitted paths, and supersedes the killed run.
+   **Not started:** conflict tests (need the lease).
 
 Rows committed before slice 1 have `NULL` in the observation columns and a
 random `id`; they remain readable and are not rewritten.

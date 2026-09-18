@@ -83,6 +83,42 @@ pub enum Commands {
         /// The SQL query to execute
         sql: String,
     },
+
+    /// Inspect ingest run journals: what each run recorded and whether it finished
+    Runs(RunsArgs),
+}
+
+#[derive(Parser, Debug)]
+pub struct RunsArgs {
+    #[command(subcommand)]
+    pub command: RunsCommand,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum RunsCommand {
+    /// List runs, newest first
+    List {
+        /// Only runs for this source (`source_id`)
+        #[arg(long, value_name = "NAME")]
+        source: Option<String>,
+
+        /// Only runs that never reached a terminal state and were not reconciled
+        #[arg(long)]
+        open: bool,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "human")]
+        format: IngestOutputFormat,
+    },
+    /// Show one run with its full history
+    Show {
+        /// The run's `run_id`
+        run_id: uuid::Uuid,
+
+        /// Output format
+        #[arg(long, value_enum, default_value = "human")]
+        format: IngestOutputFormat,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -189,7 +225,7 @@ pub struct IngestArgs {
     pub format: IngestOutputFormat,
 }
 
-/// Output format for ingest summaries.
+/// Output format for operator summaries (`ingest`, `runs`).
 #[derive(clap::ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum IngestOutputFormat {
     /// Human-readable operator output

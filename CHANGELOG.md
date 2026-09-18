@@ -37,6 +37,19 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   UUIDv5 over `(source_id, relative_path, content_hash, status)`. Every ingest
   run has a `run_id`, shown in the human report and in the JSON summary
   (`format_version` 2).
+- Durable ingest run journal and `runs` command (ADR-009 slice 4a): every
+  writing ingest keeps `_runs/<run_id>.json` in the data bucket and rewrites
+  it on each transition (`started`, `committing`, `batch_committed`,
+  `completed` | `incomplete` | `commit_failed`). A killed run leaves a
+  non-terminal last entry, which is how "interrupted" is identified; nothing
+  is inferred beyond that. A run that cannot write its `started` entry does
+  not start. The next ingest for the same source warns about unfinished runs,
+  records how many rows each actually has in the catalog (`reconciled`), and
+  marks them `superseded_by` itself on completion. New read-only
+  `runs list [--source] [--open]` and `runs show <run_id>`, both with
+  `--format json`. Docker-gated test SIGKILLs the CLI after its first batch
+  commit and verifies exit status, journal, catalog count, and the recovery
+  run (4/4 stable). No `--resume`; no single-writer lease yet.
 - Bounded ingest pipeline with batched commits (S6A slice 3c): files are
   processed by a `tokio` worker pool of `--concurrency` (default 4) and
   observation rows are committed every `--batch-size` rows (default 1000),
@@ -139,10 +152,15 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
 
 ### Deferred
 
-- Ingest row-grain, mutation safety, durable recovery, and reconciliation are
-  tracked in `.local/followup-v0.3-stabilization-plan.md`.
-- Iceberg `expire`/`vacuum` maintenance and bounded ingest stage concurrency
-  (M4) remain required roadmap work and are not shipped.
+- A single-writer lease per ingest source (ADR-009 slice 4b) and deletion or
+  rename observations are tracked in
+  `.local/followup-v0.3-stabilization-plan.md`.
+- Queries that read `run_id` over data files written before the observation
+  columns existed fail in iceberg-rust 0.10 (`unexpected target column type
+  FixedSizeBinary(16)`); a `source_id = …` predicate prunes those files. To be
+  re-checked on the `iceberg 0.11` bump.
+- Iceberg `expire`/`vacuum` maintenance and the M4 pipeline event schema
+  remain required roadmap work and are not shipped.
 - Active multi-architecture publication, distroless promotion, and
   SBOM/provenance enforcement remain gated follow-ups.
 - `RUSTSEC-2026-0195` and `RUSTSEC-2026-0194` remain temporarily ignored:

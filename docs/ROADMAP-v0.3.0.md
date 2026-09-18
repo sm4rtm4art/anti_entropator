@@ -384,9 +384,13 @@ Each criterion names its evidence. A criterion without evidence is not met.
    128 MiB. **Met** (2026-09-18).
 4. **Recovery (ADR-009 slice 4, minimum)** — every ingest run has a durable
    `run_id`; an interrupted or partially failed run is never reported as
-   success and its state is identifiable afterwards. _Evidence:_
-   failure-injection test (kill between upload and commit) proving non-zero
-   exit and a journal entry. **Open — S6A slice 4.**
+   success and its state is identifiable afterwards. _Evidence:_ run journal
+   at `_runs/<run_id>.json` with lifecycle transitions, `runs list` /
+   `runs show`, and the Docker-gated `interrupted_ingest_is_recorded_and_reconciled`
+   test: SIGKILL after the first batch commit → non-zero exit, open journal,
+   catalog count matches, the next run reconciles and supersedes it (4/4
+   stable, 2026-09-18). **Met** (S6A slice 4a). Single-writer lease (4b)
+   is not a criterion and stays open.
 5. **Quality gates** — `cargo fmt --check`, `clippy -D warnings`, tests,
    `cargo audit` (documented ignores only), coverage floor `≥ 50%` enforced by
    `--fail-under-lines 50`. _Evidence:_ green `ci.yml` on `main`. **Met**,
@@ -405,9 +409,9 @@ Deferred out of `v0.3.0` (see the 2026-09-17 status entry): maintenance
 per-stage tracing and concurrency tuning (all v0.4.0); interactive SQL,
 duplicate workflow, branch merge (v0.5.0+).
 
-> Execution note: criterion 4 is the remaining release-blocking work; it is
-> S6A slice 4 in the local plan. Tag `v0.3.0` when 1–5 and 7 are met;
-> criterion 6 is satisfied by the tag itself.
+> Execution note: criteria 1–5 and 7 are met once S6A slice 4a is on `main`.
+> Criterion 6 is satisfied by the tag itself; tagging `v0.3.0` is the next
+> release step.
 
 ---
 
@@ -420,8 +424,9 @@ duplicate workflow, branch merge (v0.5.0+).
 | ~~P0~~   | ~~S1 correctness queue (ingest filters, SQL rewrite, ingest counters)~~ | ~~Medium~~ | **Done** | S1–S6 closed 2026-09-13; S6A slices 1, 2a–2d merged 2026-09-17 |
 | ~~P1~~   | ~~Integration test: Ingest -> Query (containers)~~ | ~~Medium~~ | **Done** | Docker-gated `ingest_then_query_flow` against the Compose stack |
 | ~~P0~~   | ~~S6A slice 3: streaming, mutation-safe CAS upload + ADR-009 observation semantics~~ | ~~Large~~ | **Done** | 3a #218, 3b #219, 3c bounded pipeline + batched commits (criterion 3 met 2026-09-18) |
-| P0       | S6A slice 4: durable run journal, non-success on interruption | Medium | **Next** | Release-blocking (criterion 4) |
-| P1       | Tag `v0.3.0`; release workflow evidence on the tag | Small | Pending | Criterion 6 |
+| ~~P0~~   | ~~S6A slice 4a: durable run journal, non-success on interruption~~ | ~~Medium~~ | **Done** | Criterion 4 met 2026-09-18; `runs` command, kill test |
+| P1       | Tag `v0.3.0`; release workflow evidence on the tag | Small | **Next** | Criterion 6 |
+| P2       | S6A slice 4b: single-writer lease per source | Small | v0.4.0 | `if_not_exists` lease object, TTL, stale takeover |
 | P2       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | v0.4.0      | Needs ADR-009 run identity for "live reference"          |
 | P2       | Per-stage `tracing` spans, pipeline event schema (M4) | Medium | v0.4.0 | dataflow-rs dropped (ADR-007 superseded)                 |
 | ~~P2~~   | ~~S5 CI/CD hardening (Trivy + multi-arch path)~~ | ~~Medium~~ | **Done** | S5 closed; residual multi-arch/Trivy enforcement deferred |

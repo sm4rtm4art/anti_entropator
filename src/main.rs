@@ -15,6 +15,7 @@ mod ingest;
 mod lakehouse;
 mod profile;
 mod query;
+mod runs;
 mod scan;
 mod storage;
 
@@ -52,6 +53,9 @@ async fn main() -> Result<()> {
         }
         Commands::Query { sql } => {
             query::run(sql).await?;
+        }
+        Commands::Runs(args) => {
+            runs::run(args).await?;
         }
     }
 
