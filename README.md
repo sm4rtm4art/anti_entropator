@@ -163,15 +163,15 @@ make profile
   📊 Anti-Entropator Swamp Profile
 ═══════════════════════════════════════════════════════════════
 
-  Path: /Users/you/Downloads
-  Files: 4,548 | Dirs: 111 | Total size: 4.49 GiB
+  Path: <folder>
+  Files: <n> | Dirs: <n> | Total size: <size>
 
 ─── By Extension (top 25 by total size) ───────────────────────
 ╭───────────┬───────┬───────────┬──────────┬───────────╮
 │ Extension │ Count │ Total     │ Avg      │ Max       │
 ├───────────┼───────┼───────────┼──────────┼───────────┤
-│ .mp4      │ 811   │ 2.05 GiB  │ 2.59 MiB │ 53.81 MiB │
-│ .pdf      │ 465   │ 1.11 GiB  │ 2.44 MiB │ 99.66 MiB │
+│ .mp4      │ …     │ …         │ …        │ …         │
+│ .pdf      │ …     │ …         │ …        │ …         │
 ...
 ```
 
