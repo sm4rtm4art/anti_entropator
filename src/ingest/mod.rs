@@ -3,6 +3,7 @@
 //! Implements content-addressed storage with Iceberg catalog integration.
 
 mod output;
+mod pipeline;
 mod state;
 mod upload;
 
@@ -19,11 +20,13 @@ use console::style;
 use indicatif::{ProgressBar, ProgressStyle};
 use opendal::Operator;
 use output::{
-    catalog_commit_from_result, outcome_error, print_human_report, print_json_report, IngestCounts,
-    IngestMode, IngestSummary,
+    outcome_error, print_human_report, print_json_report, CommitCounts, IngestCounts, IngestMode,
+    IngestSummary,
 };
+use pipeline::{BatchCommitter, PipelineConfig};
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Arc;
 use uuid::Uuid;
 use walkdir::WalkDir;
 
@@ -154,8 +157,8 @@ pub async fn run(args: IngestArgs) -> Result<()> {
                 ctx.run_id,
                 ctx.source_id.clone(),
                 IngestCounts::default(),
+                CommitCounts::default(),
                 &[],
-                catalog_commit_from_result(&None),
             ),
             None,
             args.format,
@@ -177,9 +180,6 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         pb
     };
 
-    let mut tally = Tally::default();
-    let mut errors = Vec::new();
-
     // Create OpenDAL operator (needed for existence checks and uploads)
     let operator = if mode.is_connected() {
         Some(storage::create_operator(&config)?)
@@ -187,104 +187,89 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         None
     };
 
-    for file_path in &files {
-        pb.inc(1);
-        let file_name = file_path
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .to_string();
-        pb.set_message(file_name.clone());
+    let run_id = ctx.run_id;
+    let source_id = ctx.source_id.clone();
+    let fc = Arc::new(FileContext {
+        root: path,
+        config: config.clone(),
+        operator,
+        mode,
+        run: ctx,
+        state: current_state,
+    });
+    let committer = IcebergCommitter { config: &config };
+    let pipeline_cfg = PipelineConfig {
+        concurrency: args.concurrency,
+        batch_size: args.batch_size,
+    };
+    tracing::info!(
+        concurrency = pipeline_cfg.concurrency.get(),
+        batch_size = pipeline_cfg.batch_size.get(),
+        "Starting ingest pipeline"
+    );
 
-        let ctx_for_file = FileContext {
-            root: &path,
-            config: &config,
-            operator: operator.as_ref(),
-            mode,
-            run: &ctx,
-            state: current_state.as_ref(),
-        };
-        match process_file(file_path, &ctx_for_file).await {
-            Ok(outcome) => tally.record(outcome),
-            Err(e) => {
-                errors.push(format!("{}: {}", file_path.display(), e));
+    let report = pipeline::run_pipeline(
+        files.clone(),
+        pipeline_cfg,
+        {
+            let fc = Arc::clone(&fc);
+            move |p| {
+                let fc = Arc::clone(&fc);
+                async move { process_file(&p, &fc).await }
             }
-        }
-    }
+        },
+        mode.writes().then_some(&committer),
+        |p| {
+            pb.inc(1);
+            pb.set_message(
+                p.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+        },
+    )
+    .await;
 
     pb.finish_and_clear();
 
-    let Tally {
+    let pipeline::PipelineReport {
         mut counts,
-        observations,
-    } = tally;
+        commit,
+        errors,
+        commit_failure,
+    } = report;
     counts.candidates = files.len() as u64;
 
-    // Commit to Iceberg only in ingest mode and only when something was observed
-    let commit_result = if mode.writes() && !observations.is_empty() {
-        if !json_output {
-            print!("  Committing metadata to Iceberg catalog... ");
-        }
-        match writer::commit_files(observations, &config).await {
-            Ok(_) => {
-                if !json_output {
-                    println!("{}", style("OK").green());
-                }
-                Some(Ok(()))
-            }
-            Err(e) => {
-                if !json_output {
-                    println!("{}", style("FAILED").red());
-                }
-                Some(Err(e))
-            }
-        }
-    } else {
-        None
-    };
+    if !json_output && mode.writes() && commit.batches_committed + commit.batches_failed > 0 {
+        let verdict = if commit_failure.is_none() {
+            style("OK").green()
+        } else {
+            style("FAILED").red()
+        };
+        println!(
+            "  Committed {} batch(es) to the Iceberg catalog... {verdict}",
+            commit.batches_committed
+        );
+    }
 
-    let catalog_commit = catalog_commit_from_result(&commit_result);
     finalize_ingest(
-        IngestSummary::build(
-            mode,
-            ctx.run_id,
-            ctx.source_id.clone(),
-            counts,
-            &errors,
-            catalog_commit,
-        ),
-        commit_result,
+        IngestSummary::build(mode, run_id, source_id, counts, commit, &errors),
+        commit_failure,
         args.format,
     )
 }
 
-/// Fold per-file outcomes into summary counts and the rows to commit.
-#[derive(Default)]
-struct Tally {
-    counts: IngestCounts,
-    observations: Vec<FileInfo>,
+/// Production [`BatchCommitter`]: one Parquet file and one `fast_append`
+/// snapshot per batch. The table is reloaded per commit so each append is
+/// based on the snapshot the previous batch produced.
+struct IcebergCommitter<'a> {
+    config: &'a LakehouseConfig,
 }
 
-impl Tally {
-    fn record(&mut self, outcome: IngestOutcome) {
-        let blob = match outcome {
-            IngestOutcome::Observed(info, blob) => {
-                self.counts.observed += 1;
-                if blob == BlobState::Uploaded {
-                    self.counts.bytes += info.size_bytes;
-                }
-                self.observations.push(*info);
-                blob
-            }
-            IngestOutcome::Unchanged(blob) => {
-                self.counts.unchanged += 1;
-                blob
-            }
-        };
-        match blob {
-            BlobState::Uploaded => self.counts.uploaded += 1,
-            BlobState::Existing => self.counts.already_exists += 1,
-        }
+impl BatchCommitter for IcebergCommitter<'_> {
+    async fn commit(&self, rows: Vec<FileInfo>) -> Result<()> {
+        writer::commit_files(rows, self.config).await
     }
 }
 
@@ -297,7 +282,7 @@ async fn load_state(config: &LakehouseConfig, source_id: &str) -> Result<state::
 /// Finalize the ingest operation: print summary and determine command outcome.
 fn finalize_ingest(
     summary: IngestSummary,
-    commit_result: Option<Result<()>>,
+    commit_failure: Option<anyhow::Error>,
     format: IngestOutputFormat,
 ) -> Result<()> {
     match format {
@@ -308,7 +293,7 @@ fn finalize_ingest(
         IngestOutputFormat::Human => print_human_report(&summary),
     }
 
-    outcome_error(&summary, commit_result)
+    outcome_error(&summary, commit_failure)
 }
 
 /// Check lakehouse connectivity
@@ -440,17 +425,18 @@ impl RunContext {
     }
 }
 
-/// Everything `process_file` needs besides the file itself.
-struct FileContext<'a> {
-    root: &'a Path,
-    config: &'a LakehouseConfig,
+/// Everything `process_file` needs besides the file itself. Owned so it can be
+/// shared (`Arc`) by the concurrently running workers.
+struct FileContext {
+    root: std::path::PathBuf,
+    config: LakehouseConfig,
     /// `None` in `--dry-run --offline`.
-    operator: Option<&'a Operator>,
+    operator: Option<Operator>,
     mode: IngestMode,
-    run: &'a RunContext,
+    run: RunContext,
     /// Latest observation per path for this source; `None` when the catalog
     /// was not read (`--dry-run --offline`).
-    state: Option<&'a state::CurrentState>,
+    state: Option<state::CurrentState>,
 }
 
 /// How many times a file whose bytes changed mid-upload is rescanned and
@@ -460,10 +446,10 @@ const SOURCE_CHANGED_RETRIES: usize = 1;
 /// Process a single file: scan and hash it, decide whether the path needs a
 /// new observation, then depending on `mode` stop (`--dry-run --offline`),
 /// verify the blob only (`--dry-run`), or verify and upload (ingest).
-async fn process_file(path: &Path, fc: &FileContext<'_>) -> Result<IngestOutcome> {
-    let mut info = prepare_file(path, fc.root, fc.config, fc.run).await?;
+async fn process_file(path: &Path, fc: &FileContext) -> Result<IngestOutcome> {
+    let mut info = prepare_file(path, &fc.root, &fc.config, &fc.run).await?;
 
-    let Some(op) = fc.operator else {
+    let Some(op) = fc.operator.as_ref() else {
         // --dry-run --offline: no catalog, no store. Every candidate is
         // "would observe" and "would upload".
         return Ok(IngestOutcome::Observed(Box::new(info), BlobState::Uploaded));
@@ -479,7 +465,7 @@ async fn process_file(path: &Path, fc: &FileContext<'_>) -> Result<IngestOutcome
             .relative_path
             .clone()
             .expect("prepare_file always sets the relative path");
-        let decision = state::decide(fc.state, &relative_path, &hash.0);
+        let decision = state::decide(fc.state.as_ref(), &relative_path, &hash.0);
 
         // Existing blobs are verified (size, and SHA-256 metadata when present),
         // not merely checked for existence. A mismatch is a per-file error,
@@ -498,7 +484,7 @@ async fn process_file(path: &Path, fc: &FileContext<'_>) -> Result<IngestOutcome
                             error = %e,
                             "Source changed during upload; rescanning and retrying"
                         );
-                        info = prepare_file(path, fc.root, fc.config, fc.run).await?;
+                        info = prepare_file(path, &fc.root, &fc.config, &fc.run).await?;
                         continue;
                     }
                     Err(e) => {
@@ -597,12 +583,17 @@ mod tests {
             max_size: None,
             limit: None,
             source: None,
+            concurrency: std::num::NonZeroUsize::new(4).unwrap(),
+            batch_size: std::num::NonZeroUsize::new(1000).unwrap(),
             dry_run: true,
             offline: true,
             format: IngestOutputFormat::Human,
         }
     }
 
+    /// Commit outcome for the finalize tests: `Some(Ok)` commits every
+    /// observed row in one batch, `Some(Err)` fails batch 1, `None` never
+    /// commits.
     fn finalize(
         commit_result: Option<Result<()>>,
         uploaded_count: u64,
@@ -632,7 +623,25 @@ mod tests {
         format: IngestOutputFormat,
     ) -> Result<()> {
         let candidates = uploaded_count + exists_count + errors.len() as u64;
-        let catalog_commit = catalog_commit_from_result(&commit_result);
+        let (commit, failure) = match commit_result {
+            Some(Ok(())) => (
+                CommitCounts {
+                    committed: uploaded_count,
+                    batches_committed: 1,
+                    batches_failed: 0,
+                },
+                None,
+            ),
+            Some(Err(e)) => (
+                CommitCounts {
+                    committed: 0,
+                    batches_committed: 0,
+                    batches_failed: 1,
+                },
+                Some(e),
+            ),
+            None => (CommitCounts::default(), None),
+        };
         finalize_ingest(
             IngestSummary::build(
                 mode,
@@ -645,11 +654,12 @@ mod tests {
                     uploaded: uploaded_count,
                     already_exists: exists_count,
                     bytes: total_bytes,
+                    skipped: 0,
                 },
+                commit,
                 errors,
-                catalog_commit,
             ),
-            commit_result,
+            failure,
             format,
         )
     }
@@ -831,74 +841,6 @@ mod tests {
     }
 
     // ── IngestOutcome tally tests ──
-
-    fn make_test_info(name: &str, size: u64) -> FileInfo {
-        let mut info = FileInfo::new(
-            std::path::PathBuf::from(format!("/test/{}", name)),
-            name.to_string(),
-            ".txt".to_string(),
-            size,
-            None,
-            None,
-        );
-        info.ingested_at = Some(chrono::Utc::now());
-        info
-    }
-
-    fn tally(outcomes: Vec<IngestOutcome>) -> Tally {
-        let mut t = Tally::default();
-        for o in outcomes {
-            t.record(o);
-        }
-        t
-    }
-
-    #[test]
-    fn tally_counts_both_axes_independently() {
-        let t = tally(vec![
-            // new path, new blob
-            IngestOutcome::Observed(Box::new(make_test_info("a.txt", 100)), BlobState::Uploaded),
-            // new path, blob already there (identical bytes elsewhere)
-            IngestOutcome::Observed(Box::new(make_test_info("b.txt", 200)), BlobState::Existing),
-            // unchanged path, blob there
-            IngestOutcome::Unchanged(BlobState::Existing),
-        ]);
-        assert_eq!(t.counts.observed, 2);
-        assert_eq!(t.counts.unchanged, 1);
-        assert_eq!(t.counts.uploaded, 1);
-        assert_eq!(t.counts.already_exists, 2);
-        // Only uploaded bytes count; b.txt's blob was not transferred.
-        assert_eq!(t.counts.bytes, 100);
-        assert_eq!(t.observations.len(), 2);
-    }
-
-    #[test]
-    fn tally_unchanged_paths_commit_nothing() {
-        let t = tally(vec![
-            IngestOutcome::Unchanged(BlobState::Existing),
-            IngestOutcome::Unchanged(BlobState::Existing),
-            IngestOutcome::Unchanged(BlobState::Existing),
-        ]);
-        assert_eq!(t.counts.unchanged, 3);
-        assert_eq!(t.counts.already_exists, 3);
-        assert_eq!(t.counts.observed, 0);
-        assert_eq!(t.counts.uploaded, 0);
-        assert!(t.observations.is_empty());
-    }
-
-    #[test]
-    fn tally_restored_blob_for_unchanged_path_counts_as_upload_without_row() {
-        let t = tally(vec![IngestOutcome::Unchanged(BlobState::Uploaded)]);
-        assert_eq!(t.counts.unchanged, 1);
-        assert_eq!(t.counts.uploaded, 1);
-        assert!(t.observations.is_empty());
-    }
-
-    #[test]
-    fn tally_candidates_is_set_by_caller_not_by_record() {
-        let t = tally(vec![IngestOutcome::Unchanged(BlobState::Existing)]);
-        assert_eq!(t.counts.candidates, 0);
-    }
 
     // ── RunContext ──
 

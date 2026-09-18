@@ -140,7 +140,7 @@ were rejected and why.
 | Catalog        | [Lakekeeper](https://github.com/lakekeeper/lakekeeper) | Iceberg REST catalog in Rust, Postgres-backed, no JVM ([ADR-004](docs/adr/ADR-004-lakekeeper-catalog.md)) |
 | Query engine   | [DataFusion](https://datafusion.apache.org/) | Embedded Arrow SQL engine, reads Iceberg in-process ([ADR-005](docs/adr/ADR-005-datafusion-query-engine.md)) |
 | I/O boundary   | [OpenDAL](https://opendal.apache.org/) | One abstraction for all object-store operations ([ADR-006](docs/adr/ADR-006-opendal-unified-io.md)) |
-| Pipeline       | Single staged engine  | Sequential today; bounded `tokio` stage concurrency is roadmap M4. A dataflow-rs second engine was considered and dropped ([ADR-007](docs/adr/ADR-007-dataflow-rs-orchestration.md), superseded) |
+| Pipeline       | Single staged engine  | Bounded `tokio` worker pool (`--concurrency`) feeding a batched commit stage (`--batch-size`); a failed batch stops the run and keeps earlier batches. A dataflow-rs second engine was considered and dropped ([ADR-007](docs/adr/ADR-007-dataflow-rs-orchestration.md), superseded) |
 | Delivery       | Docker Compose        | One-command local stack; release path documented in [ADR-008](docs/adr/ADR-008-release-grade-ci-cd-delivery.md) |
 
 The whole stack is Rust or Rust-friendly by design: no JVM, no Spark, no
@@ -249,8 +249,8 @@ This is a showcase project, so the process is part of what is on display.
   public deployment needs its own threat model, non-local auth, managed
   secrets, and network review — see [docs/security](docs/security/).
 - **Not implemented yet:** interactive SQL, duplicate management, ingest branch
-  merge, Iceberg maintenance primitives (`expire`, `vacuum`), and bounded
-  stage concurrency in the ingest pipeline. All are tracked in the
+  merge, Iceberg maintenance primitives (`expire`, `vacuum`), and deletion or
+  rename observations in the catalog. All are tracked in the
   [roadmap](docs/ROADMAP-v0.3.0.md).
 - **Blue/green delivery is a documented simulation**, not production
   automation. It is labeled as such wherever it appears.

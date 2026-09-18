@@ -3,6 +3,7 @@
 //! Defines all commands and their arguments for the Anti-Entropator.
 
 use clap::{Parser, Subcommand};
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 const KIBIBYTE: u64 = 1024;
@@ -164,6 +165,15 @@ pub struct IngestArgs {
     #[arg(long, value_name = "NAME", value_parser = parse_source_name)]
     pub source: Option<String>,
 
+    /// Files hashed, verified, and uploaded at the same time.
+    #[arg(long, value_name = "N", default_value = "4")]
+    pub concurrency: NonZeroUsize,
+
+    /// Catalog rows per commit. Each batch becomes one Parquet file and one
+    /// Iceberg snapshot; a commit failure keeps earlier batches and stops the run.
+    #[arg(long, value_name = "ROWS", default_value = "1000")]
+    pub batch_size: NonZeroUsize,
+
     /// Preview: read catalog state, check which objects already exist in the
     /// store, but never upload or commit. Fails if the lakehouse is unreachable.
     #[arg(long)]
@@ -202,7 +212,40 @@ pub enum OutputFormat {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_byte_size, parse_source_name};
+    use super::{parse_byte_size, parse_source_name, Cli, Commands};
+    use clap::Parser;
+
+    fn ingest_args(extra: &[&str]) -> super::IngestArgs {
+        let mut argv = vec!["anti_entropator", "ingest", "/tmp/x"];
+        argv.extend_from_slice(extra);
+        match Cli::try_parse_from(argv).expect("parses").command {
+            Commands::Ingest(args) => args,
+            other => panic!("expected ingest, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn ingest_bounds_default_to_4_and_1000() {
+        let args = ingest_args(&[]);
+        assert_eq!(args.concurrency.get(), 4);
+        assert_eq!(args.batch_size.get(), 1000);
+    }
+
+    #[test]
+    fn ingest_bounds_accept_positive_values() {
+        let args = ingest_args(&["--concurrency", "1", "--batch-size", "50"]);
+        assert_eq!(args.concurrency.get(), 1);
+        assert_eq!(args.batch_size.get(), 50);
+    }
+
+    #[test]
+    fn ingest_bounds_reject_zero() {
+        for flag in ["--concurrency", "--batch-size"] {
+            let err = Cli::try_parse_from(["anti_entropator", "ingest", "/tmp/x", flag, "0"])
+                .expect_err("zero must be rejected");
+            assert_eq!(err.kind(), clap::error::ErrorKind::ValueValidation);
+        }
+    }
 
     #[test]
     fn parse_source_name_trims_and_rejects_empty() {
