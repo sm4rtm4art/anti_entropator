@@ -145,7 +145,7 @@ How a run is recorded: every ingest that writes keeps a journal object at
 `_runs/<run_id>.json` in the data bucket and rewrites it on each transition:
 `started`, `committing`, `batch_committed`, then `completed`, `incomplete`
 (per-file errors), or `commit_failed`. A run that is killed leaves a journal
-whose last entry is not terminal; that *is* the record of an interrupted run,
+whose last entry is not terminal; that is the record of an interrupted run,
 nothing else is inferred. If the journal cannot be written at start, the run
 refuses to start. Previews (`--dry-run`) write no journal.
 
