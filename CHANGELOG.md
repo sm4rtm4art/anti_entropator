@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+- Docs truth pass after the `v0.3.0` tag: README badge and engineering-practice
+  claims match the shipped binary (Rust 1.94, nine ADRs, no placeholder
+  commands, three Docker-gated tests); `docs/design/architecture.md` describes
+  the bounded pipeline, verified CAS upload, run journal, and `runs` command
+  instead of the pre-3c sequential engine; roadmap criterion 6 records the tag
+  run and the RustFS `1.0.0` backlog row is closed. No code changes.
 
 ## [0.3.0] - 2026-09-18
 
