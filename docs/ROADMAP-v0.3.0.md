@@ -4,9 +4,10 @@
 > file ingest and query**: one I/O boundary (OpenDAL), ingest that is
 > idempotent and honest about failure (ADR-009 observation semantics, durable
 > run identity), a binary that contains only implemented commands, and CI /
-> release gates proven on a real tag. Maintenance primitives and bounded
-> pipeline concurrency move to **v0.4.0**; interactive SQL, duplicate
-> workflow, and branch merge to **v0.5.0+**.
+> release gates proven on a real tag. Maintenance primitives and pipeline
+> observability (event schema, span coverage, tuning) move to **v0.4.0**;
+> interactive SQL, duplicate workflow, and branch merge to **v0.5.0+**.
+> (Bounded pipeline concurrency itself shipped in v0.3.0 with S6A slice 3c.)
 
 ---
 
@@ -99,10 +100,11 @@
   CAS upload with ADR-009 observation semantics) and 4 (durable run journal;
   interrupted or partial runs never exit 0) on top of what already ships.
 - **Moved to v0.4.0:** M3 maintenance (`expire`, `vacuum`, `optimize plan`),
-  M3 query UX (output formats, filters, pagination), M4 bounded stage
-  concurrency and per-stage tracing. Reason: `vacuum` needs ADR-009 run
-  identity to define "live reference" safely; concurrency is built inside the
-  slice-3 pipeline and is not release-blocking.
+  M3 query UX (output formats, filters, pagination), M4 pipeline
+  observability (event schema, full span coverage, tuning). Reason: `vacuum`
+  needs ADR-009 run identity to define "live reference" safely. The bounded
+  stage wiring itself was built inside the slice-3 pipeline (3c, 2026-09-18)
+  and did ship in v0.3.0.
 - **Moved to v0.5.0+:** interactive SQL, duplicate workflow, ingest branch
   merge. Their placeholder subcommands were removed from the binary
   (2026-09-17); duplicate content is answerable today with one `GROUP BY`
@@ -312,8 +314,12 @@ pipeline. No second execution engine.
 
 #### Tasks
 
-- Bounded stage channels and concurrency limits (lands with S6A item 3).
-- Add structured spans (`tracing`) per stage (supports flamegraphs).
+- ~~Bounded stage channels and concurrency limits~~ — **shipped with S6A
+  slice 3c** (`JoinSet` worker pool bounded by `--concurrency`, bounded
+  `mpsc` into a writer stage committing every `--batch-size` rows;
+  `ingest.file` and `ingest.commit` spans).
+- Add structured spans (`tracing`) per stage (supports flamegraphs); scan and
+  hash spans, and a pipeline event schema, remain.
 - Keep `indicatif` progress bars multi-thread friendly.
 - Add a single “pipeline event” schema (start/stop/error counters) for consistent logging/metrics.
 
@@ -372,7 +378,10 @@ Each criterion names its evidence. A criterion without evidence is not met.
    upload streams with a bounded memory footprint and does not corrupt a blob
    when the source file changes mid-read. _Evidence:_ unit tests for the
    transition table plus the Docker-gated e2e extended with a duplicate-path
-   and a changed-file case. **Open — S6A slice 3.**
+   and a changed-file case (PRs #218, #219); bounded pipeline with batched
+   commits and a commit-failure injection test (S6A slice 3c); measured
+   2026-09-18 on a synthetic 5000-file / 1.98 GiB tree: 5 batches, peak RSS
+   128 MiB. **Met** (2026-09-18).
 4. **Recovery (ADR-009 slice 4, minimum)** — every ingest run has a durable
    `run_id`; an interrupted or partially failed run is never reported as
    success and its state is identifiable afterwards. _Evidence:_
@@ -396,9 +405,9 @@ Deferred out of `v0.3.0` (see the 2026-09-17 status entry): maintenance
 per-stage tracing and concurrency tuning (all v0.4.0); interactive SQL,
 duplicate workflow, branch merge (v0.5.0+).
 
-> Execution note: criteria 3 and 4 are the remaining release-blocking work;
-> they are S6A slices 3 and 4 in the local plan. Tag `v0.3.0` when 1–5 and 7
-> are met; criterion 6 is satisfied by the tag itself.
+> Execution note: criterion 4 is the remaining release-blocking work; it is
+> S6A slice 4 in the local plan. Tag `v0.3.0` when 1–5 and 7 are met;
+> criterion 6 is satisfied by the tag itself.
 
 ---
 
@@ -410,8 +419,8 @@ duplicate workflow, branch merge (v0.5.0+).
 | ~~P0~~   | ~~Bridge DataFusion via `object_store_opendal`~~  | ~~Small~~  | **Done** | Registered under `s3://` URL scheme                      |
 | ~~P0~~   | ~~S1 correctness queue (ingest filters, SQL rewrite, ingest counters)~~ | ~~Medium~~ | **Done** | S1–S6 closed 2026-09-13; S6A slices 1, 2a–2d merged 2026-09-17 |
 | ~~P1~~   | ~~Integration test: Ingest -> Query (containers)~~ | ~~Medium~~ | **Done** | Docker-gated `ingest_then_query_flow` against the Compose stack |
-| P0       | S6A slice 3: streaming, mutation-safe CAS upload + ADR-009 observation semantics | Large | **Next** | Release-blocking (criterion 3); bounded tokio stage wiring built here |
-| P0       | S6A slice 4: durable run journal, non-success on interruption | Medium | Pending | Release-blocking (criterion 4) |
+| ~~P0~~   | ~~S6A slice 3: streaming, mutation-safe CAS upload + ADR-009 observation semantics~~ | ~~Large~~ | **Done** | 3a #218, 3b #219, 3c bounded pipeline + batched commits (criterion 3 met 2026-09-18) |
+| P0       | S6A slice 4: durable run journal, non-success on interruption | Medium | **Next** | Release-blocking (criterion 4) |
 | P1       | Tag `v0.3.0`; release workflow evidence on the tag | Small | Pending | Criterion 6 |
 | P2       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | v0.4.0      | Needs ADR-009 run identity for "live reference"          |
 | P2       | Per-stage `tracing` spans, pipeline event schema (M4) | Medium | v0.4.0 | dataflow-rs dropped (ADR-007 superseded)                 |

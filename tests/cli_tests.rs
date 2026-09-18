@@ -544,7 +544,7 @@ fn ingest_dry_run_json_is_valid_summary() -> Result<()> {
     let json_str = String::from_utf8(output.stdout)?;
     let json: serde_json::Value = serde_json::from_str(&json_str)?;
 
-    assert_eq!(json["format_version"].as_u64(), Some(3));
+    assert_eq!(json["format_version"].as_u64(), Some(4));
     assert_eq!(json["mode"].as_str(), Some("dry_run_offline"));
     assert_eq!(json["status"].as_str(), Some("success"));
     assert_eq!(json["candidates"].as_u64(), Some(1));
@@ -564,6 +564,11 @@ fn ingest_dry_run_json_is_valid_summary() -> Result<()> {
     assert_eq!(json["bytes"].as_u64(), Some(7));
     assert!(json["source_id"].is_string());
     assert_eq!(json["catalog_commit"].as_str(), Some("not_attempted"));
+    // Previews never commit, so the batch accounting is all zero.
+    assert_eq!(json["committed"].as_u64(), Some(0));
+    assert_eq!(json["batches_committed"].as_u64(), Some(0));
+    assert_eq!(json["batches_failed"].as_u64(), Some(0));
+    assert_eq!(json["skipped"].as_u64(), Some(0));
     assert_eq!(json["errors"].as_array().map(|e| e.len()), Some(0));
     assert!(
         !json_str.contains("Would upload"),
@@ -650,7 +655,7 @@ fn ingest_partial_errors_json_exits_nonzero() -> Result<()> {
     );
 
     let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-    assert_eq!(json["format_version"].as_u64(), Some(3));
+    assert_eq!(json["format_version"].as_u64(), Some(4));
     assert_eq!(json["mode"].as_str(), Some("dry_run_offline"));
     assert_eq!(json["status"].as_str(), Some("incomplete"));
     assert_eq!(json["candidates"].as_u64(), Some(2));
@@ -745,10 +750,19 @@ fn ingest_then_query_flow() -> Result<()> {
     // 3. Ingest with --format json -- should upload 3 files and commit.
     //    stdout must be exactly one JSON document even on the upload+commit
     //    path (the Iceberg writer used to print progress lines to stdout).
+    //    `--batch-size 2` makes the 3 rows land as two real Iceberg commits
+    //    and `--concurrency 2` runs the pipeline with more than one worker.
     let ingest = cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .args(["--format", "json"])
+        .args([
+            "--format",
+            "json",
+            "--batch-size",
+            "2",
+            "--concurrency",
+            "2",
+        ])
         .output()?;
     assert!(ingest.status.success());
     let ingest_json: serde_json::Value = serde_json::from_slice(&ingest.stdout)
@@ -758,6 +772,10 @@ fn ingest_then_query_flow() -> Result<()> {
     assert_eq!(ingest_json["unchanged"].as_u64(), Some(0));
     assert_eq!(ingest_json["uploaded"].as_u64(), Some(3));
     assert_eq!(ingest_json["catalog_commit"].as_str(), Some("succeeded"));
+    assert_eq!(ingest_json["committed"].as_u64(), Some(3));
+    assert_eq!(ingest_json["batches_committed"].as_u64(), Some(2));
+    assert_eq!(ingest_json["batches_failed"].as_u64(), Some(0));
+    assert_eq!(ingest_json["skipped"].as_u64(), Some(0));
     let run_id = ingest_json["run_id"]
         .as_str()
         .expect("run_id in summary")

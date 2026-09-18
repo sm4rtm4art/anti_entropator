@@ -94,6 +94,9 @@ anti_entropator ingest ~/Downloads
 
 # Name the source so it survives moving the folder
 anti_entropator ingest ~/Downloads --source downloads
+
+# Tune the pipeline: files in flight, and catalog rows per commit
+anti_entropator ingest ~/Downloads --concurrency 8 --batch-size 500
 ```
 
 Ingest has three modes; `--offline` requires `--dry-run`:
@@ -104,21 +107,39 @@ Ingest has three modes; `--offline` requires `--dry-run`:
 | `--dry-run --offline` | no | no — every candidate is "would observe" and "would upload" | no | `dry_run_offline` |
 | default | yes | yes | yes | `ingest` |
 
-`--format json` writes a versioned summary (`format_version` 3) to stdout with
+`--format json` writes a versioned summary (`format_version` 4) to stdout with
 `mode`, `run_id`, `source_id`, `status`, `catalog_commit`, and these counts:
 
 | Count | Axis | Meaning |
 |---|---|---|
 | `candidates` | — | files selected by the filters |
-| `observed` | paths | a `present` row was appended (new path, or content changed) |
+| `observed` | paths | a `present` row was produced (new path, or content changed) |
 | `unchanged` | paths | last observation already records this content; no row |
 | `uploaded` | blobs | content uploaded to the store (`bytes` counts these) |
 | `already_exists` | blobs | content was already stored and verified |
+| `committed` | rows | observation rows now in the catalog (`observed - committed` were lost to a failed commit) |
+| `batches_committed`, `batches_failed` | commits | batches of `--batch-size` rows; the first failure stops the run |
+| `skipped` | — | candidates never started because the run stopped |
 
 The axes are independent: a second copy of a file is `observed` with
 `already_exists`, because the path is new but the bytes are not.
 Human output remains the default.
 Partial and complete failures exit non-zero in every mode; JSON mode keeps that exit status and prints the summary before the error on stderr.
+
+How a run is bounded: up to `--concurrency` files (default 4) are hashed,
+verified, and uploaded at the same time, and observation rows are committed
+every `--batch-size` rows (default 1000). Each batch is one Parquet file and
+one Iceberg snapshot, so a long run produces several snapshots and a query
+sees the rows of finished batches while the run is still going. If a commit
+fails, earlier batches stay committed, files already in flight finish (their
+blobs are content-addressed and safe), no further file is started, and the run
+exits non-zero with `status: commit_failed`. Re-running the same ingest picks
+up exactly the rows that were not committed, because those paths have no
+observation yet. Small batches mean many small Parquet files; compaction is a
+later maintenance feature.
+
+Peak memory does not grow with the size of the files: they are streamed, and
+only the file list and at most two batches of rows are held at once.
 
 What a `file_catalog` row means (ADR-009): one row is one observation of one
 path in one source during one run, appended-only. Ingest reads the latest

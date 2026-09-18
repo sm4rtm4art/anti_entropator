@@ -37,6 +37,16 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   UUIDv5 over `(source_id, relative_path, content_hash, status)`. Every ingest
   run has a `run_id`, shown in the human report and in the JSON summary
   (`format_version` 2).
+- Bounded ingest pipeline with batched commits (S6A slice 3c): files are
+  processed by a `tokio` worker pool of `--concurrency` (default 4) and
+  observation rows are committed every `--batch-size` rows (default 1000),
+  each batch one Parquet file and one Iceberg snapshot. A failed commit stops
+  the run: earlier batches stay committed, in-flight files finish, nothing
+  else starts, exit is non-zero. The summary gains `committed`,
+  `batches_committed`, `batches_failed`, and `skipped` (`format_version` 4).
+  Measured on a synthetic 5000-file / 1.98 GiB tree: 5 batches, 16.9 s,
+  peak RSS 128 MiB; the same 1000-file tree took 8.4 s at `--concurrency 1`
+  and 3.5 s at 4.
 - ADR-009 observation per path (slice 3 complete, slice 4 partial): ingest
   reads the latest `present` observation per path for the source at run start
   and appends a row only when a path is new or its content changed. Identical

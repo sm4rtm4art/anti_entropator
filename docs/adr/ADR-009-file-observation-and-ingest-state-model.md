@@ -148,7 +148,13 @@ This ADR defines target v0.3 behavior. Implementation lands in small slices:
    observation are independent axes: identical bytes at a second path append
    a `present` observation that references the existing blob. The ingest
    summary reports both axes (`observed`/`unchanged` for paths,
-   `uploaded`/`already_exists` for blobs).
+   `uploaded`/`already_exists` for blobs). Files are processed by a bounded
+   worker pool (`--concurrency`, default 4) and rows are committed in batches
+   (`--batch-size`, default 1000), so one run may produce several snapshots.
+   A failed commit stops the run; earlier batches stay committed and the
+   summary reports `committed`, `batches_committed`/`batches_failed`, and
+   `skipped` so the operator knows exactly which rows are missing. Re-running
+   observes exactly those paths again because they have no row yet.
 4. Add unchanged/change/delete/rename behavior and current-state queries.
    **Partial.** At run start, ingest reads every `present` observation for
    the `source_id` and reduces it to the latest per `relative_path` by

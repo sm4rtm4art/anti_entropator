@@ -14,7 +14,9 @@ use uuid::Uuid;
 /// - 2: added `run_id` (ADR-009 run identity).
 /// - 3: added `source_id`, `observed`, `unchanged` (ADR-009 observation per
 ///   path). `uploaded` / `already_exists` keep their blob meaning.
-pub const INGEST_SUMMARY_FORMAT_VERSION: u32 = 3;
+/// - 4: batched commits: added `committed`, `batches_committed`,
+///   `batches_failed`, `skipped`.
+pub const INGEST_SUMMARY_FORMAT_VERSION: u32 = 4;
 
 /// How an ingest invocation is allowed to interact with the lakehouse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -104,6 +106,34 @@ pub struct IngestCounts {
     pub already_exists: u64,
     /// Bytes of the uploaded blobs.
     pub bytes: u64,
+    /// Candidates never started because the run stopped after a commit
+    /// failure. Always 0 on a run that did not stop early.
+    pub skipped: u64,
+}
+
+/// What the writer stage committed. A run commits in batches; the first
+/// failed batch stops the run, so `batches_failed` is 0 or 1.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct CommitCounts {
+    /// Observation rows now in the catalog. `observed - committed` is the
+    /// number of rows this run produced but did not commit.
+    pub committed: u64,
+    /// Batches (one Parquet file and one snapshot each) committed.
+    pub batches_committed: u64,
+    /// Batches whose commit failed.
+    pub batches_failed: u64,
+}
+
+impl CommitCounts {
+    pub fn status(&self) -> CatalogCommitStatus {
+        if self.batches_failed > 0 {
+            CatalogCommitStatus::Failed
+        } else if self.batches_committed > 0 {
+            CatalogCommitStatus::Succeeded
+        } else {
+            CatalogCommitStatus::NotAttempted
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -119,6 +149,8 @@ pub struct IngestSummary {
     pub counts: IngestCounts,
     pub failed: u64,
     pub catalog_commit: CatalogCommitStatus,
+    #[serde(flatten)]
+    pub commit: CommitCounts,
     pub errors: Vec<String>,
 }
 
@@ -128,10 +160,11 @@ impl IngestSummary {
         run_id: Uuid,
         source_id: String,
         counts: IngestCounts,
+        commit: CommitCounts,
         errors: &[String],
-        catalog_commit: CatalogCommitStatus,
     ) -> Self {
         let failed = errors.len() as u64;
+        let catalog_commit = commit.status();
         let status = if catalog_commit == CatalogCommitStatus::Failed {
             IngestStatus::CommitFailed
         } else if failed > 0 {
@@ -149,16 +182,14 @@ impl IngestSummary {
             counts,
             failed,
             catalog_commit,
+            commit,
             errors: errors.to_vec(),
         }
     }
-}
 
-pub fn catalog_commit_from_result(commit_result: &Option<Result<()>>) -> CatalogCommitStatus {
-    match commit_result {
-        Some(Ok(())) => CatalogCommitStatus::Succeeded,
-        Some(Err(_)) => CatalogCommitStatus::Failed,
-        None => CatalogCommitStatus::NotAttempted,
+    /// Rows this run produced but did not get into the catalog.
+    pub fn uncommitted_rows(&self) -> u64 {
+        self.counts.observed.saturating_sub(self.commit.committed)
     }
 }
 
@@ -187,6 +218,21 @@ pub fn print_human_report(summary: &IngestSummary) {
         );
         println!("  Uploaded:        {} blobs ({bytes})", c.uploaded);
         println!("  Already in store: {} blobs", c.already_exists);
+        let k = &summary.commit;
+        println!(
+            "  Committed:       {} rows in {} batch(es)",
+            k.committed, k.batches_committed
+        );
+        if k.batches_failed > 0 {
+            println!(
+                "  Commit failed:   batch {}; {} rows not committed",
+                k.batches_committed + 1,
+                summary.uncommitted_rows()
+            );
+        }
+        if c.skipped > 0 {
+            println!("  Not started:     {} files (run stopped)", c.skipped);
+        }
     } else if summary.mode.is_connected() {
         println!("  Would observe:   {} paths (catalog rows)", c.observed);
         println!(
@@ -252,17 +298,27 @@ pub fn print_human_report(summary: &IngestSummary) {
         IngestStatus::CommitFailed => {
             println!(
                 "{}",
-                style("  Ingest incomplete: metadata commit failed.").red()
+                style(format!(
+                    "  Ingest incomplete: metadata commit failed after {} committed batch(es).",
+                    summary.commit.batches_committed
+                ))
+                .red()
             );
-            println!("  Objects may have been uploaded but are not registered in the catalog.");
+            println!(
+                "  {} observed row(s) are not in the catalog; {} file(s) were not started.",
+                summary.uncommitted_rows(),
+                summary.counts.skipped
+            );
+            println!("  Uploaded blobs are safe. Re-run the same ingest to observe the rest.");
             println!();
         }
     }
 }
 
-pub fn outcome_error(summary: &IngestSummary, commit_result: Option<Result<()>>) -> Result<()> {
-    match commit_result {
-        Some(Err(e)) => Err(e.context("metadata commit failed")),
+/// `commit_failure` is the error of the batch that stopped the run, if any.
+pub fn outcome_error(summary: &IngestSummary, commit_failure: Option<anyhow::Error>) -> Result<()> {
+    match commit_failure {
+        Some(e) => Err(e.context("metadata commit failed")),
         _ if summary.failed > 0 => {
             if summary.mode.writes() {
                 Err(anyhow::anyhow!(
@@ -303,6 +359,25 @@ mod tests {
             uploaded,
             already_exists,
             bytes,
+            skipped: 0,
+        }
+    }
+
+    /// Commit counts that yield the given status: `Succeeded` commits every
+    /// observed row in one batch, `Failed` commits nothing and fails batch 1.
+    fn commit_for(status: CatalogCommitStatus, observed: u64) -> CommitCounts {
+        match status {
+            CatalogCommitStatus::Succeeded => CommitCounts {
+                committed: observed,
+                batches_committed: 1,
+                batches_failed: 0,
+            },
+            CatalogCommitStatus::Failed => CommitCounts {
+                committed: 0,
+                batches_committed: 0,
+                batches_failed: 1,
+            },
+            CatalogCommitStatus::NotAttempted => CommitCounts::default(),
         }
     }
 
@@ -312,7 +387,14 @@ mod tests {
         errors: &[String],
         commit: CatalogCommitStatus,
     ) -> IngestSummary {
-        IngestSummary::build(mode, Uuid::nil(), "/src".to_string(), c, errors, commit)
+        IngestSummary::build(
+            mode,
+            Uuid::nil(),
+            "/src".to_string(),
+            c,
+            commit_for(commit, c.observed),
+            errors,
+        )
     }
 
     #[test]
@@ -323,7 +405,7 @@ mod tests {
             &[],
             CatalogCommitStatus::Succeeded,
         );
-        assert_eq!(summary.format_version, 3);
+        assert_eq!(summary.format_version, 4);
         assert_eq!(summary.mode, IngestMode::Ingest);
         assert_eq!(summary.run_id, Uuid::nil());
         assert_eq!(summary.source_id, "/src");
@@ -380,19 +462,49 @@ mod tests {
     }
 
     #[test]
-    fn catalog_commit_from_result_maps_outcomes() {
-        assert_eq!(
-            catalog_commit_from_result(&Some(Ok(()))),
-            CatalogCommitStatus::Succeeded
+    fn commit_counts_status_prefers_failure_over_partial_success() {
+        let c = |committed, batches_committed, batches_failed| CommitCounts {
+            committed,
+            batches_committed,
+            batches_failed,
+        };
+        assert_eq!(c(0, 0, 0).status(), CatalogCommitStatus::NotAttempted);
+        assert_eq!(c(10, 2, 0).status(), CatalogCommitStatus::Succeeded);
+        // Batch 1 committed, batch 2 failed: the run is a failure even
+        // though rows landed.
+        assert_eq!(c(1000, 1, 1).status(), CatalogCommitStatus::Failed);
+        assert_eq!(c(0, 0, 1).status(), CatalogCommitStatus::Failed);
+    }
+
+    #[test]
+    fn partial_commit_failure_reports_uncommitted_rows_and_skipped_files() {
+        // 3 batches of 2 planned; batch 2 failed. Batch 1 (2 rows) landed,
+        // 4 rows were produced but 2 of them are lost, and 3 candidates were
+        // never started.
+        let mut c = counts(9, 4, 2, 4, 2, 4096);
+        c.skipped = 3;
+        let summary = IngestSummary::build(
+            IngestMode::Ingest,
+            Uuid::nil(),
+            "/src".to_string(),
+            c,
+            CommitCounts {
+                committed: 2,
+                batches_committed: 1,
+                batches_failed: 1,
+            },
+            &[],
         );
-        assert_eq!(
-            catalog_commit_from_result(&Some(Err(anyhow::anyhow!("catalog down")))),
-            CatalogCommitStatus::Failed
-        );
-        assert_eq!(
-            catalog_commit_from_result(&None),
-            CatalogCommitStatus::NotAttempted
-        );
+        assert_eq!(summary.status, IngestStatus::CommitFailed);
+        assert_eq!(summary.uncommitted_rows(), 2);
+        let json = serde_json::to_value(&summary).unwrap();
+        assert_eq!(json["committed"], 2);
+        assert_eq!(json["batches_committed"], 1);
+        assert_eq!(json["batches_failed"], 1);
+        assert_eq!(json["skipped"], 3);
+        assert_eq!(json["catalog_commit"], "failed");
+        // Flattened, not nested.
+        assert!(json.get("commit").is_none());
     }
 
     #[test]
@@ -405,7 +517,7 @@ mod tests {
         );
         let json = serde_json::to_value(&summary).unwrap();
 
-        assert_eq!(json["format_version"], 3);
+        assert_eq!(json["format_version"], 4);
         assert_eq!(json["mode"], "dry_run");
         assert_eq!(json["run_id"], "00000000-0000-0000-0000-000000000000");
         assert_eq!(json["source_id"], "/src");
@@ -419,7 +531,11 @@ mod tests {
         assert_eq!(json["already_exists"], 0);
         assert_eq!(json["failed"], 1);
         assert_eq!(json["bytes"], 8);
+        assert_eq!(json["skipped"], 0);
         assert_eq!(json["catalog_commit"], "not_attempted");
+        assert_eq!(json["committed"], 0);
+        assert_eq!(json["batches_committed"], 0);
+        assert_eq!(json["batches_failed"], 0);
         assert_eq!(json["errors"][0], "unreadable.txt: permission denied");
     }
 
@@ -433,10 +549,11 @@ mod tests {
         );
         let err = outcome_error(
             &summary,
-            Some(Err(anyhow::anyhow!("catalog connection refused"))),
+            Some(anyhow::anyhow!("catalog connection refused")),
         )
         .unwrap_err();
         assert!(err.to_string().contains("metadata commit"));
+        assert!(format!("{err:#}").contains("catalog connection refused"));
     }
 
     #[test]
@@ -448,7 +565,7 @@ mod tests {
             &errors,
             CatalogCommitStatus::Succeeded,
         );
-        let err = outcome_error(&summary, Some(Ok(()))).unwrap_err();
+        let err = outcome_error(&summary, None).unwrap_err();
         assert!(err
             .to_string()
             .contains("ingest incomplete: 1 file(s) failed"));
@@ -477,7 +594,7 @@ mod tests {
             &[],
             CatalogCommitStatus::Succeeded,
         );
-        assert!(outcome_error(&summary, Some(Ok(()))).is_ok());
+        assert!(outcome_error(&summary, None).is_ok());
     }
 
     #[test]
