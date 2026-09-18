@@ -80,7 +80,7 @@ The command is idempotent - run it multiple times safely. The project ID is stor
 ### 4. Ingest Files
 
 ```bash
-# Dry run: check which objects already exist in the store, upload nothing
+# Dry run: read catalog state, check which blobs exist, upload nothing
 anti_entropator ingest ~/Downloads --dry-run
 
 # Offline dry run: list candidates without contacting the lakehouse at all
@@ -91,21 +91,51 @@ anti_entropator ingest ~/Downloads --dry-run --format json
 
 # Actually ingest (uploads to object storage + commits to the catalog)
 anti_entropator ingest ~/Downloads
+
+# Name the source so it survives moving the folder
+anti_entropator ingest ~/Downloads --source downloads
 ```
 
 Ingest has three modes; `--offline` requires `--dry-run`:
 
-| Mode | Contacts lakehouse | Checks existing objects | Uploads / commits | JSON `mode` |
+| Mode | Contacts lakehouse | Reads catalog state / checks blobs | Uploads / commits | JSON `mode` |
 |---|---|---|---|---|
-| `--dry-run` | yes (fails if unreachable) | yes — `already_exists` is accurate | no | `dry_run` |
-| `--dry-run --offline` | no | no — every candidate is reported as "would upload" | no | `dry_run_offline` |
+| `--dry-run` | yes (fails if unreachable) | yes — `unchanged` and `already_exists` are accurate | no | `dry_run` |
+| `--dry-run --offline` | no | no — every candidate is "would observe" and "would upload" | no | `dry_run_offline` |
 | default | yes | yes | yes | `ingest` |
 
-`--format json` writes a versioned summary (`format_version` 2: `mode`, `run_id`, counts, `status`, `catalog_commit`) to stdout.
+`--format json` writes a versioned summary (`format_version` 3) to stdout with
+`mode`, `run_id`, `source_id`, `status`, `catalog_commit`, and these counts:
+
+| Count | Axis | Meaning |
+|---|---|---|
+| `candidates` | — | files selected by the filters |
+| `observed` | paths | a `present` row was appended (new path, or content changed) |
+| `unchanged` | paths | last observation already records this content; no row |
+| `uploaded` | blobs | content uploaded to the store (`bytes` counts these) |
+| `already_exists` | blobs | content was already stored and verified |
+
+The axes are independent: a second copy of a file is `observed` with
+`already_exists`, because the path is new but the bytes are not.
 Human output remains the default.
 Partial and complete failures exit non-zero in every mode; JSON mode keeps that exit status and prints the summary before the error on stderr.
 
-How an upload is made safe (ADR-009):
+What a `file_catalog` row means (ADR-009): one row is one observation of one
+path in one source during one run, appended-only. Ingest reads the latest
+observation per path for the source at run start and appends a row only when
+a path is new or its content changed; re-running an unchanged ingest appends
+nothing and attempts no commit. If the catalog cannot be read, the run stops
+rather than guess.
+
+- `source_id` defaults to the canonical absolute path of the ingested
+  directory. Pass `--source <name>` to keep observing the same logical source
+  after moving the folder; a different `source_id` is a different source and
+  every path is observed again (blobs are not re-uploaded).
+- Deleted and renamed files are not yet recorded: a rename appears as a new
+  row at the new path and the old path's row stays. `observation_status` is
+  always `present` today.
+
+How an upload is made safe:
 
 - Files are streamed in bounded chunks and re-hashed while they are sent; the
   object is stored under `sha256/<aa>/<bb>/<hash>` only if the bytes still
@@ -115,15 +145,11 @@ How an upload is made safe (ADR-009):
 - An object that already exists is verified against the local file (size, and
   the object's `sha256` metadata when present). A mismatch is reported as an
   error for that file; the stored object is never overwritten.
-- Every run has a `run_id`. Rows committed by that run carry it together with
-  `source_id` (the canonical absolute path of the ingest root), `relative_path`,
-  `observation_status`, and `observed_at`. Moving the ingest root changes
-  `source_id`; an override flag is planned.
 
-Tables created before these columns existed are upgraded in place the next
-time you run `anti_entropator init`; until then `ingest` stops with
+Tables created before the observation columns existed are upgraded in place
+the next time you run `anti_entropator init`; until then `ingest` stops with
 `run anti_entropator init to upgrade it`. Older rows keep `NULL` in the new
-columns.
+columns and are observed again once.
 
 ### 5. Query Your Catalog
 
@@ -143,6 +169,9 @@ anti_entropator query "SELECT category, COUNT(*) FROM iceberg.anti_entropator.fi
 
 # Duplicate content today: group by hash in SQL
 anti_entropator query "SELECT content_hash, COUNT(*) AS copies FROM iceberg.anti_entropator.file_catalog GROUP BY content_hash HAVING COUNT(*) > 1"
+
+# Current state of one source: the latest present observation per path
+anti_entropator query "SELECT relative_path, content_hash, observed_at FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY relative_path ORDER BY observed_at DESC) AS rn FROM iceberg.anti_entropator.file_catalog WHERE source_id = 'downloads' AND observation_status = 'present') WHERE rn = 1"
 ```
 
 ## Command Reference
