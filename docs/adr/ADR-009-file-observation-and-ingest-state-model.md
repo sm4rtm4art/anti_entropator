@@ -1,7 +1,7 @@
 # ADR-009: File Observation and Ingest State Model
 
-Status: **accepted design, partially implemented** (slice 1 and the blob half
-of slice 3 shipped; see Current State).
+Status: **accepted design, partially implemented** (slices 1 and 3 shipped,
+slice 4 partial; see Current State).
 
 ## Context
 
@@ -125,24 +125,48 @@ This ADR defines target v0.3 behavior. Implementation lands in small slices:
    writer refuses to commit into a table that lacks them. The row `id` is a
    UUIDv5 over `(source_id, relative_path, content_hash, status)`, so the
    identifier field is a natural idempotency key. `source_id` defaults to the
-   canonical absolute path of the ingest root; moving the root therefore
-   starts a new source until an override flag exists.
+   canonical absolute path of the ingest root and can be overridden with
+   `ingest --source <name>`; moving the root without passing the old name
+   starts a new source.
+
+   A path that returns to earlier content (A→B→A) produces a row whose `id`
+   equals the first observation's `id`. This is intended: `id` identifies an
+   observation *state*, not a row. Iceberg identifier fields are not enforced
+   on append, and current-state reduction orders by `observed_at`, never by
+   `id`.
 2. Persist run identity and lifecycle transitions.
    **Partial.** Every run has a `run_id`; it is stamped on each committed row
    and reported in the human and JSON summaries. No run journal, lease, or
    lifecycle states yet.
 3. Separate blob existence from observation creation.
-   **Blob half shipped.** Uploads stream the file, re-hash the bytes in
-   flight, and materialize the object only through a conditional
-   `if_not_exists` write; a mid-upload change aborts the write (nothing is
-   stored) and the file is rescanned and retried once. Existing blobs are
-   verified against local size and, when present, `sha256` user metadata;
-   mismatches are per-file errors, never overwrites. New blobs carry `sha256`
-   and `size` metadata. **Still open:** an existing blob still ends
-   processing with no observation row for that path; this depends on the
-   unchanged-suppression rule in slice 4 and lands with it.
+   **Shipped.** Uploads stream the file, re-hash the bytes in flight, and
+   materialize the object only through a conditional `if_not_exists` write; a
+   mid-upload change aborts the write (nothing is stored) and the file is
+   rescanned and retried once. Existing blobs are verified against local size
+   and, when present, `sha256` user metadata; mismatches are per-file errors,
+   never overwrites. New blobs carry `sha256` and `size` metadata. Blob and
+   observation are independent axes: identical bytes at a second path append
+   a `present` observation that references the existing blob. The ingest
+   summary reports both axes (`observed`/`unchanged` for paths,
+   `uploaded`/`already_exists` for blobs).
 4. Add unchanged/change/delete/rename behavior and current-state queries.
-   Not started.
+   **Partial.** At run start, ingest reads every `present` observation for
+   the `source_id` and reduces it to the latest per `relative_path` by
+   `observed_at` (single local writer assumed). A path whose last observation
+   records the same content appends nothing (`unchanged`); a changed or
+   unknown path appends a new `present` observation. If the catalog cannot be
+   read, connected modes fail closed instead of guessing; `--dry-run
+   --offline` has no state and reports every candidate as "would observe".
+   Rows from before slice 1 (`source_id` NULL) are not matched and are
+   re-observed once. If the blob of an unchanged path is missing from the
+   store it is restored without a new row.
+   **Not started:** deleted and rename observations. `observation_status` is
+   always `present` today. A rename appears as a new present row at the new
+   path; the old path's row stays until a deletion slice exists. Deletion
+   requires a *complete* scan of the source, which an ingest with
+   `--include`/`--exclude`/`--max-size` is not, so those flags must never
+   mark anything deleted. The current-state reduction is internal to ingest;
+   the manual shows the equivalent SQL.
 5. Add restart, partial-failure, and conflict tests.
    Not started.
 

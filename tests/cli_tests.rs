@@ -354,7 +354,7 @@ fn ingest_max_size_filters_files() -> Result<()> {
         .assert()
         .success()
         .stdout(predicate::str::contains("Found 1 files to ingest"))
-        .stdout(predicate::str::contains("Would upload:    1 files"));
+        .stdout(predicate::str::contains("Would upload:    1 blobs"));
     Ok(())
 }
 
@@ -406,8 +406,73 @@ fn ingest_offline_dry_run_reports_store_not_checked() -> Result<()> {
             "Already in store: not checked (--offline)",
         ))
         .stdout(predicate::str::contains(
+            "Unchanged:       not checked (--offline)",
+        ))
+        .stdout(predicate::str::contains(
+            "Would observe:   1 paths (catalog not read)",
+        ))
+        .stdout(predicate::str::contains(
             "Remove --dry-run --offline to actually ingest",
         ));
+    Ok(())
+}
+
+#[test]
+fn ingest_source_flag_overrides_source_id_and_defaults_to_canonical_root() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("test.txt"), "content")?;
+
+    // Default: canonical absolute path of the ingest root.
+    let output = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--dry-run", "--offline", "--format", "json"])
+        .output()?;
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(
+        json["source_id"].as_str(),
+        Some(temp.path().canonicalize()?.to_string_lossy().as_ref())
+    );
+
+    // Override: trimmed name, echoed in JSON and in the human header.
+    let output = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args([
+            "--source",
+            "  downloads  ",
+            "--dry-run",
+            "--offline",
+            "--format",
+            "json",
+        ])
+        .output()?;
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["source_id"].as_str(), Some("downloads"));
+
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--source", "downloads", "--dry-run", "--offline"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Source:  downloads"))
+        .stdout(predicate::str::contains("Source:          downloads"));
+    Ok(())
+}
+
+#[test]
+fn ingest_source_flag_rejects_empty_name() -> Result<()> {
+    let temp = tempdir()?;
+    cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--source", "   ", "--dry-run", "--offline"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("source name must not be empty"));
     Ok(())
 }
 
@@ -424,7 +489,7 @@ fn ingest_offline_dry_run_never_contacts_the_store() -> Result<()> {
         .args(["--dry-run", "--offline"])
         .assert()
         .success()
-        .stdout(predicate::str::contains("Would upload:    1 files"));
+        .stdout(predicate::str::contains("Would upload:    1 blobs"));
     Ok(())
 }
 
@@ -479,7 +544,7 @@ fn ingest_dry_run_json_is_valid_summary() -> Result<()> {
     let json_str = String::from_utf8(output.stdout)?;
     let json: serde_json::Value = serde_json::from_str(&json_str)?;
 
-    assert_eq!(json["format_version"].as_u64(), Some(2));
+    assert_eq!(json["format_version"].as_u64(), Some(3));
     assert_eq!(json["mode"].as_str(), Some("dry_run_offline"));
     assert_eq!(json["status"].as_str(), Some("success"));
     assert_eq!(json["candidates"].as_u64(), Some(1));
@@ -489,10 +554,15 @@ fn ingest_dry_run_json_is_valid_summary() -> Result<()> {
         uuid::Uuid::parse_str(run_id).is_ok(),
         "run_id must be a UUID, got {run_id}"
     );
+    // Offline: no catalog state, so every candidate is "would observe" and
+    // "would upload"; nothing can be unchanged or already stored.
+    assert_eq!(json["observed"].as_u64(), Some(1));
+    assert_eq!(json["unchanged"].as_u64(), Some(0));
     assert_eq!(json["uploaded"].as_u64(), Some(1));
     assert_eq!(json["already_exists"].as_u64(), Some(0));
     assert_eq!(json["failed"].as_u64(), Some(0));
     assert_eq!(json["bytes"].as_u64(), Some(7));
+    assert!(json["source_id"].is_string());
     assert_eq!(json["catalog_commit"].as_str(), Some("not_attempted"));
     assert_eq!(json["errors"].as_array().map(|e| e.len()), Some(0));
     assert!(
@@ -580,7 +650,7 @@ fn ingest_partial_errors_json_exits_nonzero() -> Result<()> {
     );
 
     let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
-    assert_eq!(json["format_version"].as_u64(), Some(2));
+    assert_eq!(json["format_version"].as_u64(), Some(3));
     assert_eq!(json["mode"].as_str(), Some("dry_run_offline"));
     assert_eq!(json["status"].as_str(), Some("incomplete"));
     assert_eq!(json["candidates"].as_u64(), Some(2));
@@ -684,6 +754,8 @@ fn ingest_then_query_flow() -> Result<()> {
     let ingest_json: serde_json::Value = serde_json::from_slice(&ingest.stdout)
         .expect("ingest --format json stdout must be a single JSON document");
     assert_eq!(ingest_json["mode"].as_str(), Some("ingest"));
+    assert_eq!(ingest_json["observed"].as_u64(), Some(3));
+    assert_eq!(ingest_json["unchanged"].as_u64(), Some(0));
     assert_eq!(ingest_json["uploaded"].as_u64(), Some(3));
     assert_eq!(ingest_json["catalog_commit"].as_str(), Some("succeeded"));
     let run_id = ingest_json["run_id"]
@@ -718,7 +790,8 @@ fn ingest_then_query_flow() -> Result<()> {
         .success()
         .stdout(predicate::str::contains("| 3        |"));
 
-    // 5. Connected dry-run -- verifies all blobs in the store, uploads nothing
+    // 5. Connected dry-run -- reads catalog state, verifies all blobs,
+    //    uploads nothing, appends nothing: every path is unchanged.
     let plan = cmd()?
         .arg("ingest")
         .arg(temp.path())
@@ -728,17 +801,24 @@ fn ingest_then_query_flow() -> Result<()> {
     let plan_json: serde_json::Value = serde_json::from_slice(&plan.stdout)?;
     assert_eq!(plan_json["mode"].as_str(), Some("dry_run"));
     assert_eq!(plan_json["candidates"].as_u64(), Some(3));
+    assert_eq!(plan_json["observed"].as_u64(), Some(0));
+    assert_eq!(plan_json["unchanged"].as_u64(), Some(3));
     assert_eq!(plan_json["uploaded"].as_u64(), Some(0));
     assert_eq!(plan_json["already_exists"].as_u64(), Some(3));
     assert_eq!(plan_json["catalog_commit"].as_str(), Some("not_attempted"));
 
-    // 6. Re-ingest -- no new uploads (idempotent)
-    cmd()?
+    // 6. Re-ingest unchanged -- no rows, no uploads, no commit (idempotent)
+    let again = cmd()?
         .arg("ingest")
         .arg(temp.path())
-        .assert()
-        .success()
-        .stdout(predicate::str::contains("Uploaded:        0"));
+        .args(["--format", "json"])
+        .output()?;
+    assert!(again.status.success());
+    let again_json: serde_json::Value = serde_json::from_slice(&again.stdout)?;
+    assert_eq!(again_json["observed"].as_u64(), Some(0));
+    assert_eq!(again_json["unchanged"].as_u64(), Some(3));
+    assert_eq!(again_json["uploaded"].as_u64(), Some(0));
+    assert_eq!(again_json["catalog_commit"].as_str(), Some("not_attempted"));
 
     // 7. Query again -- still exactly 3 rows (no duplicates)
     cmd()?
@@ -747,6 +827,76 @@ fn ingest_then_query_flow() -> Result<()> {
         .assert()
         .success()
         .stdout(predicate::str::contains("| 3        |"));
+
+    // 8. ADR-009 transitions in one run:
+    //    - identical bytes at a second path -> new row, blob already exists;
+    //    - changed bytes at an existing path -> new row, new blob;
+    //    - the untouched file -> unchanged.
+    let file_copy = format!("s2b_{}_copy_of_a.txt", marker);
+    std::fs::copy(temp.path().join(&file_a), temp.path().join(&file_copy))?;
+    std::fs::write(temp.path().join(&file_b), format!("world-v2-{marker}"))?;
+
+    let third = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--format", "json"])
+        .output()?;
+    assert!(third.status.success());
+    let third_json: serde_json::Value = serde_json::from_slice(&third.stdout)?;
+    assert_eq!(third_json["candidates"].as_u64(), Some(4));
+    assert_eq!(third_json["observed"].as_u64(), Some(2));
+    assert_eq!(third_json["unchanged"].as_u64(), Some(2));
+    assert_eq!(third_json["uploaded"].as_u64(), Some(1));
+    assert_eq!(third_json["already_exists"].as_u64(), Some(3));
+    assert_eq!(third_json["catalog_commit"].as_str(), Some("succeeded"));
+
+    // 5 rows total: 3 original + copy + new version of b.
+    cmd()?
+        .arg("query")
+        .arg(&query)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("| 5        |"));
+
+    // The copy and the original share one blob (two rows, one content_hash).
+    let shared_blob = format!(
+        "SELECT count(*) FROM files WHERE filename IN ('{file_a}', '{file_copy}') GROUP BY content_hash"
+    );
+    cmd()?
+        .arg("query")
+        .arg(&shared_blob)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("| 2        |"));
+
+    // Current state of b: the latest present observation carries the new hash.
+    let b_history = format!(
+        "SELECT count(DISTINCT content_hash) FROM files WHERE filename = '{file_b}' AND observation_status = 'present'"
+    );
+    cmd()?
+        .arg("query")
+        .arg(&b_history)
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("| 2 "));
+
+    // 9. A different --source is a different logical source: everything is
+    //    re-observed, nothing is re-uploaded.
+    let other_source = format!("s2b-other-{marker}");
+    let other = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--source", &other_source, "--format", "json"])
+        .output()?;
+    assert!(other.status.success());
+    let other_json: serde_json::Value = serde_json::from_slice(&other.stdout)?;
+    assert_eq!(
+        other_json["source_id"].as_str(),
+        Some(other_source.as_str())
+    );
+    assert_eq!(other_json["observed"].as_u64(), Some(4));
+    assert_eq!(other_json["uploaded"].as_u64(), Some(0));
+    assert_eq!(other_json["already_exists"].as_u64(), Some(4));
 
     Ok(())
 }

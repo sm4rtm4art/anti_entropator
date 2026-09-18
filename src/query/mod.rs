@@ -20,35 +20,45 @@ static FILES_TABLE_RE: LazyLock<regex::Regex> = LazyLock::new(|| {
         .expect("FILES_TABLE_RE is a valid static regex")
 });
 
-/// Run a one-shot SQL query
-pub async fn run(sql: String) -> Result<()> {
-    let config = LakehouseConfig::default();
+/// Fully qualified name of the canonical table, `iceberg.<namespace>.<table>`.
+pub(crate) fn qualified_table_name() -> String {
+    format!("iceberg.{}.{}", NAMESPACE, FILE_CATALOG_TABLE)
+}
 
-    // 1. Initialize Catalog
-    let catalog: RestCatalog = build_rest_catalog(&config).await?;
+/// Build a DataFusion session with the Iceberg REST catalog registered as
+/// `iceberg` and object access routed through OpenDAL.
+///
+/// Shared by the `query` command and by ingest's catalog read; it performs
+/// no output so callers with a machine-readable stdout can use it.
+pub(crate) async fn build_session(config: &LakehouseConfig) -> Result<SessionContext> {
+    let catalog: RestCatalog = build_rest_catalog(config).await?;
 
-    // 2. Setup DataFusion with OpenDAL-backed ObjectStore
     let ctx = SessionContext::new();
 
-    let operator = storage::create_operator(&config)?;
+    let operator = storage::create_operator(config)?;
     let opendal_store = Arc::new(OpendalStore::new(operator));
     let s3_url =
         Url::parse(&format!("s3://{}", config.bucket)).context("Failed to parse bucket URL")?;
     ctx.register_object_store(&s3_url, opendal_store as Arc<dyn ObjectStore>);
 
-    // 3. Register Iceberg Catalog
     let catalog_provider = IcebergCatalogProvider::try_new(Arc::new(catalog))
         .await
         .context("Failed to create IcebergCatalogProvider")?;
-
     ctx.register_catalog("iceberg", Arc::new(catalog_provider));
 
-    // 4. Execute Query (rewrite `FROM files` / `JOIN files` shorthand)
+    Ok(ctx)
+}
+
+/// Run a one-shot SQL query
+pub async fn run(sql: String) -> Result<()> {
+    let config = LakehouseConfig::default();
+    let ctx = build_session(&config).await?;
+
+    // Execute Query (rewrite `FROM files` / `JOIN files` shorthand)
     let query_sql = rewrite_table_reference(&sql);
     println!("  Executing query: {}", query_sql);
     let df = ctx.sql(&query_sql).await?;
 
-    // 5. Show Results
     df.show().await?;
 
     Ok(())
@@ -57,7 +67,7 @@ pub async fn run(sql: String) -> Result<()> {
 /// Rewrite the `files` shorthand to the fully qualified Iceberg table name,
 /// but only in table-reference positions (after FROM or JOIN keywords).
 fn rewrite_table_reference(sql: &str) -> String {
-    let qualified = format!("iceberg.{}.{}", NAMESPACE, FILE_CATALOG_TABLE);
+    let qualified = qualified_table_name();
     FILES_TABLE_RE
         .replace_all(sql, format!("${{1}}{}", qualified))
         .into_owned()

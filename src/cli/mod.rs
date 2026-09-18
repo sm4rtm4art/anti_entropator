@@ -9,6 +9,16 @@ const KIBIBYTE: u64 = 1024;
 const MEBIBYTE: u64 = KIBIBYTE * 1024;
 const GIBIBYTE: u64 = MEBIBYTE * 1024;
 
+/// `--source` must carry a name; whitespace-only values would silently create
+/// an unnameable source.
+fn parse_source_name(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("source name must not be empty".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
 fn parse_byte_size(value: &str) -> Result<u64, String> {
     let normalized = value.trim().to_ascii_uppercase();
     let (number, multiplier) = if let Some(number) = normalized.strip_suffix("GB") {
@@ -148,13 +158,19 @@ pub struct IngestArgs {
     #[arg(long)]
     pub limit: Option<usize>,
 
-    /// Preview: check connectivity and which objects already exist in the
+    /// Logical source name recorded as `source_id` on every observation.
+    /// Defaults to the canonical absolute path of the ingested directory;
+    /// pass the same name to keep observing a source after moving the root.
+    #[arg(long, value_name = "NAME", value_parser = parse_source_name)]
+    pub source: Option<String>,
+
+    /// Preview: read catalog state, check which objects already exist in the
     /// store, but never upload or commit. Fails if the lakehouse is unreachable.
     #[arg(long)]
     pub dry_run: bool,
 
     /// With --dry-run: skip the lakehouse entirely. Every candidate is reported
-    /// as "would upload" because existing objects are not checked.
+    /// as "would observe / would upload" because nothing is checked.
     #[arg(long, requires = "dry_run")]
     pub offline: bool,
 
@@ -186,7 +202,17 @@ pub enum OutputFormat {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_byte_size;
+    use super::{parse_byte_size, parse_source_name};
+
+    #[test]
+    fn parse_source_name_trims_and_rejects_empty() {
+        assert_eq!(
+            parse_source_name(" downloads "),
+            Ok("downloads".to_string())
+        );
+        assert!(parse_source_name("").is_err());
+        assert!(parse_source_name("   ").is_err());
+    }
 
     #[test]
     fn parse_byte_size_accepts_supported_units() {

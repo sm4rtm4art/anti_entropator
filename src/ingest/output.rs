@@ -12,7 +12,9 @@ use uuid::Uuid;
 /// Version history:
 /// - 1: initial summary.
 /// - 2: added `run_id` (ADR-009 run identity).
-pub const INGEST_SUMMARY_FORMAT_VERSION: u32 = 2;
+/// - 3: added `source_id`, `observed`, `unchanged` (ADR-009 observation per
+///   path). `uploaded` / `already_exists` keep their blob meaning.
+pub const INGEST_SUMMARY_FORMAT_VERSION: u32 = 3;
 
 /// How an ingest invocation is allowed to interact with the lakehouse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -86,31 +88,46 @@ pub enum CatalogCommitStatus {
     Failed,
 }
 
+/// Per-run tallies on two independent axes (ADR-009):
+/// paths (`observed` / `unchanged`) and blobs (`uploaded` / `already_exists`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct IngestCounts {
+    /// Files selected by the filters.
+    pub candidates: u64,
+    /// Paths for which a `present` observation row was (or would be) appended.
+    pub observed: u64,
+    /// Paths whose last observation already records this content; no row.
+    pub unchanged: u64,
+    /// Blobs uploaded (or that would be) to the content-addressed store.
+    pub uploaded: u64,
+    /// Blobs that already existed in the store and were verified.
+    pub already_exists: u64,
+    /// Bytes of the uploaded blobs.
+    pub bytes: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IngestSummary {
     pub format_version: u32,
     pub mode: IngestMode,
     /// Identity of this ingest attempt; every row it commits carries it.
     pub run_id: Uuid,
+    /// Logical source the observations belong to.
+    pub source_id: String,
     pub status: IngestStatus,
-    pub candidates: u64,
-    pub uploaded: u64,
-    pub already_exists: u64,
+    #[serde(flatten)]
+    pub counts: IngestCounts,
     pub failed: u64,
-    pub bytes: u64,
     pub catalog_commit: CatalogCommitStatus,
     pub errors: Vec<String>,
 }
 
 impl IngestSummary {
-    #[allow(clippy::too_many_arguments)] // Mirrors the summary's fields one-to-one.
     pub fn build(
         mode: IngestMode,
         run_id: Uuid,
-        candidates: u64,
-        uploaded: u64,
-        already_exists: u64,
-        bytes: u64,
+        source_id: String,
+        counts: IngestCounts,
         errors: &[String],
         catalog_commit: CatalogCommitStatus,
     ) -> Self {
@@ -127,12 +144,10 @@ impl IngestSummary {
             format_version: INGEST_SUMMARY_FORMAT_VERSION,
             mode,
             run_id,
+            source_id,
             status,
-            candidates,
-            uploaded,
-            already_exists,
+            counts,
             failed,
-            bytes,
             catalog_commit,
             errors: errors.to_vec(),
         }
@@ -159,26 +174,36 @@ pub fn print_human_report(summary: &IngestSummary) {
     println!();
     println!("─── Ingest Results ─────────────────────────────────────────────");
     println!();
+    let c = &summary.counts;
+    let bytes = humansize::format_size(c.bytes, humansize::BINARY);
     if summary.mode.writes() {
         println!(
-            "  Uploaded:        {} files ({})",
-            summary.uploaded,
-            humansize::format_size(summary.bytes, humansize::BINARY)
+            "  Observed:        {} paths (catalog rows appended)",
+            c.observed
         );
-    } else {
         println!(
-            "  Would upload:    {} files ({})",
-            summary.uploaded,
-            humansize::format_size(summary.bytes, humansize::BINARY)
+            "  Unchanged:       {} paths (already in catalog)",
+            c.unchanged
         );
-    }
-    if summary.mode.is_connected() {
-        println!("  Already in store: {} files", summary.already_exists);
+        println!("  Uploaded:        {} blobs ({bytes})", c.uploaded);
+        println!("  Already in store: {} blobs", c.already_exists);
+    } else if summary.mode.is_connected() {
+        println!("  Would observe:   {} paths (catalog rows)", c.observed);
+        println!(
+            "  Unchanged:       {} paths (already in catalog)",
+            c.unchanged
+        );
+        println!("  Would upload:    {} blobs ({bytes})", c.uploaded);
+        println!("  Already in store: {} blobs", c.already_exists);
     } else {
+        println!("  Would observe:   {} paths (catalog not read)", c.observed);
+        println!("  Unchanged:       not checked (--offline)");
+        println!("  Would upload:    {} blobs ({bytes})", c.uploaded);
         println!("  Already in store: not checked (--offline)");
     }
     println!("  Errors:          {} files", summary.failed);
     println!("  Run:             {}", summary.run_id);
+    println!("  Source:          {}", summary.source_id);
     println!();
 
     if !summary.errors.is_empty() {
@@ -263,25 +288,51 @@ mod tests {
         vec!["unreadable.txt: permission denied".to_string()]
     }
 
+    fn counts(
+        candidates: u64,
+        observed: u64,
+        unchanged: u64,
+        uploaded: u64,
+        already_exists: u64,
+        bytes: u64,
+    ) -> IngestCounts {
+        IngestCounts {
+            candidates,
+            observed,
+            unchanged,
+            uploaded,
+            already_exists,
+            bytes,
+        }
+    }
+
+    fn build(
+        mode: IngestMode,
+        c: IngestCounts,
+        errors: &[String],
+        commit: CatalogCommitStatus,
+    ) -> IngestSummary {
+        IngestSummary::build(mode, Uuid::nil(), "/src".to_string(), c, errors, commit)
+    }
+
     #[test]
     fn summary_success_status() {
-        let summary = IngestSummary::build(
+        let summary = build(
             IngestMode::Ingest,
-            Uuid::nil(),
-            4,
-            3,
-            1,
-            1024,
+            counts(4, 3, 1, 2, 2, 1024),
             &[],
             CatalogCommitStatus::Succeeded,
         );
-        assert_eq!(summary.format_version, 2);
+        assert_eq!(summary.format_version, 3);
         assert_eq!(summary.mode, IngestMode::Ingest);
         assert_eq!(summary.run_id, Uuid::nil());
+        assert_eq!(summary.source_id, "/src");
         assert_eq!(summary.status, IngestStatus::Success);
-        assert_eq!(summary.candidates, 4);
-        assert_eq!(summary.uploaded, 3);
-        assert_eq!(summary.already_exists, 1);
+        assert_eq!(summary.counts.candidates, 4);
+        assert_eq!(summary.counts.observed, 3);
+        assert_eq!(summary.counts.unchanged, 1);
+        assert_eq!(summary.counts.uploaded, 2);
+        assert_eq!(summary.counts.already_exists, 2);
         assert_eq!(summary.failed, 0);
         assert_eq!(summary.catalog_commit, CatalogCommitStatus::Succeeded);
         assert!(summary.errors.is_empty());
@@ -290,13 +341,9 @@ mod tests {
     #[test]
     fn summary_incomplete_from_errors() {
         let errors = sample_errors();
-        let summary = IngestSummary::build(
+        let summary = build(
             IngestMode::Ingest,
-            Uuid::nil(),
-            3,
-            2,
-            0,
-            1024,
+            counts(3, 2, 0, 2, 0, 1024),
             &errors,
             CatalogCommitStatus::Succeeded,
         );
@@ -308,13 +355,9 @@ mod tests {
     #[test]
     fn summary_commit_failed_takes_precedence() {
         let errors = sample_errors();
-        let summary = IngestSummary::build(
+        let summary = build(
             IngestMode::Ingest,
-            Uuid::nil(),
-            3,
-            3,
-            0,
-            1024,
+            counts(3, 3, 0, 3, 0, 1024),
             &errors,
             CatalogCommitStatus::Failed,
         );
@@ -325,13 +368,9 @@ mod tests {
 
     #[test]
     fn summary_dry_run_does_not_attempt_commit() {
-        let summary = IngestSummary::build(
+        let summary = build(
             IngestMode::DryRun,
-            Uuid::nil(),
-            1,
-            1,
-            0,
-            12,
+            counts(1, 1, 0, 1, 0, 12),
             &[],
             CatalogCommitStatus::NotAttempted,
         );
@@ -357,24 +396,25 @@ mod tests {
     }
 
     #[test]
-    fn summary_serializes_stable_snake_case_keys() {
-        let summary = IngestSummary::build(
+    fn summary_serializes_stable_flat_snake_case_keys() {
+        let summary = build(
             IngestMode::DryRun,
-            Uuid::nil(),
-            2,
-            1,
-            0,
-            8,
+            counts(2, 1, 1, 1, 0, 8),
             &sample_errors(),
             CatalogCommitStatus::NotAttempted,
         );
         let json = serde_json::to_value(&summary).unwrap();
 
-        assert_eq!(json["format_version"], 2);
+        assert_eq!(json["format_version"], 3);
         assert_eq!(json["mode"], "dry_run");
         assert_eq!(json["run_id"], "00000000-0000-0000-0000-000000000000");
+        assert_eq!(json["source_id"], "/src");
         assert_eq!(json["status"], "incomplete");
+        // Counts are flattened: no nested `counts` object.
+        assert!(json.get("counts").is_none());
         assert_eq!(json["candidates"], 2);
+        assert_eq!(json["observed"], 1);
+        assert_eq!(json["unchanged"], 1);
         assert_eq!(json["uploaded"], 1);
         assert_eq!(json["already_exists"], 0);
         assert_eq!(json["failed"], 1);
@@ -385,13 +425,9 @@ mod tests {
 
     #[test]
     fn outcome_error_preserves_commit_failure() {
-        let summary = IngestSummary::build(
+        let summary = build(
             IngestMode::Ingest,
-            Uuid::nil(),
-            3,
-            3,
-            0,
-            1024,
+            counts(3, 3, 0, 3, 0, 1024),
             &[],
             CatalogCommitStatus::Failed,
         );
@@ -406,13 +442,9 @@ mod tests {
     #[test]
     fn outcome_error_reports_partial_ingest_failure() {
         let errors = sample_errors();
-        let summary = IngestSummary::build(
+        let summary = build(
             IngestMode::Ingest,
-            Uuid::nil(),
-            3,
-            2,
-            0,
-            1024,
+            counts(3, 2, 0, 2, 0, 1024),
             &errors,
             CatalogCommitStatus::Succeeded,
         );
@@ -425,13 +457,9 @@ mod tests {
     #[test]
     fn outcome_error_reports_dry_run_preview_failure() {
         let errors = sample_errors();
-        let summary = IngestSummary::build(
+        let summary = build(
             IngestMode::DryRun,
-            Uuid::nil(),
-            1,
-            0,
-            0,
-            0,
+            counts(1, 0, 0, 0, 0, 0),
             &errors,
             CatalogCommitStatus::NotAttempted,
         );
@@ -443,17 +471,27 @@ mod tests {
 
     #[test]
     fn outcome_error_success_is_ok() {
-        let summary = IngestSummary::build(
+        let summary = build(
             IngestMode::Ingest,
-            Uuid::nil(),
-            3,
-            3,
-            0,
-            1024,
+            counts(3, 3, 0, 3, 0, 1024),
             &[],
             CatalogCommitStatus::Succeeded,
         );
         assert!(outcome_error(&summary, Some(Ok(()))).is_ok());
+    }
+
+    #[test]
+    fn unchanged_only_run_is_success_without_commit() {
+        // Re-ingest of an unchanged source: nothing observed, nothing
+        // uploaded, no commit attempted, still a success.
+        let summary = build(
+            IngestMode::Ingest,
+            counts(3, 0, 3, 0, 3, 0),
+            &[],
+            CatalogCommitStatus::NotAttempted,
+        );
+        assert_eq!(summary.status, IngestStatus::Success);
+        assert!(outcome_error(&summary, None).is_ok());
     }
 
     // ── IngestMode ──
@@ -490,13 +528,9 @@ mod tests {
             (IngestMode::DryRun, "dry_run"),
             (IngestMode::Ingest, "ingest"),
         ] {
-            let summary = IngestSummary::build(
+            let summary = build(
                 mode,
-                Uuid::nil(),
-                0,
-                0,
-                0,
-                0,
+                IngestCounts::default(),
                 &[],
                 CatalogCommitStatus::NotAttempted,
             );
@@ -506,34 +540,28 @@ mod tests {
     }
 
     #[test]
-    fn connected_dry_run_summary_keeps_existing_counts_and_never_commits() {
-        let summary = IngestSummary::build(
+    fn connected_dry_run_summary_keeps_both_axes_and_never_commits() {
+        let summary = build(
             IngestMode::DryRun,
-            Uuid::nil(),
-            3,
-            1,
-            2,
-            12,
+            counts(3, 2, 1, 1, 2, 12),
             &[],
             CatalogCommitStatus::NotAttempted,
         );
         assert_eq!(summary.mode, IngestMode::DryRun);
         assert_eq!(summary.status, IngestStatus::Success);
-        assert_eq!(summary.uploaded, 1);
-        assert_eq!(summary.already_exists, 2);
+        assert_eq!(summary.counts.observed, 2);
+        assert_eq!(summary.counts.unchanged, 1);
+        assert_eq!(summary.counts.uploaded, 1);
+        assert_eq!(summary.counts.already_exists, 2);
         assert_eq!(summary.catalog_commit, CatalogCommitStatus::NotAttempted);
     }
 
     #[test]
     fn outcome_error_reports_offline_preview_failure() {
         let errors = sample_errors();
-        let summary = IngestSummary::build(
+        let summary = build(
             IngestMode::DryRunOffline,
-            Uuid::nil(),
-            1,
-            0,
-            0,
-            0,
+            counts(1, 0, 0, 0, 0, 0),
             &errors,
             CatalogCommitStatus::NotAttempted,
         );

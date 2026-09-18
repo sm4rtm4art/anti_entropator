@@ -37,6 +37,16 @@ optional orchestration engine remain open in the roadmap and follow-up plan.
   UUIDv5 over `(source_id, relative_path, content_hash, status)`. Every ingest
   run has a `run_id`, shown in the human report and in the JSON summary
   (`format_version` 2).
+- ADR-009 observation per path (slice 3 complete, slice 4 partial): ingest
+  reads the latest `present` observation per path for the source at run start
+  and appends a row only when a path is new or its content changed. Identical
+  bytes at a second path now produce a second catalog row referencing the same
+  blob; re-running an unchanged ingest appends nothing and attempts no commit.
+  If the catalog cannot be read, connected runs stop instead of guessing.
+  `ingest --source <name>` overrides `source_id` (default: canonical root
+  path). The summary reports paths (`observed`, `unchanged`) and blobs
+  (`uploaded`, `already_exists`) separately and includes `source_id`
+  (`format_version` 3). Deleted and rename observations are not yet recorded.
 - Mutation-safe CAS upload: files are streamed in bounded chunks (no
   whole-file read), re-hashed in flight, and stored only through a conditional
   `if_not_exists` write; a file that changes during upload is aborted (nothing
