@@ -141,6 +141,31 @@ later maintenance feature.
 Peak memory does not grow with the size of the files: they are streamed, and
 only the file list and at most two batches of rows are held at once.
 
+How a run is recorded: every ingest that writes keeps a journal object at
+`_runs/<run_id>.json` in the data bucket and rewrites it on each transition:
+`started`, `committing`, `batch_committed`, then `completed`, `incomplete`
+(per-file errors), or `commit_failed`. A run that is killed leaves a journal
+whose last entry is not terminal; that is the record of an interrupted run,
+nothing else is inferred. If the journal cannot be written at start, the run
+refuses to start. Previews (`--dry-run`) write no journal.
+
+```bash
+# Every run, newest first; --open shows only runs that never finished
+anti_entropator runs list [--source <name>] [--open] [--format json]
+
+# One run with its full history
+anti_entropator runs show <run_id> [--format json]
+```
+
+If a run was interrupted, the recovery is to run the same ingest again. It
+warns about the unfinished run, counts the rows that run actually got into the
+catalog and records that in its journal (`reconciled`), observes exactly the
+paths that have no row yet, and marks the old run `superseded_by` the new one
+when it completes. A blob that was uploaded but never committed is found in
+the store and only re-observed, never re-uploaded. There is no `--resume`, and
+two ingests of the same source at the same time are not yet prevented (a
+single-writer lease is a follow-up).
+
 What a `file_catalog` row means (ADR-009): one row is one observation of one
 path in one source during one run, appended-only. Ingest reads the latest
 observation per path for the source at run start and appends a row only when
@@ -171,6 +196,13 @@ Tables created before the observation columns existed are upgraded in place
 the next time you run `anti_entropator init`; until then `ingest` stops with
 `run anti_entropator init to upgrade it`. Older rows keep `NULL` in the new
 columns and are observed again once.
+
+Known limitation for such upgraded tables: a query that reads `run_id` over
+those older data files fails with `unexpected target column type
+FixedSizeBinary(16)`, because iceberg-rust 0.10 cannot fill a missing UUID
+column with nulls. Adding `source_id = '<name>'` to the `WHERE` clause prunes
+those files before they are read. Ingest's own reconciliation query does this.
+Tables created by the current `init` are not affected.
 
 ### 5. Query Your Catalog
 
@@ -206,6 +238,7 @@ anti_entropator query "SELECT relative_path, content_hash, observed_at FROM (SEL
 | `scan <path>`    | ✅      | Enrich metadata without uploading            |
 | `ingest <path>`  | ✅      | Upload files & commit metadata to Iceberg    |
 | `query <sql>`    | ✅      | Execute one-shot SQL via DataFusion (basic)  |
+| `runs list` / `runs show <run_id>` | ✅ | Inspect ingest run journals (read-only) |
 
 Every command in the binary is implemented. Interactive SQL, a duplicate
 workflow, and branch merge are roadmap items and do not exist as commands yet.

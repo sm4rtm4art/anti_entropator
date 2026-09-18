@@ -18,6 +18,7 @@ use chrono::{DateTime, Utc};
 use datafusion::prelude::SessionContext;
 use datafusion::scalar::ScalarValue;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 /// Last known content of one path.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,6 +109,50 @@ pub async fn load_current_state(ctx: &SessionContext, source_id: &str) -> Result
         "Loaded catalog state for source"
     );
     Ok(reduce_latest(rows))
+}
+
+/// How many observation rows the catalog holds for one run. Used to resolve
+/// an interrupted run's unknown commit outcome (ADR-009 slice 4).
+///
+/// The `source_id` predicate is not redundant: data files written before the
+/// observation columns existed have no `run_id`, and iceberg-rust 0.10 cannot
+/// null-fill a `FixedSizeBinary(16)` column for them. `source_id = …` prunes
+/// those files by their (absent) column statistics before they are read.
+pub async fn count_rows_for_run(
+    ctx: &SessionContext,
+    source_id: &str,
+    run_id: Uuid,
+) -> Result<u64> {
+    // `run_id` is a 16-byte UUID column; compare its hex form to a bound
+    // string so neither parameter reaches the SQL text.
+    let sql = format!(
+        "SELECT COUNT(*) FROM {} WHERE source_id = $1 AND encode(run_id, 'hex') = $2",
+        qualified_table_name()
+    );
+    let batches = ctx
+        .sql(&sql)
+        .await
+        .context("Failed to plan run row-count query")?
+        .with_param_values(vec![
+            ScalarValue::Utf8(Some(source_id.to_string())),
+            ScalarValue::Utf8(Some(run_id.simple().to_string())),
+        ])
+        .context("Failed to bind run row-count parameter")?
+        .collect()
+        .await
+        .context("Failed to count rows for run")?;
+    count_from_batches(&batches)
+}
+
+/// Read the single scalar of a `COUNT(*)` result.
+pub fn count_from_batches(batches: &[RecordBatch]) -> Result<u64> {
+    let batch = batches
+        .iter()
+        .find(|b| b.num_rows() > 0)
+        .context("count query returned no rows")?;
+    let col = cast(batch.column(0), &DataType::Int64).context("count column")?;
+    let col = col.as_primitive::<arrow::datatypes::Int64Type>();
+    u64::try_from(col.value(0)).context("negative count")
 }
 
 /// Convert result batches (`relative_path`, `content_hash`, `observed_at`)
@@ -318,5 +363,34 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(rows.len(), 2);
+    }
+
+    fn count_batch(values: Vec<i64>) -> RecordBatch {
+        let schema = Arc::new(Schema::new(vec![Field::new(
+            "count(*)",
+            DataType::Int64,
+            false,
+        )]));
+        RecordBatch::try_new(
+            schema,
+            vec![Arc::new(arrow::array::Int64Array::from(values))],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn count_from_batches_reads_first_non_empty_batch() {
+        assert_eq!(
+            count_from_batches(&[count_batch(vec![]), count_batch(vec![7])]).unwrap(),
+            7
+        );
+        assert_eq!(count_from_batches(&[count_batch(vec![0])]).unwrap(), 0);
+    }
+
+    #[test]
+    fn count_from_batches_rejects_empty_and_negative() {
+        assert!(count_from_batches(&[]).is_err());
+        assert!(count_from_batches(&[count_batch(vec![])]).is_err());
+        assert!(count_from_batches(&[count_batch(vec![-1])]).is_err());
     }
 }

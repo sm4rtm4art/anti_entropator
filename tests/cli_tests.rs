@@ -919,6 +919,217 @@ fn ingest_then_query_flow() -> Result<()> {
     Ok(())
 }
 
+// ==================== Run Journal Tests ====================
+
+#[test]
+fn runs_help_lists_list_and_show() -> Result<()> {
+    cmd()?
+        .args(["runs", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("\n  list"))
+        .stdout(predicate::str::contains("\n  show"));
+    cmd()?
+        .args(["runs", "list", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--source"))
+        .stdout(predicate::str::contains("--open"))
+        .stdout(predicate::str::contains("--format"));
+    Ok(())
+}
+
+#[test]
+fn runs_show_rejects_non_uuid() -> Result<()> {
+    cmd()?
+        .args(["runs", "show", "not-a-run-id"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("invalid value"));
+    Ok(())
+}
+
+/// Run a `COUNT(*)` query and read the single number out of the table output.
+fn query_count(sql: &str) -> Result<u64> {
+    let out = cmd()?.arg("query").arg(sql).output()?;
+    assert!(out.status.success(), "query failed: {sql}");
+    let stdout = String::from_utf8(out.stdout)?;
+    stdout
+        .lines()
+        .filter_map(|l| l.strip_prefix('|').and_then(|l| l.strip_suffix('|')))
+        .filter_map(|cell| cell.trim().parse::<u64>().ok())
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("no count in query output:\n{stdout}"))
+}
+
+/// ADR-009 slice 4 / roadmap criterion 4: a run killed between upload and
+/// commit is never reported as success, its state is identifiable afterwards,
+/// and the next run for the source reconciles and supersedes it.
+#[test]
+#[ignore] // Requires: docker compose up -d && source .env
+fn interrupted_ingest_is_recorded_and_reconciled() -> Result<()> {
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+
+    cmd()?.arg("init").assert().success();
+
+    // 40 distinct 2 MiB files: enough work that the run is still going when
+    // the first batch has been committed.
+    let temp = tempdir()?;
+    let marker = &uuid::Uuid::new_v4().to_string()[..8];
+    let total = 40u64;
+    for i in 0..total {
+        let body: Vec<u8> = (0..(2 * 1024 * 1024usize))
+            .map(|k| ((k as u64).wrapping_mul(2654435761).wrapping_add(i * 7919)) as u8)
+            .chain(marker.bytes())
+            .collect();
+        std::fs::write(temp.path().join(format!("s4a_{marker}_{i:02}.bin")), body)?;
+    }
+    let source = format!("s4a-kill-{marker}");
+
+    // 1. Start an ingest that commits one row per batch and kill it right
+    //    after the first `Batch committed` event on stderr (SIGKILL: no
+    //    chance to write a terminal journal state).
+    #[allow(deprecated)]
+    let bin = assert_cmd::cargo::cargo_bin("anti_entropator");
+    let mut child = std::process::Command::new(bin)
+        .arg("ingest")
+        .arg(temp.path())
+        .args([
+            "--source",
+            &source,
+            "--batch-size",
+            "1",
+            "--concurrency",
+            "1",
+        ])
+        .args(["--format", "json"])
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let stderr = child.stderr.take().expect("piped stderr");
+    let mut saw_commit = false;
+    for line in BufReader::new(stderr).lines() {
+        if line?.contains("Batch committed") {
+            saw_commit = true;
+            break;
+        }
+    }
+    child.kill()?;
+    let status = child.wait()?;
+    assert!(saw_commit, "run ended before its first batch commit");
+    assert!(!status.success(), "a killed run must not exit 0");
+
+    // 2. The journal shows exactly one open run for this source.
+    let list = cmd()?
+        .args(["runs", "list", "--source", &source, "--open"])
+        .args(["--format", "json"])
+        .output()?;
+    assert!(list.status.success());
+    let open: Vec<serde_json::Value> = serde_json::from_slice(&list.stdout)?;
+    assert_eq!(open.len(), 1, "one interrupted run expected: {open:?}");
+    let killed = &open[0];
+    assert_eq!(killed["outcome"], "interrupted");
+    let killed_id = killed["run_id"].as_str().expect("run_id").to_string();
+    let journal_rows = killed["rows_committed"].as_u64().expect("rows_committed");
+    assert!(journal_rows >= 1, "journal must record the committed batch");
+    assert!(journal_rows < total, "run must not have finished");
+
+    let show = cmd()?
+        .args(["runs", "show", &killed_id, "--format", "json"])
+        .output()?;
+    assert!(show.status.success());
+    let show_json: serde_json::Value = serde_json::from_slice(&show.stdout)?;
+    let history = show_json["history"].as_array().expect("history");
+    assert_eq!(history[0]["state"], "started");
+    let last = history.last().unwrap()["state"].as_str().unwrap();
+    assert!(
+        matches!(last, "started" | "committing" | "batch_committed"),
+        "last own state must be non-terminal, got {last}"
+    );
+
+    // 3. The catalog holds at least what the journal recorded (the kill may
+    //    have landed between a commit and its journal entry). The `source_id`
+    //    predicate prunes pre-ADR-009 data files, which have no `run_id`
+    //    column (see "Known limitations" in the manual).
+    let hex = killed_id.replace('-', "");
+    let in_catalog = query_count(&format!(
+        "SELECT count(*) FROM files WHERE source_id = '{source}' AND encode(run_id, 'hex') = '{hex}'"
+    ))?;
+    assert!(in_catalog >= journal_rows);
+    assert!(in_catalog <= journal_rows + 1);
+
+    // 4. The next run for the source warns, reconciles the killed run against
+    //    the catalog, observes exactly the paths that never got a row, and
+    //    supersedes its predecessor when it completes.
+    let again = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--source", &source, "--format", "json"])
+        .output()?;
+    assert!(again.status.success());
+    let stderr = String::from_utf8_lossy(&again.stderr);
+    assert!(
+        stderr.contains("did not finish"),
+        "second run must warn about the interrupted one; stderr:\n{stderr}"
+    );
+    let again_json: serde_json::Value = serde_json::from_slice(&again.stdout)?;
+    assert_eq!(again_json["status"], "success");
+    assert_eq!(again_json["unchanged"].as_u64(), Some(in_catalog));
+    assert_eq!(again_json["observed"].as_u64(), Some(total - in_catalog));
+    // Blob states cover every candidate (unchanged paths are verified too).
+    // A blob the killed run uploaded but never committed is found in the
+    // store and only re-observed, never re-uploaded; with concurrency 1 at
+    // most one file was in that window.
+    let uploaded = again_json["uploaded"].as_u64().unwrap();
+    let already = again_json["already_exists"].as_u64().unwrap();
+    assert_eq!(uploaded + already, total);
+    let upload_without_commit = already - in_catalog;
+    assert!(
+        upload_without_commit <= 1,
+        "at most one upload-without-commit: {upload_without_commit}"
+    );
+    let new_id = again_json["run_id"].as_str().unwrap();
+
+    let closed = cmd()?
+        .args(["runs", "show", &killed_id, "--format", "json"])
+        .output()?;
+    let closed_json: serde_json::Value = serde_json::from_slice(&closed.stdout)?;
+    assert_eq!(closed_json["outcome"], "reconciled");
+    let states: Vec<&serde_json::Value> =
+        closed_json["history"].as_array().unwrap().iter().collect();
+    let reconciled = states
+        .iter()
+        .find(|t| t["state"] == "reconciled")
+        .expect("reconciled entry");
+    assert_eq!(reconciled["rows_in_catalog"].as_u64(), Some(in_catalog));
+    let superseded = states
+        .iter()
+        .find(|t| t["state"] == "superseded_by")
+        .expect("superseded_by entry");
+    assert_eq!(superseded["run_id"].as_str(), Some(new_id));
+
+    let open_after = cmd()?
+        .args(["runs", "list", "--source", &source, "--open"])
+        .args(["--format", "json"])
+        .output()?;
+    let open_after: Vec<serde_json::Value> = serde_json::from_slice(&open_after.stdout)?;
+    assert!(open_after.is_empty(), "no open runs left: {open_after:?}");
+
+    // 5. The completed run's own journal is terminal.
+    let done = cmd()?
+        .args(["runs", "show", new_id, "--format", "json"])
+        .output()?;
+    let done_json: serde_json::Value = serde_json::from_slice(&done.stdout)?;
+    assert_eq!(done_json["outcome"], "completed");
+    assert_eq!(
+        done_json["rows_committed"].as_u64(),
+        Some(total - in_catalog)
+    );
+
+    Ok(())
+}
+
 // ==================== Removed Flag Rejection Tests ====================
 
 #[test]

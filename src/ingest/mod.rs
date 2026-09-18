@@ -2,6 +2,7 @@
 //!
 //! Implements content-addressed storage with Iceberg catalog integration.
 
+pub(crate) mod journal;
 mod output;
 mod pipeline;
 mod state;
@@ -17,7 +18,9 @@ use crate::storage;
 use anyhow::{Context, Result};
 use chrono::Utc;
 use console::style;
+use datafusion::prelude::SessionContext;
 use indicatif::{ProgressBar, ProgressStyle};
+use journal::{JournalWriter, RunJournal, RunState};
 use opendal::Operator;
 use output::{
     outcome_error, print_human_report, print_json_report, CommitCounts, IngestCounts, IngestMode,
@@ -26,6 +29,7 @@ use output::{
 use pipeline::{BatchCommitter, PipelineConfig};
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use uuid::Uuid;
 use walkdir::WalkDir;
@@ -111,32 +115,55 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         }
     }
 
+    // Connected modes share one OpenDAL operator (blobs, journals) and one
+    // DataFusion session (catalog state, reconciliation).
+    let operator = if mode.is_connected() {
+        Some(storage::create_operator(&config)?)
+    } else {
+        None
+    };
+    let session = match &operator {
+        Some(_) => Some(crate::query::build_session(&config).await?),
+        None => None,
+    };
+
     // Read the current catalog state for this source (ADR-009 "unchanged →
     // no row"). Connected modes fail closed here: without this state the run
     // cannot tell an unchanged path from a changed one. Offline previews have
     // no state and report every candidate as "would observe".
-    let current_state = if mode.is_connected() {
-        if !json_output {
-            print!("  Reading catalog state for source... ");
-        }
-        match load_state(&config, &ctx.source_id).await {
-            Ok(s) => {
-                if !json_output {
-                    println!("{}", style(format!("{} known paths", s.len())).green());
-                }
-                Some(s)
+    let current_state = match &session {
+        Some(session) => {
+            if !json_output {
+                print!("  Reading catalog state for source... ");
             }
-            Err(e) => {
-                if !json_output {
-                    println!("{}", style("FAILED").red());
+            match state::load_current_state(session, &ctx.source_id).await {
+                Ok(s) => {
+                    if !json_output {
+                        println!("{}", style(format!("{} known paths", s.len())).green());
+                    }
+                    Some(s)
                 }
-                return Err(e.context(
-                    "Cannot read current catalog state; refusing to guess which paths are unchanged",
-                ));
+                Err(e) => {
+                    if !json_output {
+                        println!("{}", style("FAILED").red());
+                    }
+                    return Err(e.context(
+                        "Cannot read current catalog state; refusing to guess which paths are unchanged",
+                    ));
+                }
             }
         }
-    } else {
-        None
+        None => None,
+    };
+
+    // Earlier runs for this source that never reached a terminal state
+    // (ADR-009 "interrupted or unknown commit outcome"). Always reported;
+    // in ingest mode also reconciled against the catalog.
+    let open_runs = match (&operator, &session) {
+        (Some(op), Some(session)) => {
+            report_open_runs(op, session, &ctx.source_id, mode.writes(), json_output).await?
+        }
+        _ => Vec::new(),
     };
 
     // Collect files to ingest
@@ -180,11 +207,22 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         pb
     };
 
-    // Create OpenDAL operator (needed for existence checks and uploads)
-    let operator = if mode.is_connected() {
-        Some(storage::create_operator(&config)?)
-    } else {
-        None
+    // Ingest mode records itself before touching anything. Fails closed.
+    let committer = match &operator {
+        Some(op) if mode.writes() => {
+            let journal = JournalWriter::start(
+                op.clone(),
+                ctx.run_id,
+                ctx.source_id.clone(),
+                files.len() as u64,
+            )
+            .await?;
+            Some(JournaledCommitter::new(
+                IcebergCommitter { config: &config },
+                journal,
+            ))
+        }
+        _ => None,
     };
 
     let run_id = ctx.run_id;
@@ -192,12 +230,11 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     let fc = Arc::new(FileContext {
         root: path,
         config: config.clone(),
-        operator,
+        operator: operator.clone(),
         mode,
         run: ctx,
         state: current_state,
     });
-    let committer = IcebergCommitter { config: &config };
     let pipeline_cfg = PipelineConfig {
         concurrency: args.concurrency,
         batch_size: args.batch_size,
@@ -218,7 +255,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
                 async move { process_file(&p, &fc).await }
             }
         },
-        mode.writes().then_some(&committer),
+        committer.as_ref(),
         |p| {
             pb.inc(1);
             pb.set_message(
@@ -253,6 +290,27 @@ pub async fn run(args: IngestArgs) -> Result<()> {
         );
     }
 
+    // Terminal journal entry; then close the interrupted predecessors this
+    // run has superseded. Only a run that saw every candidate through may
+    // supersede.
+    if let Some(committer) = committer {
+        let mut journal = committer.into_journal();
+        let terminal = match (&commit_failure, errors.len() as u64) {
+            (Some(_), _) => RunState::CommitFailed {
+                batch: commit.batches_committed + 1,
+            },
+            (None, 0) => RunState::Completed,
+            (None, failed) => RunState::Incomplete { failed },
+        };
+        let completed = terminal == RunState::Completed;
+        journal.record(terminal).await;
+        if completed {
+            if let Some(op) = &operator {
+                supersede_open_runs(op, open_runs, run_id).await;
+            }
+        }
+    }
+
     finalize_ingest(
         IngestSummary::build(mode, run_id, source_id, counts, commit, &errors),
         commit_failure,
@@ -273,10 +331,109 @@ impl BatchCommitter for IcebergCommitter<'_> {
     }
 }
 
-/// Build a DataFusion session and load the latest observation per path.
-async fn load_state(config: &LakehouseConfig, source_id: &str) -> Result<state::CurrentState> {
-    let session = crate::query::build_session(config).await?;
-    state::load_current_state(&session, source_id).await
+/// Decorator that records `committing` / `batch_committed` around every
+/// batch. The pipeline's writer stage calls `commit` sequentially, so the
+/// mutex is never contended; it only satisfies `&self`.
+struct JournaledCommitter<'a> {
+    inner: IcebergCommitter<'a>,
+    journal: tokio::sync::Mutex<JournalWriter>,
+    batches: AtomicU64,
+}
+
+impl<'a> JournaledCommitter<'a> {
+    fn new(inner: IcebergCommitter<'a>, journal: JournalWriter) -> Self {
+        Self {
+            inner,
+            journal: tokio::sync::Mutex::new(journal),
+            batches: AtomicU64::new(0),
+        }
+    }
+
+    fn into_journal(self) -> JournalWriter {
+        self.journal.into_inner()
+    }
+}
+
+impl BatchCommitter for JournaledCommitter<'_> {
+    async fn commit(&self, rows: Vec<FileInfo>) -> Result<()> {
+        let batch = self.batches.fetch_add(1, Ordering::SeqCst) + 1;
+        let n = rows.len() as u64;
+        self.journal
+            .lock()
+            .await
+            .record(RunState::Committing { batch })
+            .await;
+        self.inner.commit(rows).await?;
+        self.journal
+            .lock()
+            .await
+            .record(RunState::BatchCommitted { batch, rows: n })
+            .await;
+        Ok(())
+    }
+}
+
+/// Report runs for `source_id` that never reached a terminal state. With
+/// `reconcile`, look up how many rows each actually has in the catalog and
+/// record that in its journal, turning "unknown commit outcome" into a fact.
+async fn report_open_runs(
+    op: &Operator,
+    session: &SessionContext,
+    source_id: &str,
+    reconcile: bool,
+    json_output: bool,
+) -> Result<Vec<RunJournal>> {
+    let mut open = journal::open_runs_for(op, source_id)
+        .await
+        .context("Cannot read run journals for this source")?;
+    for j in &mut open {
+        let last = j.last_own().label();
+        tracing::warn!(
+            run_id = %j.run_id,
+            last_state = %last,
+            started_at = %j.started_at,
+            "Earlier run for this source did not finish"
+        );
+        if !json_output {
+            println!(
+                "  {} earlier run {} did not finish (last: {}, started {})",
+                style("Warning:").yellow(),
+                j.run_id,
+                last,
+                j.started_at.format("%Y-%m-%d %H:%M:%S UTC")
+            );
+        }
+        if reconcile {
+            let rows = state::count_rows_for_run(session, source_id, j.run_id).await?;
+            journal::close(
+                op,
+                j,
+                RunState::Reconciled {
+                    rows_in_catalog: rows,
+                },
+            )
+            .await
+            .with_context(|| format!("Cannot reconcile run {}", j.run_id))?;
+            if !json_output {
+                println!(
+                    "           catalog holds {} row(s) for it (journal recorded {}); marked reconciled",
+                    rows,
+                    j.rows_committed()
+                );
+            }
+        }
+    }
+    Ok(open)
+}
+
+/// Mark reconciled predecessors as superseded by the run that just completed.
+/// Best effort: the journals of *other* runs must not fail this one.
+async fn supersede_open_runs(op: &Operator, runs: Vec<RunJournal>, by: Uuid) {
+    for mut j in runs {
+        if let Err(e) = journal::close(op, &mut j, RunState::SupersededBy { run_id: by }).await {
+            tracing::warn!(run_id = %j.run_id, error = %e, "Could not mark run as superseded");
+        }
+    }
 }
 
 /// Finalize the ingest operation: print summary and determine command outcome.
