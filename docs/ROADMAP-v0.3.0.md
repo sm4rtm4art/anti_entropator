@@ -116,6 +116,22 @@
 - Dated status entries above are kept as written; they are history, not
   current claims.
 
+### Status update (2026-09-18) — release
+
+- S6A slices 3a (#218), 3b (#219), 3c (#220), and 4a (#221) are on `main`.
+  Success criteria 1–5 and 7 are met (evidence per criterion below).
+- Release prep: crate version `0.3.0`, `CHANGELOG.md` `[0.3.0]` cut, this
+  entry. Criterion 6 is satisfied by the `v0.3.0` tag itself: the tag push
+  runs `release.yml` (quality gates, binaries, container verify + Trivy
+  fixable-only policy, GHCR publish, GitHub release). A `workflow_dispatch`
+  rehearsal of the same workflow on the release commit precedes the tag.
+- Correction to the 2026-09-17 entry: RustFS did move to `1.0.0` afterwards
+  (#215, named volume `rustfs-data`); the beta.2 note above is history.
+- Open after v0.3.0 (tracked in the backlog): single-writer ingest lease
+  (4b), deletion/rename observations, maintenance primitives, M4
+  observability, the `iceberg 0.11` stack bump (removes the two `cargo audit`
+  ignores; re-check the `FixedSizeBinary(16)` null-fill limitation).
+
 ### Completed (M1 -- Unified Storage, 2026-03-14)
 
 - Replaced `aws-sdk-s3` + `aws-config` with OpenDAL for all S3 I/O
