@@ -16,7 +16,7 @@ flowchart LR
 
     subgraph OR["🔁  Ingest Pipeline"]
         direction TB
-        PROC["Scan → Hash → Upload → Commit (sequential today)"]
+        PROC["Scan → Hash → Upload → Commit<br/><small>bounded worker pool · batched commits · run journal</small>"]
     end
 
     subgraph CP["⚡  Compute"]
@@ -51,8 +51,9 @@ flowchart LR
     ICE -->|manifests| IO
 ```
 
-> **Note:** There is one ingest engine. Bounded stage concurrency and per-stage
-> tracing are roadmap M4; the dual-engine dataflow-rs plan was dropped
+> **Note:** There is one ingest engine. Bounded stage concurrency shipped in
+> v0.3.0 (S6A slice 3c); per-stage tracing and a pipeline event schema are
+> roadmap M4 (v0.4.0). The dual-engine dataflow-rs plan was dropped
 > ([ADR-007](../adr/ADR-007-dataflow-rs-orchestration.md), superseded 2026-09-17).
 > The unified OpenDAL I/O boundary is implemented (M1 complete).
 > This project is local-first; shared or public deployment requires additional security controls.
@@ -74,18 +75,35 @@ flowchart LR
 - **scan**: Enrich file metadata without uploading
 - **ingest**: Upload to RustFS + commit to Iceberg via Lakekeeper
 - **query**: Execute one-shot SQL via DataFusion
+- **runs**: Inspect ingest run journals (`runs list`, `runs show <run_id>`)
 
 Not in the binary (roadmap): interactive SQL, duplicate management workflow,
 ingest branch merge, Iceberg maintenance.
 
 ### Pipeline Layer (v0.3.0)
 
-- **Single procedural engine**: `Scan → Hash → Upload → Commit`, sequential
-  per file today.
-- **Planned (M4)**: the same stages connected by bounded `tokio` channels with
-  per-stage concurrency limits and `tracing` spans, built alongside the S6A
-  streaming-upload rewrite. There is no `--engine` flag; ADR-007's
-  dataflow-rs second engine was
+- **Single engine, two bounded stages** (`src/ingest/pipeline.rs`): a
+  `tokio::task::JoinSet` worker pool hashes, verifies, and uploads up to
+  `--concurrency` files at once (default 4) and feeds a bounded `mpsc`
+  channel; one writer task accumulates rows and commits every `--batch-size`
+  rows (default 1000). Each batch is one Parquet file and one Iceberg
+  snapshot. A failed commit stops the run: in-flight files finish, no new file
+  starts, earlier batches stay committed, and the run exits non-zero with
+  `status: commit_failed`. Peak memory holds the file list and at most two
+  batches of rows; file bytes are streamed.
+- **Mutation-safe CAS upload** (`src/ingest/upload.rs`, ADR-009): a file is
+  hashed once, written with OpenDAL `if_not_exists`, and re-hashed while
+  streaming; if the bytes changed underneath, the write is aborted and the
+  file is retried. An existing blob is reused only after its length and, where
+  the store kept it, its recorded SHA-256 match the local file.
+- **Run journal** (`src/ingest/journal.rs`): every writing run rewrites
+  `_runs/<run_id>.json` in the data bucket on each transition (`started`,
+  `committing`, `batch_committed`, then `completed`, `incomplete`, or
+  `commit_failed`). An interrupted run leaves a non-terminal journal; the next
+  run of the same source warns, counts the rows that run committed
+  (`reconciled`), and marks it `superseded_by` when it completes.
+- **Planned (M4, v0.4.0)**: per-stage `tracing` spans and a pipeline event
+  schema. There is no `--engine` flag; ADR-007's dataflow-rs second engine was
   [superseded](../adr/ADR-007-dataflow-rs-orchestration.md) because the crate
   is a JSONLogic rules engine, not a DAG executor.
 
@@ -113,40 +131,56 @@ ingest branch merge, Iceberg maintenance.
 sequenceDiagram
     participant User
     participant CLI
-    participant Engine as Engine<br/>(procedural today)
-    participant Scanner
-    participant Hasher
+    participant Journal as Journal<br/>(_runs/run_id.json)
+    participant Workers as Worker pool<br/>(--concurrency)
+    participant Writer as Writer<br/>(--batch-size)
     participant OpenDAL
     participant RustFS
     participant Lakekeeper
 
     User->>CLI: ingest ~/Downloads
-    CLI->>Engine: dispatch pipeline
-    Engine->>Scanner: traverse directory
-    Scanner->>Hasher: compute SHA-256
-    Hasher->>OpenDAL: put(sha256/ab/cd/hash)
-    OpenDAL->>RustFS: S3 PutObject
-    RustFS-->>Engine: object URI
-    Engine->>Lakekeeper: append row to file_catalog (Iceberg snapshot commit)
+    CLI->>Journal: started
+    CLI->>Workers: file list
+    loop per file, N in flight
+        Workers->>Workers: hash · check catalog state
+        Workers->>OpenDAL: write sha256/ab/cd/hash (if_not_exists, verified)
+        OpenDAL->>RustFS: S3 PutObject
+        Workers-->>Writer: observation row
+    end
+    loop per batch
+        Writer->>Journal: committing
+        Writer->>Lakekeeper: append rows to file_catalog (Iceberg snapshot commit)
+        Writer->>Journal: batch_committed
+    end
+    CLI->>Journal: completed | incomplete | commit_failed
     User->>CLI: query (validate snapshot / time travel)
 ```
 
-> **Current state:** The procedural engine routes all I/O through OpenDAL (`src/storage/mod.rs`). DataFusion reads via `object_store_opendal`.
+> **Current state:** All object-store I/O, including the journal, goes through
+> the shared OpenDAL `Operator` (`src/storage/mod.rs`). DataFusion reads via
+> `object_store_opendal`. Journal writes after `started` are best-effort and
+> warn on failure; a failed `started` write refuses to start the run.
 
 ### Content-Addressed Storage
 
 Files are stored with keys derived from their content hash:
 
 ```text
-s3://anti-entropator/warehouse/
-└── sha256/
-    ├── ab/
-    │   └── cd/
-    │       └── abcd1234...5678  (actual file bytes)
-    └── ef/
-        └── gh/
-            └── efgh9012...3456
+s3://<bucket>/
+├── sha256/
+│   ├── ab/
+│   │   └── cd/
+│   │       └── abcd1234...5678  (actual file bytes)
+│   └── ef/
+│       └── gh/
+│           └── efgh9012...3456
+└── _runs/
+    └── <run_id>.json            (ingest run journal)
 ```
+
+The key is `ContentHash::to_object_key()` (`src/domain/mod.rs`); Iceberg data
+and metadata files live under the Lakekeeper warehouse prefix, not next to the
+blobs.
 
 Benefits:
 

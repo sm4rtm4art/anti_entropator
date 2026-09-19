@@ -3,7 +3,7 @@
 [![CI](https://github.com/sm4rtm4art/anti_entropator/actions/workflows/ci.yml/badge.svg)](https://github.com/sm4rtm4art/anti_entropator/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/sm4rtm4art/anti_entropator/graph/badge.svg)](https://codecov.io/gh/sm4rtm4art/anti_entropator)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Rust](https://img.shields.io/badge/rust-1.85+-orange.svg)](https://www.rust-lang.org)
+[![Rust](https://img.shields.io/badge/rust-1.94+-orange.svg)](https://www.rust-lang.org)
 
 _Fighting entropy, one file at a time._
 
@@ -163,15 +163,15 @@ make profile
   📊 Anti-Entropator Swamp Profile
 ═══════════════════════════════════════════════════════════════
 
-  Path: /Users/you/Downloads
-  Files: 4,548 | Dirs: 111 | Total size: 4.49 GiB
+  Path: /Users/<NAME>/Downloads
+  Files: 5.234 | Dirs: 121 | Total size: 5.23 GiB
 
 ─── By Extension (top 25 by total size) ───────────────────────
 ╭───────────┬───────┬───────────┬──────────┬───────────╮
 │ Extension │ Count │ Total     │ Avg      │ Max       │
 ├───────────┼───────┼───────────┼──────────┼───────────┤
-│ .mp4      │ 811   │ 2.05 GiB  │ 2.59 MiB │ 53.81 MiB │
-│ .pdf      │ 465   │ 1.11 GiB  │ 2.44 MiB │ 99.66 MiB │
+│ .mp4      │ 323   │ 3.42 GiB  │ 11.9 MiB │ 810 MiB   │
+│ .pdf      │ 1232  │ 1.22 GiB  │ 1.47 MiB │ 248.3 MiB │
 ...
 ```
 
@@ -225,19 +225,22 @@ This is a showcase project, so the process is part of what is on display.
   PR-sized blocks — correctness fixes, test pyramid, secrets and auth
   hardening, technical-debt audit, CI/CD delivery — each with a named quality
   gate and recorded validation evidence before it merges.
-- **Tests are the release floor.** Unit and CLI tests run on every change, and
-  one ignored Docker-backed `init → ingest → query` test can be run on demand
-  against the local stack. CI fails the build below 50% line coverage.
+- **Tests are the release floor.** Unit and CLI tests run on every change.
+  Three ignored Docker-backed tests run on demand against the local stack:
+  `doctor`, the `init → ingest → query` flow, and a kill test that `SIGKILL`s
+  an ingest mid-run and checks that the journal, the catalog count, and the
+  recovery run agree. CI fails the build below 50% line coverage.
 - **Everything checkable is checked automatically.** `cargo fmt`,
   `clippy -D warnings`, tests, coverage, `cargo audit`, Trivy filesystem and
   image scanning with a fixable HIGH/CRITICAL gate, `zizmor` workflow analysis,
   and Markdown/shell linting all run in GitHub Actions. Third-party actions are
   SHA-pinned. Pre-commit and pre-push hooks catch the same failures locally.
-- **Decisions are written down.** Eight ADRs record the reasoning, including
-  what was rejected: MinIO, Nessie, DuckDB, and anything requiring a JVM.
-- **Honest documentation is a hard rule.** Placeholder commands fail loudly,
-  planned work is labeled planned, and every security control is classified as
-  enforced today, human-verified, or planned.
+- **Decisions are written down.** Nine ADRs record the reasoning, including
+  what was rejected: MinIO, Nessie, DuckDB, a second pipeline engine, and
+  anything requiring a JVM. A superseded ADR stays in the tree with the reason.
+- **Honest documentation is a hard rule.** The binary contains only
+  implemented commands, planned work is labeled planned, and every security
+  control is classified as enforced today, human-verified, or planned.
 
 ## Scope and limits
 

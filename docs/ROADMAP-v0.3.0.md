@@ -413,9 +413,13 @@ Each criterion names its evidence. A criterion without evidence is not met.
    re-verified per PR.
 6. **Release path proven on a real tag** — the `v0.3.0` tag runs the release
    workflow end to end (quality gates, container verify + Trivy fixable-only
-   policy, GHCR publish, GitHub release). _Evidence:_ the tag's workflow run.
-   **Open — happens at tagging;** the dispatch dry run is already evidenced in
-   ADR-008.
+   policy, GHCR publish, GitHub release). _Evidence:_ tag `v0.3.0` pushed
+   2026-09-18; [release run 35376014640](https://github.com/sm4rtm4art/anti_entropator/actions/runs/35376014640)
+   green end to end, [GitHub release v0.3.0](https://github.com/sm4rtm4art/anti_entropator/releases/tag/v0.3.0)
+   published with the Linux and macOS binaries. The preceding
+   `workflow_dispatch` rehearsal on the release commit is
+   [run 35365542813](https://github.com/sm4rtm4art/anti_entropator/actions/runs/35365542813).
+   **Met.**
 7. **Docs match behavior** — README command table, manual, and ADR-001..009
    describe what ships; planned work is labeled planned. _Evidence:_ the
    2026-09-17 audit PRs. **Met**, re-verified per PR.
@@ -425,9 +429,9 @@ Deferred out of `v0.3.0` (see the 2026-09-17 status entry): maintenance
 per-stage tracing and concurrency tuning (all v0.4.0); interactive SQL,
 duplicate workflow, branch merge (v0.5.0+).
 
-> Execution note: criteria 1–5 and 7 are met once S6A slice 4a is on `main`.
-> Criterion 6 is satisfied by the tag itself; tagging `v0.3.0` is the next
-> release step.
+> Execution note: all seven criteria are met as of the `v0.3.0` tag
+> (2026-09-18). This roadmap is closed; open items below are carried into the
+> v0.4.0 plan.
 
 ---
 
@@ -441,13 +445,13 @@ duplicate workflow, branch merge (v0.5.0+).
 | ~~P1~~   | ~~Integration test: Ingest -> Query (containers)~~ | ~~Medium~~ | **Done** | Docker-gated `ingest_then_query_flow` against the Compose stack |
 | ~~P0~~   | ~~S6A slice 3: streaming, mutation-safe CAS upload + ADR-009 observation semantics~~ | ~~Large~~ | **Done** | 3a #218, 3b #219, 3c bounded pipeline + batched commits (criterion 3 met 2026-09-18) |
 | ~~P0~~   | ~~S6A slice 4a: durable run journal, non-success on interruption~~ | ~~Medium~~ | **Done** | Criterion 4 met 2026-09-18; `runs` command, kill test |
-| P1       | Tag `v0.3.0`; release workflow evidence on the tag | Small | **Next** | Criterion 6 |
+| ~~P1~~   | ~~Tag `v0.3.0`; release workflow evidence on the tag~~ | ~~Small~~ | **Done** | Criterion 6 met 2026-09-18; run 35376014640 |
 | P2       | S6A slice 4b: single-writer lease per source | Small | v0.4.0 | `if_not_exists` lease object, TTL, stale takeover |
 | P2       | Add `maintenance expire` + `vacuum` (safe flags) | Medium | v0.4.0      | Needs ADR-009 run identity for "live reference"          |
 | P2       | Per-stage `tracing` spans, pipeline event schema (M4) | Medium | v0.4.0 | dataflow-rs dropped (ADR-007 superseded)                 |
 | ~~P2~~   | ~~S5 CI/CD hardening (Trivy + multi-arch path)~~ | ~~Medium~~ | **Done** | S5 closed; residual multi-arch/Trivy enforcement deferred |
 | P2       | Add `optimize plan` (report-only)                | Small  | v0.4.0      |                                                          |
-| P3       | RustFS `1.0.0` upgrade path for existing data dirs | Small | Blocked | GA fails store init on beta.2 data dir; see hardening review |
+| ~~P3~~   | ~~RustFS `1.0.0` upgrade path for existing data dirs~~ | ~~Small~~ | **Done** | #215: GA image on a named volume (`rustfs-data`); bind-mount failure documented in the hardening review |
 | P2       | Refactor `files_to_batch` into helpers           | Small  | Deferred    | Already clean with `BatchColumnsBuilder`                 |
 
 ---
