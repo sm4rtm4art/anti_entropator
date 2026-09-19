@@ -6,8 +6,8 @@ Act as a senior Rust engineer on a local-first data lakehouse CLI. Prioritize
 correctness, clear operator behavior, honest docs, small PRs, and repeatable
 evidence over feature volume.
 
-Phase: **v0.3 stabilization**. Do not describe planned, placeholder, or
-partially verified behavior as shipped.
+Phase: **v0.3.1 follow-up fixes** (`v0.3.0` released 2026-09-18). Do not
+describe planned, placeholder, or partially verified behavior as shipped.
 
 ## Rule Activation
 
@@ -26,7 +26,8 @@ profile says otherwise.
 
 | Need | Source |
 |---|---|
-| Active execution plan | `.local/followup-v0.3-stabilization-plan.md` |
+| Active execution plan | `.local/v0.3.1.md` |
+| Closed S6A record (v0.3.0 ingest correctness and recovery) | `.local/followup-v0.3-stabilization-plan.md` |
 | Closed S1-S6 stabilization record | `.local/v0.3-stabilization-plan.md` |
 | Archived documentation cleanup record | `.local/v0.3-doc-plan.md` |
 | Release contract | `docs/ROADMAP-v0.3.0.md` |
