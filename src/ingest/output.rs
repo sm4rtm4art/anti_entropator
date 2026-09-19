@@ -115,12 +115,14 @@ pub struct IngestCounts {
 /// failed batch stops the run, so `batches_failed` is 0 or 1.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 pub struct CommitCounts {
-    /// Observation rows now in the catalog. `observed - committed` is the
-    /// number of rows this run produced but did not commit.
+    /// Observation rows whose commit the catalog acknowledged. After a failed
+    /// batch, `observed - committed` is an upper bound on missing rows: the
+    /// failed batch may have landed server-side; the next run reconciles.
     pub committed: u64,
-    /// Batches (one Parquet file and one snapshot each) committed.
+    /// Batches (one Parquet file and one snapshot each) acknowledged.
     pub batches_committed: u64,
-    /// Batches whose commit failed.
+    /// Batches whose commit returned an error (outcome unknown until
+    /// reconciled).
     pub batches_failed: u64,
 }
 
@@ -225,7 +227,7 @@ pub fn print_human_report(summary: &IngestSummary) {
         );
         if k.batches_failed > 0 {
             println!(
-                "  Commit failed:   batch {}; {} rows not committed",
+                "  Commit failed:   batch {}; {} rows not acknowledged",
                 k.batches_committed + 1,
                 summary.uncommitted_rows()
             );
@@ -299,17 +301,22 @@ pub fn print_human_report(summary: &IngestSummary) {
             println!(
                 "{}",
                 style(format!(
-                    "  Ingest incomplete: metadata commit failed after {} committed batch(es).",
+                    "  Ingest incomplete: metadata commit failed after {} acknowledged batch(es).",
                     summary.commit.batches_committed
                 ))
                 .red()
             );
             println!(
-                "  {} observed row(s) are not in the catalog; {} file(s) were not started.",
+                "  Up to {} observed row(s) may be missing from the catalog; {} file(s) were not started.",
                 summary.uncommitted_rows(),
                 summary.counts.skipped
             );
-            println!("  Uploaded blobs are safe. Re-run the same ingest to observe the rest.");
+            println!(
+                "  The failed batch may still have landed. Uploaded blobs are safe. Re-run the same"
+            );
+            println!(
+                "  ingest: it records what the catalog holds for this run and observes the rest."
+            );
             println!();
         }
     }

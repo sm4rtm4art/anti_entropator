@@ -164,14 +164,27 @@ fn print_show(v: &RunView) -> Result<()> {
         ]);
     }
     println!("{table}");
-    if v.outcome == RunOutcome::Interrupted {
-        println!();
-        println!(
-            "  This run never reached a terminal state. Re-run the same ingest: rows it did not"
-        );
-        println!(
-            "  commit are observed again, and the catalog count for this run is recorded here."
-        );
+    match v.outcome {
+        RunOutcome::Interrupted => {
+            println!();
+            println!(
+                "  This run never reached a terminal state. Re-run the same ingest: rows it did not"
+            );
+            println!(
+                "  commit are observed again, and the catalog count for this run is recorded here."
+            );
+        }
+        RunOutcome::CommitFailed => {
+            println!();
+            println!(
+                "  A batch commit returned an error; the catalog may still hold it. Re-run the same"
+            );
+            println!(
+                "  ingest: the catalog count for this run is recorded here and missing rows are"
+            );
+            println!("  observed again.");
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -220,5 +233,29 @@ mod tests {
         print_list(&[]).unwrap();
         print_list(&[RunView::summary(&journal())]).unwrap();
         print_show(&RunView::full(&journal())).unwrap();
+    }
+
+    #[test]
+    fn commit_failed_view_is_open_and_reconciled_view_keeps_the_failure_in_history() {
+        let t = DateTime::parse_from_rfc3339("2026-09-18T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut j = RunJournal::new(Uuid::from_u128(3), "downloads".into(), 2, t);
+        j.push(RunState::Committing { batch: 1 }, t);
+        j.push(RunState::CommitFailed { batch: 1 }, t);
+        let v = RunView::summary(&j);
+        assert_eq!(v.outcome, RunOutcome::CommitFailed);
+        assert!(j.is_open(), "`runs list --open` must show it");
+        print_show(&RunView::full(&j)).unwrap();
+
+        j.push(RunState::Reconciled { rows_in_catalog: 2 }, t);
+        let v = RunView::full(&j);
+        assert_eq!(v.outcome, RunOutcome::Reconciled);
+        assert_eq!(v.last_state, "commit failed at batch 1");
+        let json = serde_json::to_value(&v).unwrap();
+        let h = json["history"].as_array().unwrap();
+        assert_eq!(h[2]["state"], "commit_failed");
+        assert_eq!(h[3]["state"], "reconciled");
+        assert_eq!(h[3]["rows_in_catalog"], 2);
     }
 }

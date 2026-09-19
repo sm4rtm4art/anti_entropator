@@ -20,7 +20,7 @@ use chrono::Utc;
 use console::style;
 use datafusion::prelude::SessionContext;
 use indicatif::{ProgressBar, ProgressStyle};
-use journal::{JournalWriter, RunJournal, RunState};
+use journal::{JournalWriter, RunJournal, RunOutcome, RunState};
 use opendal::Operator;
 use output::{
     outcome_error, print_human_report, print_json_report, CommitCounts, IngestCounts, IngestMode,
@@ -373,9 +373,11 @@ impl BatchCommitter for JournaledCommitter<'_> {
     }
 }
 
-/// Report runs for `source_id` that never reached a terminal state. With
+/// Report runs for `source_id` whose outcome is unknown: interrupted, or a
+/// batch commit that returned an error (the catalog may hold it anyway). With
 /// `reconcile`, look up how many rows each actually has in the catalog and
 /// record that in its journal, turning "unknown commit outcome" into a fact.
+/// Assumes the earlier writer has stopped; there is no lease yet.
 async fn report_open_runs(
     op: &Operator,
     session: &SessionContext,
@@ -388,17 +390,22 @@ async fn report_open_runs(
         .context("Cannot read run journals for this source")?;
     for j in &mut open {
         let last = j.last_own().label();
+        let what = match j.outcome() {
+            RunOutcome::CommitFailed => "had an unacknowledged commit",
+            _ => "did not finish",
+        };
         tracing::warn!(
             run_id = %j.run_id,
             last_state = %last,
             started_at = %j.started_at,
-            "Earlier run for this source did not finish"
+            "Earlier run for this source {what}; commit outcome unknown"
         );
         if !json_output {
             println!(
-                "  {} earlier run {} did not finish (last: {}, started {})",
+                "  {} earlier run {} {} (last: {}, started {})",
                 style("Warning:").yellow(),
                 j.run_id,
+                what,
                 last,
                 j.started_at.format("%Y-%m-%d %H:%M:%S UTC")
             );
