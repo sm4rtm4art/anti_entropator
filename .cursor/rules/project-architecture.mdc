@@ -1,11 +1,11 @@
 ---
-description: Always-on architecture guard rails for v0.3 stabilization.
+description: Always-on architecture guard rails for the v0.3.x line.
 alwaysApply: true
 ---
 
 # Architecture Guard Rails
 
-Phase: **v0.3 stabilization**.
+Phase: **v0.3.1 follow-up fixes** (`v0.3.0` released 2026-09-18).
 
 ## Stack (do not substitute)
 

@@ -43,7 +43,11 @@ Implemented today:
   Actions and GHCR.
 - Release-tag (`v*`) quality gates are enforced before any publish path:
   formatting, clippy, tests, `cargo audit`, a container smoke check, and the
-  Trivy fixable-only HIGH/CRITICAL image policy.
+  Trivy fixable-only HIGH/CRITICAL image policy. Amended 2026-09-19: the
+  Docker-gated CLI tests (`stack-tests.yml`, fresh Compose stack with
+  throwaway credentials) are a further gate; `publish-container` and
+  `verify-container` depend on it. They were `#[ignore]`-only on the `v0.3.0`
+  tag.
 - Release-tag container images never rebuild between scan and push. Amended
   2026-06-24: the earlier three-job tarball handoff (`verify-container` ->
   `prepare-container-publish` -> `push-container`) was flattened into two in-job

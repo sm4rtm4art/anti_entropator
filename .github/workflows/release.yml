@@ -39,6 +39,16 @@ jobs:
       run_test: true
       run_audit: true
 
+  # Docker-gated integration tests against a throwaway Compose stack. Runs on
+  # every tag and dispatch; both publish jobs and the dispatch verify depend on
+  # it, so no image or binary is published from a commit whose end-to-end path
+  # did not pass on a fresh stack.
+  stack-tests:
+    name: Stack Tests
+    permissions:
+      contents: read
+    uses: $/.github/workflows/stack-tests.yml
+
   build-binaries:
     name: Build ${{ matrix.target }}
     needs: [quality]
@@ -102,7 +112,7 @@ jobs:
   verify-container:
     name: Verify Container Image
     if: github.event_name == 'workflow_dispatch'
-    needs: [quality]
+    needs: [quality, stack-tests]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -153,7 +163,7 @@ jobs:
   publish-container:
     name: Publish Container Image
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [quality, build-binaries]
+    needs: [quality, stack-tests, build-binaries]
     runs-on: ubuntu-latest
     permissions:
       contents: read
