@@ -97,7 +97,12 @@ jobs:
 
       - name: Tear down stack
         if: always()
-        run: docker compose down -v --remove-orphans --timeout 30
+        # The bind-mount directories are owned by container UIDs (postgres,
+        # RustFS 10001); left in place they break the post-job cargo cache
+        # save (`hashFiles('**/Cargo.lock')` cannot traverse them).
+        run: |
+          docker compose down -v --remove-orphans --timeout 30
+          sudo rm -rf data logs
 
       - name: Clean runner workspace
         if: always()
