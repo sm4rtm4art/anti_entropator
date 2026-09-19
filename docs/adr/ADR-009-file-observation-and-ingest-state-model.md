@@ -148,7 +148,13 @@ This ADR defines target v0.3 behavior. Implementation lands in small slices:
    and continue, so the journal can only under-report progress. The next run
    for the same source appends `reconciled {rows_in_catalog}` to each open
    predecessor (a `COUNT(*)` by `run_id`) and, when it completes,
-   `superseded_by {run_id}`. `runs list` / `runs show` expose the journals.
+   `superseded_by {run_id}`. Amended 2026-09-19: "open" covers both a
+   non-terminal last entry and `commit_failed`; a commit error is an
+   unacknowledged commit (the REST catalog may have applied it), so it stays
+   open until reconciled, and a reconciled run reads `reconciled` while its
+   own `commit_failed` entry stays in the history. Until v0.3.1 a
+   `commit_failed` run was treated as terminal and never reconciled.
+   `runs list` / `runs show` expose the journals.
    The retry rule "reuse `run_id`" above is not implemented: recovery is a
    fresh run, which slice 4 makes idempotent. **Not started:** the
    single-writer lease; two concurrent ingests of one source can
@@ -167,9 +173,11 @@ This ADR defines target v0.3 behavior. Implementation lands in small slices:
    worker pool (`--concurrency`, default 4) and rows are committed in batches
    (`--batch-size`, default 1000), so one run may produce several snapshots.
    A failed commit stops the run; earlier batches stay committed and the
-   summary reports `committed`, `batches_committed`/`batches_failed`, and
-   `skipped` so the operator knows exactly which rows are missing. Re-running
-   observes exactly those paths again because they have no row yet.
+   summary reports `committed` (acknowledged rows),
+   `batches_committed`/`batches_failed`, and `skipped`; `observed -
+   committed` is an upper bound on missing rows because the failed batch may
+   have landed. Re-running reconciles the count and observes exactly the
+   paths that have no row.
 4. Add unchanged/change/delete/rename behavior and current-state queries.
    **Partial.** At run start, ingest reads every `present` observation for
    the `source_id` and reduces it to the latest per `relative_path` by

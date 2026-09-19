@@ -6,9 +6,12 @@
 //!
 //! States are written as they happen. `interrupted` is never written: a
 //! journal whose last entry is not terminal *is* an interrupted run. That is
-//! the only honest record a killed process can leave. A later run for the
-//! same source closes such journals with `reconciled` (rows actually found in
-//! the catalog for that `run_id`) and `superseded_by`.
+//! the only honest record a killed process can leave. `commit_failed` is
+//! written by the run itself but means only that the client got no
+//! acknowledgement: the catalog may still hold the batch (server applied it,
+//! response lost). Both cases are *open* until a later run for the same
+//! source closes the journal with `reconciled` (rows actually found in the
+//! catalog for that `run_id`) and, once it completes, `superseded_by`.
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
@@ -39,9 +42,12 @@ pub enum RunState {
     Completed,
     /// Terminal: batches committed, but `failed` files had per-file errors.
     Incomplete { failed: u64 },
-    /// Terminal: the commit of `batch` failed and stopped the run.
+    /// Terminal for the run's own writing: the commit of `batch` returned an
+    /// error and stopped the run. Whether the catalog holds that batch is
+    /// unknown until a later run reconciles it.
     CommitFailed { batch: u64 },
     /// Closure by a later run: rows for this `run_id` found in the catalog.
+    /// Resolves both an interrupted run and an unacknowledged commit.
     Reconciled { rows_in_catalog: u64 },
     /// Closure by a later run for the same source that completed.
     SupersededBy { run_id: Uuid },
@@ -84,10 +90,13 @@ pub struct Transition {
 pub enum RunOutcome {
     Completed,
     Incomplete,
+    /// A batch commit was not acknowledged and no later run has closed the
+    /// journal; the catalog may or may not hold that batch.
     CommitFailed,
     /// Last own entry is not terminal and no later run has closed it.
     Interrupted,
-    /// Was interrupted; a later run recorded what the catalog holds.
+    /// Was interrupted or had an unacknowledged commit; a later run recorded
+    /// what the catalog holds.
     Reconciled,
 }
 
@@ -137,15 +146,22 @@ impl RunJournal {
         match self.last_own() {
             RunState::Completed => RunOutcome::Completed,
             RunState::Incomplete { .. } => RunOutcome::Incomplete,
-            RunState::CommitFailed { .. } => RunOutcome::CommitFailed,
+            // A closure entry resolves every outcome-unknown state, so it is
+            // checked before `CommitFailed`; otherwise a reconciled failed
+            // commit would read as open forever.
             _ if self.is_closed() => RunOutcome::Reconciled,
+            RunState::CommitFailed { .. } => RunOutcome::CommitFailed,
             _ => RunOutcome::Interrupted,
         }
     }
 
-    /// Interrupted and not yet closed by a later run.
+    /// Outcome unknown: interrupted or unacknowledged commit, and no later
+    /// run has closed the journal yet.
     pub fn is_open(&self) -> bool {
-        self.outcome() == RunOutcome::Interrupted
+        matches!(
+            self.outcome(),
+            RunOutcome::Interrupted | RunOutcome::CommitFailed
+        )
     }
 
     fn is_closed(&self) -> bool {
@@ -304,16 +320,74 @@ mod tests {
         for (state, outcome) in [
             (RunState::Completed, RunOutcome::Completed),
             (RunState::Incomplete { failed: 2 }, RunOutcome::Incomplete),
-            (
-                RunState::CommitFailed { batch: 3 },
-                RunOutcome::CommitFailed,
-            ),
         ] {
             let mut j = RunJournal::new(Uuid::nil(), "src".into(), 1, t0());
             j.push(state, t0());
             assert_eq!(j.outcome(), outcome);
             assert!(!j.is_open());
         }
+    }
+
+    #[test]
+    fn commit_failed_is_open_until_a_later_run_reconciles_it() {
+        // The client saw an error for batch 2; the server may have applied
+        // it anyway (response lost). Until a later run counts the rows this
+        // run has in the catalog, the outcome is unknown and the run is open.
+        let mut j = RunJournal::new(Uuid::nil(), "src".into(), 10, t0());
+        j.push(RunState::BatchCommitted { batch: 1, rows: 3 }, t0());
+        j.push(RunState::Committing { batch: 2 }, t0());
+        j.push(RunState::CommitFailed { batch: 2 }, t0());
+        assert_eq!(j.outcome(), RunOutcome::CommitFailed);
+        assert!(j.is_open(), "unacknowledged commit must be reconcilable");
+        assert_eq!(j.rows_committed(), 3, "acknowledged rows only");
+
+        // Reconciliation closes it and keeps the own history intact.
+        j.push(RunState::Reconciled { rows_in_catalog: 6 }, t0());
+        assert_eq!(j.outcome(), RunOutcome::Reconciled);
+        assert!(!j.is_open());
+        assert_eq!(j.last_own(), &RunState::CommitFailed { batch: 2 });
+        assert_eq!(j.rows_committed(), 3);
+
+        // A later supersede does not reopen it.
+        j.push(
+            RunState::SupersededBy {
+                run_id: Uuid::from_u128(7),
+            },
+            t0(),
+        );
+        assert_eq!(j.outcome(), RunOutcome::Reconciled);
+        assert!(!j.is_open());
+    }
+
+    #[tokio::test]
+    async fn reconciled_commit_failed_run_stays_closed_across_storage_and_is_not_reopened() {
+        let op = create_memory_operator().unwrap();
+        let id = Uuid::from_u128(11);
+        let mut w = JournalWriter::start(op.clone(), id, "A".into(), 4)
+            .await
+            .unwrap();
+        w.record(RunState::Committing { batch: 1 }).await;
+        w.record(RunState::CommitFailed { batch: 1 }).await;
+
+        let open = open_runs_for(&op, "A").await.unwrap();
+        assert_eq!(
+            open.len(),
+            1,
+            "commit_failed run is open for reconciliation"
+        );
+        assert_eq!(open[0].outcome(), RunOutcome::CommitFailed);
+
+        let mut j = open.into_iter().next().unwrap();
+        close(&op, &mut j, RunState::Reconciled { rows_in_catalog: 4 })
+            .await
+            .unwrap();
+
+        // Read back from storage: closed, history intact, no second pass.
+        let stored = load(&op, id).await.unwrap();
+        assert_eq!(stored.outcome(), RunOutcome::Reconciled);
+        assert!(!stored.is_open());
+        assert_eq!(stored.last_own(), &RunState::CommitFailed { batch: 1 });
+        assert!(open_runs_for(&op, "A").await.unwrap().is_empty());
     }
 
     #[test]

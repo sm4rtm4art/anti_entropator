@@ -117,8 +117,8 @@ Ingest has three modes; `--offline` requires `--dry-run`:
 | `unchanged` | paths | last observation already records this content; no row |
 | `uploaded` | blobs | content uploaded to the store (`bytes` counts these) |
 | `already_exists` | blobs | content was already stored and verified |
-| `committed` | rows | observation rows now in the catalog (`observed - committed` were lost to a failed commit) |
-| `batches_committed`, `batches_failed` | commits | batches of `--batch-size` rows; the first failure stops the run |
+| `committed` | rows | observation rows whose commit the catalog acknowledged; after a failed batch, `observed - committed` is an upper bound on missing rows |
+| `batches_committed`, `batches_failed` | commits | batches of `--batch-size` rows; the first commit error stops the run |
 | `skipped` | — | candidates never started because the run stopped |
 
 The axes are independent: a second copy of a file is `observed` with
@@ -131,12 +131,13 @@ verified, and uploaded at the same time, and observation rows are committed
 every `--batch-size` rows (default 1000). Each batch is one Parquet file and
 one Iceberg snapshot, so a long run produces several snapshots and a query
 sees the rows of finished batches while the run is still going. If a commit
-fails, earlier batches stay committed, files already in flight finish (their
-blobs are content-addressed and safe), no further file is started, and the run
-exits non-zero with `status: commit_failed`. Re-running the same ingest picks
-up exactly the rows that were not committed, because those paths have no
-observation yet. Small batches mean many small Parquet files; compaction is a
-later maintenance feature.
+returns an error, earlier batches stay committed, files already in flight
+finish (their blobs are content-addressed and safe), no further file is
+started, and the run exits non-zero with `status: commit_failed`. The failed
+batch itself has an unknown outcome: the catalog may have applied it and lost
+the response. Re-running the same ingest resolves that (see below) and
+observes only the paths that have no row. Small batches mean many small
+Parquet files; compaction is a later maintenance feature.
 
 Peak memory does not grow with the size of the files: they are streamed, and
 only the file list and at most two batches of rows are held at once.
@@ -147,24 +148,29 @@ How a run is recorded: every ingest that writes keeps a journal object at
 (per-file errors), or `commit_failed`. A run that is killed leaves a journal
 whose last entry is not terminal; that is the record of an interrupted run,
 nothing else is inferred. If the journal cannot be written at start, the run
-refuses to start. Previews (`--dry-run`) write no journal.
+refuses to start; a journal write that fails later is logged and the journal
+then lags behind the catalog (it under-reports, which reads as interrupted).
+Previews (`--dry-run`) write no journal.
 
 ```bash
-# Every run, newest first; --open shows only runs that never finished
+# Every run, newest first; --open shows runs whose outcome is unknown
+# (interrupted, or a commit that returned an error and is not yet reconciled)
 anti_entropator runs list [--source <name>] [--open] [--format json]
 
 # One run with its full history
 anti_entropator runs show <run_id> [--format json]
 ```
 
-If a run was interrupted, the recovery is to run the same ingest again. It
-warns about the unfinished run, counts the rows that run actually got into the
-catalog and records that in its journal (`reconciled`), observes exactly the
-paths that have no row yet, and marks the old run `superseded_by` the new one
-when it completes. A blob that was uploaded but never committed is found in
-the store and only re-observed, never re-uploaded. There is no `--resume`, and
-two ingests of the same source at the same time are not yet prevented (a
-single-writer lease is a follow-up).
+If a run was interrupted or ended with `commit_failed`, the recovery is to run
+the same ingest again after the earlier process has stopped. It warns about
+the open run, counts the rows that run actually got into the catalog and
+records that in its journal (`reconciled`; the `commit_failed` entry stays in
+the history), observes exactly the paths that have no row yet, and marks the
+old run `superseded_by` the new one when it completes. A blob that was
+uploaded but never committed is found in the store and only re-observed, never
+re-uploaded. There is no `--resume`, and two ingests of the same source at the
+same time are not yet prevented (a single-writer lease is a follow-up), so the
+reconciled count is a fact only if no other writer was active.
 
 What a `file_catalog` row means (ADR-009): one row is one observation of one
 path in one source during one run, appended-only. Ingest reads the latest

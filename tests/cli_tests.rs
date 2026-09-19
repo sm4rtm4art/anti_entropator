@@ -1130,6 +1130,160 @@ fn interrupted_ingest_is_recorded_and_reconciled() -> Result<()> {
     Ok(())
 }
 
+/// v0.3.1 slice 1 (review finding 1): a batch whose commit *returned an error*
+/// may still have been applied by the catalog (response lost). Such a run must
+/// stay open until the next run records what the catalog actually holds, and
+/// re-ingesting must not duplicate the rows that did land.
+///
+/// The fixture is a journal object in the v0.3.0 on-disk format whose own
+/// history ends in `commit_failed` for a run whose rows *are* in the catalog.
+/// That is exactly the state a lost acknowledgement leaves behind, and also
+/// what a v0.3.0 binary wrote for any commit error. This proves the
+/// application-level reconciliation path; it does not exercise a real
+/// transport failure (that needs a fault-injecting proxy, deferred).
+#[test]
+#[ignore] // Requires: docker compose up -d && source .env
+fn commit_failed_run_is_reconciled_by_the_next_ingest() -> Result<()> {
+    use anti_entropator::lakehouse::LakehouseConfig;
+    use anti_entropator::storage::create_operator;
+
+    cmd()?.arg("init").assert().success();
+
+    let temp = tempdir()?;
+    let marker = &uuid::Uuid::new_v4().to_string()[..8];
+    let total = 3u64;
+    for i in 0..total {
+        std::fs::write(
+            temp.path().join(format!("s1_{marker}_{i}.txt")),
+            format!("commit-failed fixture {marker} {i}"),
+        )?;
+    }
+    let source = format!("s1-commit-failed-{marker}");
+
+    // 1. A real run commits every row; the catalog holds them for `run_id`.
+    let first = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--source", &source, "--format", "json"])
+        .output()?;
+    assert!(first.status.success());
+    let first_json: serde_json::Value = serde_json::from_slice(&first.stdout)?;
+    assert_eq!(first_json["committed"].as_u64(), Some(total));
+    let run_id = first_json["run_id"].as_str().expect("run_id").to_string();
+    let in_catalog = query_count(&format!(
+        "SELECT count(*) FROM files WHERE source_id = '{source}'"
+    ))?;
+    assert_eq!(in_catalog, total);
+
+    // 2. Rewrite its journal as the client would have seen a lost
+    //    acknowledgement: `committing 1` then `commit_failed 1`, no closure.
+    let fixture = serde_json::json!({
+        "format_version": 1,
+        "run_id": run_id,
+        "source_id": source,
+        "started_at": "2026-09-19T10:00:00Z",
+        "updated_at": "2026-09-19T10:00:02Z",
+        "candidates": total,
+        "history": [
+            {"at": "2026-09-19T10:00:00Z", "state": "started"},
+            {"at": "2026-09-19T10:00:01Z", "state": "committing", "batch": 1},
+            {"at": "2026-09-19T10:00:02Z", "state": "commit_failed", "batch": 1}
+        ]
+    });
+    let op = create_operator(&LakehouseConfig::default())?;
+    tokio::runtime::Runtime::new()?.block_on(op.write(
+        &format!("_runs/{run_id}.json"),
+        serde_json::to_vec(&fixture)?,
+    ))?;
+
+    // 3. It is open: `commit_failed` is an unknown outcome, not a fact.
+    let open = cmd()?
+        .args(["runs", "list", "--source", &source, "--open"])
+        .args(["--format", "json"])
+        .output()?;
+    assert!(open.status.success());
+    let open: Vec<serde_json::Value> = serde_json::from_slice(&open.stdout)?;
+    assert_eq!(open.len(), 1, "commit_failed run must be open: {open:?}");
+    assert_eq!(open[0]["outcome"], "commit_failed");
+    assert_eq!(open[0]["run_id"].as_str(), Some(run_id.as_str()));
+
+    // 4. The next ingest warns, reconciles against the catalog, appends no
+    //    duplicate observation (every path already has a row), and supersedes.
+    let again = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--source", &source, "--format", "json"])
+        .output()?;
+    assert!(again.status.success());
+    let stderr = String::from_utf8_lossy(&again.stderr);
+    assert!(
+        stderr.contains("unacknowledged commit"),
+        "second run must warn about the failed commit; stderr:\n{stderr}"
+    );
+    let again_json: serde_json::Value = serde_json::from_slice(&again.stdout)?;
+    assert_eq!(again_json["status"], "success");
+    assert_eq!(again_json["unchanged"].as_u64(), Some(total));
+    assert_eq!(again_json["observed"].as_u64(), Some(0));
+    assert_eq!(again_json["committed"].as_u64(), Some(0));
+    let new_id = again_json["run_id"].as_str().unwrap();
+
+    let after = query_count(&format!(
+        "SELECT count(*) FROM files WHERE source_id = '{source}'"
+    ))?;
+    assert_eq!(after, total, "reconciliation must not duplicate rows");
+
+    // 5. The journal is closed with the catalog count; its own failure entry
+    //    is still in the history; it is not reopened by the supersede.
+    let show = cmd()?
+        .args(["runs", "show", &run_id, "--format", "json"])
+        .output()?;
+    let show_json: serde_json::Value = serde_json::from_slice(&show.stdout)?;
+    assert_eq!(show_json["outcome"], "reconciled");
+    assert_eq!(show_json["last_state"], "commit failed at batch 1");
+    let states: Vec<&str> = show_json["history"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|t| t["state"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        states,
+        vec![
+            "started",
+            "committing",
+            "commit_failed",
+            "reconciled",
+            "superseded_by"
+        ]
+    );
+    let reconciled = &show_json["history"][3];
+    assert_eq!(reconciled["rows_in_catalog"].as_u64(), Some(total));
+    assert_eq!(show_json["history"][4]["run_id"].as_str(), Some(new_id));
+
+    let open_after = cmd()?
+        .args(["runs", "list", "--source", &source, "--open"])
+        .args(["--format", "json"])
+        .output()?;
+    let open_after: Vec<serde_json::Value> = serde_json::from_slice(&open_after.stdout)?;
+    assert!(open_after.is_empty(), "no open runs left: {open_after:?}");
+
+    // 6. A third run has nothing to reconcile: the closed run is not processed
+    //    again.
+    let third = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--source", &source, "--format", "json"])
+        .output()?;
+    assert!(third.status.success());
+    let stderr = String::from_utf8_lossy(&third.stderr);
+    assert!(
+        !stderr.contains("Earlier run for this source"),
+        "closed run must not be reconciled twice; stderr:\n{stderr}"
+    );
+
+    Ok(())
+}
+
 // ==================== Removed Flag Rejection Tests ====================
 
 #[test]

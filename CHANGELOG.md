@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Ingest recovery: a run that ended in `commit_failed` is now open for
+  reconciliation like an interrupted run. The catalog may have applied the
+  batch and lost the response, so the next ingest for the source counts the
+  rows that run actually has (`reconciled`, the `commit_failed` entry stays in
+  the history) and supersedes it on completion. Until now such a run was
+  treated as terminal and never reconciled. `runs list --open` includes these
+  runs; `committed` in the summary is the acknowledged count and
+  `observed - committed` is an upper bound on missing rows, not an exact loss.
+  Docker-gated test `commit_failed_run_is_reconciled_by_the_next_ingest` uses a
+  v0.3.0-format journal fixture and proves the application path, not a
+  transport failure.
+
 ### Changed
 
 - Docs truth pass after the `v0.3.0` tag: README badge and engineering-practice
