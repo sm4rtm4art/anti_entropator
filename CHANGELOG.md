@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- CI: reusable `Stack Tests` workflow starts the Compose stack (RustFS,
+  Postgres, Lakekeeper) with per-run throwaway credentials and runs the
+  Docker-gated CLI tests serialized. Required on code changes in `ci.yml`
+  (docs-only changes skip it) and unconditional in `release.yml`, where the
+  container publish and dispatch verify jobs depend on it. Until now these
+  tests were `#[ignore]` only and did not run on the `v0.3.0` tag.
+
 ### Changed
 
 - Docs truth pass after the `v0.3.0` tag: README badge and engineering-practice
