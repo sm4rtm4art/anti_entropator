@@ -77,6 +77,16 @@ jobs:
       run_test: true
       run_audit: false
 
+  # Docker-gated integration tests against a throwaway Compose stack. Same
+  # docs-only skip rule as `quality`; see stack-tests.yml for what runs.
+  stack-tests:
+    name: Stack Tests
+    needs: [changes]
+    if: needs.changes.outputs.code == 'true'
+    permissions:
+      contents: read
+    uses: $/.github/workflows/stack-tests.yml
+
   # Code coverage via cargo-llvm-cov + Codecov
   coverage:
     name: Coverage
@@ -185,7 +195,7 @@ jobs:
     name: CI Gate
     runs-on: ubuntu-latest
     if: always()
-    needs: [changes, quality, coverage, container]
+    needs: [changes, quality, stack-tests, coverage, container]
     steps:
       # Aggregator holds no build state, but still checks out (without a
       # persisted git token) so the shared cleanup can wipe any docker login /
@@ -196,10 +206,11 @@ jobs:
 
       - name: Evaluate dependency outcomes
         run: |
-          # quality/coverage/container are intentionally skipped on docs/rules-only
-          # changes (container off-main, coverage off-PR); 'skipped' is allowed,
-          # only failure/cancelled blocks. 'changes' itself is skipped on the
-          # weekly schedule (coverage-only run), which is also acceptable.
+          # quality/stack-tests/coverage/container are intentionally skipped on
+          # docs/rules-only changes (container off-main, coverage off-PR);
+          # 'skipped' is allowed, only failure/cancelled blocks. 'changes' itself
+          # is skipped on the weekly schedule (coverage-only run), which is also
+          # acceptable.
           if [[ "${{ needs.changes.result }}" == "failure" || "${{ needs.changes.result }}" == "cancelled" ]]; then
             echo "::error::changes completed with '${{ needs.changes.result }}'"
             exit 1
@@ -207,6 +218,11 @@ jobs:
 
           if [[ "${{ needs.quality.result }}" == "failure" || "${{ needs.quality.result }}" == "cancelled" ]]; then
             echo "::error::quality completed with '${{ needs.quality.result }}'"
+            exit 1
+          fi
+
+          if [[ "${{ needs.stack-tests.result }}" == "failure" || "${{ needs.stack-tests.result }}" == "cancelled" ]]; then
+            echo "::error::stack-tests completed with '${{ needs.stack-tests.result }}'"
             exit 1
           fi
 

@@ -1,0 +1,104 @@
+name: Stack Tests
+
+# Runs the Docker-gated integration tests (`#[ignore]` in tests/cli_tests.rs)
+# against a throwaway Compose stack: RustFS, Postgres, Lakekeeper. Called from
+# ci.yml (code changes) and release.yml (every tag and dispatch). The job lists
+# the tests it executed; it does not claim coverage beyond that list.
+#
+# Credentials are generated per run, masked, and discarded with the stack.
+# `allowall` authorization is the documented local-demo profile; the stack
+# binds to 127.0.0.1 on the runner and is torn down with `down -v`.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  stack-tests:
+    name: Stack Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Free disk space
+        uses: $/.github/actions/free-disk-space
+
+      - name: Setup Rust
+        uses: $/.github/actions/setup-rust
+        with:
+          cache-key-suffix: stack-tests
+
+      - name: Generate throwaway stack credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          gen() { openssl rand -hex 24; }
+          RUSTFS_ACCESS_KEY="ci-$(openssl rand -hex 6)"
+          RUSTFS_SECRET_KEY="$(gen)"
+          POSTGRES_PASSWORD="$(gen)"
+          LAKEKEEPER_PG_ENCRYPTION_KEY="$(gen)"
+          for v in RUSTFS_SECRET_KEY POSTGRES_PASSWORD LAKEKEEPER_PG_ENCRYPTION_KEY; do
+            echo "::add-mask::${!v}"
+          done
+          {
+            echo "RUSTFS_ACCESS_KEY=${RUSTFS_ACCESS_KEY}"
+            echo "RUSTFS_SECRET_KEY=${RUSTFS_SECRET_KEY}"
+            echo "POSTGRES_USER=lakekeeper"
+            echo "POSTGRES_DB=lakekeeper"
+            echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}"
+            echo "LAKEKEEPER_PG_ENCRYPTION_KEY=${LAKEKEEPER_PG_ENCRYPTION_KEY}"
+            echo "LAKEKEEPER_AUTHZ_BACKEND=allowall"
+            echo "ANTI_BIND_HOST=127.0.0.1"
+          } >> "$GITHUB_ENV"
+
+      - name: Build test binaries
+        # Compile before the stack starts so containers are not idling while
+        # cargo builds. Also what `cargo test` below would otherwise do first.
+        run: cargo test --locked --all-features --test cli_tests --no-run
+
+      - name: Prepare bind-mount directories
+        # Mirrors `make setup`: RustFS runs as UID 10001 and writes ./logs/rustfs.
+        run: |
+          mkdir -p logs/rustfs data/postgres
+          sudo chown -R 10001:10001 logs/rustfs
+
+      - name: Start lakehouse stack
+        run: docker compose up -d --wait --wait-timeout 240
+
+      - name: List Docker-gated tests
+        run: cargo test --locked --all-features --test cli_tests -- --ignored --list
+
+      - name: Run Docker-gated tests
+        # Serialized: the tests share one Iceberg table and one warehouse.
+        run: cargo test --locked --all-features --test cli_tests -- --ignored --test-threads=1
+
+      - name: Collect stack logs
+        if: failure()
+        run: |
+          mkdir -p stack-logs
+          docker compose ps --all > stack-logs/compose-ps.txt || true
+          docker compose logs --no-color --timestamps > stack-logs/compose.log || true
+
+      - name: Upload stack logs
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: stack-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: stack-logs/
+          retention-days: 7
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v --remove-orphans --timeout 30
+
+      - name: Clean runner workspace
+        if: always()
+        run: ./scripts/ci-cleanup.sh
