@@ -67,7 +67,7 @@ cargo run -- ingest <path> --dry-run --offline # no network, store not checked
 cargo run -- ingest <path>
 # Canonical Iceberg table (preferred in docs / agent examples):
 cargo run -- query "SELECT * FROM iceberg.anti_entropator.file_catalog LIMIT 10"
-# Optional CLI shorthand (rewritten to the qualified name above):
+# Optional CLI shorthand (alias table registered for the qualified name above):
 cargo run -- query "SELECT * FROM files LIMIT 10"
 ```
 

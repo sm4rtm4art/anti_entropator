@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 DOWNLOADS ?= $(HOME)/Downloads
-# Iceberg table is file_catalog. `files` is CLI sugar rewritten by `query` to
+# Iceberg table is file_catalog. `files` is a CLI alias `query` registers for
 # iceberg.anti_entropator.file_catalog (see src/query/mod.rs).
 QUERY ?= SELECT * FROM files LIMIT 10
 

@@ -874,11 +874,24 @@ fn ingest_then_query_flow() -> Result<()> {
         .expect("run_id in summary")
         .to_string();
 
-    // 4. Query with marker to isolate this run's rows
+    // 4. Query with marker to isolate this run's rows. `files` is an alias
+    //    table, so it and the qualified name count the same rows, and a
+    //    string literal containing "FROM files" is returned as written
+    //    (v0.3.1 slice 4: no text rewrite).
     let query = format!(
         "SELECT count(*) FROM files WHERE filename LIKE 's2b_{}%'",
         marker
     );
+    let via_alias = query_count(&query)?;
+    let via_fqn =
+        query_count(&query.replace("FROM files", "FROM iceberg.anti_entropator.file_catalog"))?;
+    assert_eq!(via_alias, via_fqn);
+    cmd()?
+        .arg("query")
+        .arg("SELECT 'FROM files' AS label")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("| FROM files |"));
     cmd()?
         .arg("query")
         .arg(&query)
