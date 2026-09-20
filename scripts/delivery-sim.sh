@@ -142,23 +142,23 @@ slot_log_root() {
 }
 
 prepare_slot_directories() {
+    # RustFS data lives on the project-scoped named volume (see
+    # docker-compose.delivery.yml); only logs and Postgres are bind-mounted.
     local slot="$1"
-    local rustfs_data_dir
     local rustfs_log_dir
     local postgres_dir
 
-    rustfs_data_dir="$(slot_data_root "$slot")/rustfs"
     rustfs_log_dir="$(slot_log_root "$slot")/rustfs"
     postgres_dir="$(slot_data_root "$slot")/postgres"
 
-    mkdir -p "$rustfs_data_dir" "$rustfs_log_dir" "$postgres_dir"
+    mkdir -p "$rustfs_log_dir" "$postgres_dir"
 
     # RustFS runs as UID 10001 in the container. sudo -n avoids hanging on an
     # interactive password prompt (e.g. local macOS shells).
     if command -v sudo >/dev/null 2>&1; then
-        sudo -n chown -R 10001:10001 "$rustfs_data_dir" "$rustfs_log_dir" 2>/dev/null || true
+        sudo -n chown -R 10001:10001 "$rustfs_log_dir" 2>/dev/null || true
     fi
-    chown -R 10001:10001 "$rustfs_data_dir" "$rustfs_log_dir" 2>/dev/null || true
+    chown -R 10001:10001 "$rustfs_log_dir" 2>/dev/null || true
 }
 
 remove_slot_tree() {
@@ -416,15 +416,21 @@ cmd_down() {
     set_slot_ports "$slot"
     set_compose_required_defaults
     project_name="$(project_name_for_slot "$slot")"
-    compose_cmd "$project_name" down --remove-orphans
     if [[ "$destroy_data" == "true" ]]; then
+        # --volumes removes this project's named volumes (RustFS data); other
+        # slots and the default stack have their own project-scoped volumes.
+        compose_cmd "$project_name" down --remove-orphans --volumes
         remove_slot_tree "$(slot_data_root "$slot")"
         remove_slot_tree "$(slot_log_root "$slot")"
         # A destroyed slot must not stay promotable or restorable: drop its
         # record and any active/previous markers that still reference it.
         rm -f "${SLOTS_DIR}/${slot}.env"
         invalidate_markers_for_slot "$slot"
-        echo "Removed data/log directories and slot record for slot '${slot}'."
+        echo "Removed RustFS volume, data/log directories, and slot record for slot '${slot}'."
+    else
+        # Plain down keeps the RustFS volume and the Postgres bind mount, so
+        # the slot can be started again with its data.
+        compose_cmd "$project_name" down --remove-orphans
     fi
 }
 

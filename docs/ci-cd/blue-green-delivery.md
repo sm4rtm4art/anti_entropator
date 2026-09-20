@@ -53,8 +53,13 @@ Only one slot is active for user traffic at a time.
 S5-C Slice D implements the delivery simulation with:
 
 - `docker-compose.yml` as the stable default local stack.
-- `docker-compose.delivery.yml` as an opt-in override for slot-isolated bind
-  mounts (`./data/<slot>/...`, `./logs/<slot>/...`).
+- `docker-compose.delivery.yml` as an opt-in override for slot-isolated
+  runtime state: Postgres and RustFS logs on bind mounts
+  (`./data/<slot>/postgres`, `./logs/<slot>/rustfs`); RustFS data on the base
+  file's named volume, which Compose scopes per project
+  (`anti_entropator_<slot>_rustfs-data`). Until v0.3.1 the override
+  bind-mounted `./data/<slot>/rustfs:/data`, which replaced the named volume
+  and reintroduced the Docker Desktop failure `docker-compose.yml` documents.
 - `scripts/delivery-sim.sh` as the orchestration helper for deploy/smoke,
   promotion, rollback marker handling, and teardown.
 
@@ -86,7 +91,11 @@ scripts/delivery-sim.sh rollback
 # Inspect slot and marker state
 scripts/delivery-sim.sh status
 
-# Tear down a slot (optionally remove slot data/log dirs)
+# Tear down a slot; plain `down` keeps its RustFS volume and Postgres data
+scripts/delivery-sim.sh down green
+
+# Tear down and destroy: removes the slot's RustFS volume (`compose down
+# --volumes` on that project only), its data/log dirs, and its slot record
 scripts/delivery-sim.sh down green --destroy-data
 ```
 
@@ -104,9 +113,10 @@ Guard rails:
   are not all running and healthy.
 - `rollback` validates that the previous slot still has a slot record and
   healthy services before restoring the active marker.
-- `down --destroy-data` removes the slot record and any active/previous
-  markers referencing the slot alongside the data/log directories, so a
-  destroyed slot is neither promotable nor restorable.
+- `down --destroy-data` removes the slot's RustFS named volume, its data/log
+  directories, the slot record, and any active/previous markers referencing
+  the slot, so a destroyed slot is neither promotable nor restorable. Other
+  slots and the default stack keep their own project-scoped volumes.
 
 ## GitHub Runner Simulation
 

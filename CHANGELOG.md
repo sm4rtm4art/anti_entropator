@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Delivery simulation: `docker-compose.delivery.yml` no longer bind-mounts
+  `./data/<slot>/rustfs:/data`. Compose merges volumes by target, so that
+  bind replaced the base file's `rustfs-data` named volume and reintroduced
+  the Docker Desktop failure `docker-compose.yml` documents. RustFS data now
+  stays on the named volume, scoped per slot project
+  (`anti_entropator_<slot>_rustfs-data`). `scripts/delivery-sim.sh down
+  <slot> --destroy-data` removes that volume (`compose down --volumes` on the
+  slot's project only); plain `down` keeps it.
+
 ### Added
 
 - CI: reusable `Stack Tests` workflow starts the Compose stack (RustFS,
