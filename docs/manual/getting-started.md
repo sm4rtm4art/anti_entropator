@@ -183,6 +183,13 @@ rather than guess.
   directory. Pass `--source <name>` to keep observing the same logical source
   after moving the folder; a different `source_id` is a different source and
   every path is observed again (blobs are not re-uploaded).
+- Identities are strings and are stored byte-for-byte. A file whose name is
+  not valid UTF-8 (possible on ext4/xfs, refused by APFS) has no lossless
+  identity and is reported as a per-file error: it is neither observed nor
+  counted as unchanged, the run ends `incomplete` and exits non-zero, and the
+  other files are processed normally. A root directory with such a name
+  refuses to start unless `--source <name>` is given. Nothing is renamed or
+  transliterated on your behalf.
 - Deleted and renamed files are not yet recorded: a rename appears as a new
   row at the new path and the old path's row stays. `observation_status` is
   always `present` today.
