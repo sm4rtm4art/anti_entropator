@@ -141,7 +141,12 @@ jobs:
         if: always()
         run: ./scripts/ci-cleanup.sh
 
-  # Build and push container on main branch
+  # Build and push the `edge` image on push to main. `edge` is the current
+  # main build: it passed `quality` but not the release-tag container verify
+  # (smoke + Trivy) in release.yml. `latest` is written only by release.yml
+  # for non-prerelease `v*` tags (metadata-action `latest=auto`), so it always
+  # names the last scanned release. Until v0.3.1 this job also pushed `latest`
+  # and overwrote the release tag on every merge.
   container:
     name: Build Container
     runs-on: ubuntu-latest
@@ -171,8 +176,10 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest
+            type=raw,value=edge
             type=sha,prefix=
+          flavor: |
+            latest=false
 
       - name: Build and push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0

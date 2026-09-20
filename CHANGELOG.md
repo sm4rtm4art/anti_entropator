@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Container tags: the `main` CI publish (`ci.yml`) pushes `:edge` and
+  `:<sha>` instead of `:latest`. `:latest` is written only by `release.yml`
+  for non-prerelease `v*` tags after the in-job smoke and Trivy verify
+  (`latest=auto`, now explicit), so it always names the last verified
+  release. Until now every merge to `main` overwrote `:latest` with an
+  unscanned build; after the `v0.3.0` release that happened four times.
 - Docs truth pass after the `v0.3.0` tag: README badge and engineering-practice
   claims match the shipped binary (Rust 1.94, nine ADRs, no placeholder
   commands, three Docker-gated tests); `docs/design/architecture.md` describes

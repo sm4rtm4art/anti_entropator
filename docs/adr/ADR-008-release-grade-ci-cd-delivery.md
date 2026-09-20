@@ -74,9 +74,13 @@ Implemented today:
   mitigation tracked for S5-C). A real `v*` tag has not been cut yet
   (see ROADMAP M3/M4), so the tag-push publish path is implemented but not yet
   evidenced end to end.
-- The main-branch CI image publish (`ci.yml` `container` job, `:latest`/`:sha`
-  on push to `main`) is a separate path and is not gated by the release-tag
-  verification above.
+- The main-branch CI image publish (`ci.yml` `container` job on push to
+  `main`) is a separate path and is not gated by the release-tag verification
+  above. Amended 2026-09-20: it publishes `:edge` and `:<sha>` only; `:latest`
+  is written solely by `release.yml` for non-prerelease `v*` tags
+  (`latest=auto`), so `latest` always names the last verified release. Until
+  then the CI job also pushed `:latest` and overwrote the release tag on every
+  merge (observed after `v0.3.0`).
 - The repository has a local Docker Compose lakehouse stack.
 - Trivy and `cargo audit` provide supply-chain visibility.
 - `.dockerignore` excludes local state, secrets, build outputs, and generated
