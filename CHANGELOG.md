@@ -50,13 +50,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   candidate groups" (equal size and equal first 64 KiB; not full-content
   verified) instead of "confirmed groups", reclaimable bytes as an upper bound
   within the examined files, and the examined count next to its cap
-  (`--max-hash-files`) with a note when the cap stopped the examination. JSON
-  field names are unchanged (`quickhash_confirmed_groups` keeps its name for
-  compatibility); one additive field `hash_cap`. Markdown snapshot updated.
-- CLI: `scan --format` is removed. It was accepted and ignored (scan has one
-  output). `scan --dry-run` is still accepted but has no effect and says so in
-  `--help`; the closing line no longer suggests that dropping `--dry-run`
-  would persist anything, because scan never writes.
+  (`--max-hash-files`) and, only when the scanner actually skipped
+  candidates, how many the cap left unexamined (reaching the cap with nothing
+  left is not reported as truncation). JSON field names are unchanged
+  (`quickhash_confirmed_groups` keeps its name for compatibility); additive
+  fields `hash_cap` (absent in older reports; a configured `0` is a real
+  value) and `files_not_examined`. Markdown snapshot updated.
+- CLI: `scan --format` accepts only `table` (the default). `json` and
+  `markdown` were accepted and silently answered with the table; they are now
+  rejected by the parser with a non-zero exit. `scan --dry-run` is still
+  accepted but has no effect and says so in `--help`; the closing line no
+  longer suggests that dropping `--dry-run` would persist anything, because
+  scan never writes.
 - Docs state the catalog model's limits explicitly: `file_catalog` counts
   observations, not files or blobs; the current-state query does not detect
   deletions; "latest" is wall-clock `observed_at` ordering (clock rollback

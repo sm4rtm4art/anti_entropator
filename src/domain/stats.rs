@@ -153,10 +153,16 @@ pub struct DuplicateEstimate {
     pub files_hashed: u64,
 
     /// Maximum number of files the quick hash examines (`--max-hash-files`).
-    /// When `files_hashed` reaches it, the rest of the size candidates were
-    /// not examined.
+    /// `None` only in reports written before the cap was recorded; a
+    /// configured `0` is `Some(0)`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hash_cap: Option<u64>,
+
+    /// Size-candidate files the quick hash did not look at because the cap
+    /// was reached. `0` when every candidate was examined (or failed with an
+    /// error, which `hash_errors` counts).
     #[serde(default)]
-    pub hash_cap: u64,
+    pub files_not_examined: u64,
 
     /// Files where quick-hash failed (I/O error, permissions)
     #[serde(default)]
@@ -258,7 +264,8 @@ mod tests {
             size_candidate_groups: 4,
             quickhash_confirmed_groups: 2,
             files_hashed: 9,
-            hash_cap: 5000,
+            hash_cap: Some(5000),
+            files_not_examined: 0,
             hash_errors: 2,
             reclaimable_bytes: 1024,
             top_groups: vec![],
@@ -286,6 +293,7 @@ mod tests {
         let parsed: DuplicateEstimate =
             serde_json::from_str(json).expect("deserialize without hash_errors");
         assert_eq!(parsed.hash_errors, 0);
-        assert_eq!(parsed.hash_cap, 0, "older reports carry no cap");
+        assert_eq!(parsed.hash_cap, None, "older reports carry no cap");
+        assert_eq!(parsed.files_not_examined, 0);
     }
 }
