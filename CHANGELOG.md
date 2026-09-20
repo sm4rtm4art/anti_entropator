@@ -46,6 +46,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`latest=auto`, now explicit), so it always names the last verified
   release. Until now every merge to `main` overwrote `:latest` with an
   unscanned build; after the `v0.3.0` release that happened four times.
+- `profile` duplicate estimate is reported as what it is: "Quick-hash
+  candidate groups" (equal size and equal first 64 KiB; not full-content
+  verified) instead of "confirmed groups", reclaimable bytes as an upper bound
+  within the examined files, and the examined count next to its cap
+  (`--max-hash-files`) with a note when the cap stopped the examination. JSON
+  field names are unchanged (`quickhash_confirmed_groups` keeps its name for
+  compatibility); one additive field `hash_cap`. Markdown snapshot updated.
+- CLI: `scan --format` is removed. It was accepted and ignored (scan has one
+  output). `scan --dry-run` is still accepted but has no effect and says so in
+  `--help`; the closing line no longer suggests that dropping `--dry-run`
+  would persist anything, because scan never writes.
+- Docs state the catalog model's limits explicitly: `file_catalog` counts
+  observations, not files or blobs; the current-state query does not detect
+  deletions; "latest" is wall-clock `observed_at` ordering (clock rollback
+  and ties are ambiguous, no `run_id` tie-breaker); batch success is not run
+  atomicity; memory scales with candidate count and history size, not file
+  size; the local stack and delivery simulation do not establish deployment
+  readiness. README no longer hard-codes the number of Docker-gated tests.
 - Docs truth pass after the `v0.3.0` tag: README badge and engineering-practice
   claims match the shipped binary (Rust 1.94, nine ADRs, no placeholder
   commands, three Docker-gated tests); `docs/design/architecture.md` describes

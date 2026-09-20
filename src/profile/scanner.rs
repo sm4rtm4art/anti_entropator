@@ -254,7 +254,7 @@ pub async fn scan(
 
         estimate.size_candidate_groups = size_candidates.len() as u64;
 
-        // Quick-hash candidates to confirm
+        // Quick-hash the size candidates (first 64 KiB, capped)
         let mut quickhash_groups: HashMap<(u64, String), Vec<String>> = HashMap::new();
         let mut files_hashed = 0;
         let mut hash_errors = 0;
@@ -285,9 +285,11 @@ pub async fn scan(
         }
 
         estimate.files_hashed = files_hashed as u64;
+        estimate.hash_cap = options.max_hash_files as u64;
         estimate.hash_errors = hash_errors;
 
-        // Confirmed duplicate groups
+        // Quick-hash candidate groups: equal size and equal first 64 KiB.
+        // Not verified duplicates; the tail was not read.
         let mut confirmed: Vec<((u64, String), Vec<String>)> = quickhash_groups
             .into_iter()
             .filter(|(_, paths)| paths.len() > 1)
@@ -382,6 +384,50 @@ mod tests {
         assert!(
             result.is_empty(),
             "meaningful name should not match any pattern"
+        );
+    }
+
+    /// The quick hash reads only the first 64 KiB. Two files of equal size
+    /// that agree there and differ in the tail are *not* duplicates, yet they
+    /// form a quick-hash group: the estimate must present such a group as a
+    /// candidate and its bytes as an upper bound, never as confirmed.
+    #[tokio::test]
+    async fn equal_prefix_different_tail_is_a_candidate_group_not_a_duplicate() {
+        let dir = tempfile::tempdir().unwrap();
+        let prefix = vec![0xABu8; 64 * 1024];
+        let mut a = prefix.clone();
+        a.extend_from_slice(b"tail-one");
+        let mut b = prefix;
+        b.extend_from_slice(b"tail-two");
+        assert_eq!(a.len(), b.len());
+        assert_ne!(a, b);
+        std::fs::write(dir.path().join("a.bin"), &a).unwrap();
+        std::fs::write(dir.path().join("b.bin"), &b).unwrap();
+
+        let options = ScanOptions {
+            detect_mime: false,
+            detect_duplicates: true,
+            max_hash_files: 10,
+        };
+        let result = scan(dir.path(), &options, None).await.unwrap();
+        let est = &result.duplicate_estimate;
+
+        assert_eq!(est.size_candidate_groups, 1);
+        assert_eq!(
+            est.quickhash_confirmed_groups, 1,
+            "same size and same first 64 KiB form one quick-hash group"
+        );
+        assert_eq!(
+            est.reclaimable_bytes,
+            a.len() as u64,
+            "counted as an upper bound although the files differ"
+        );
+        assert_eq!(est.files_hashed, 2);
+        assert_eq!(est.hash_cap, 10);
+        // The full-content hashes differ: this is why the group is a candidate.
+        assert_ne!(
+            crate::file_hash::full_sha256(&dir.path().join("a.bin")).unwrap(),
+            crate::file_hash::full_sha256(&dir.path().join("b.bin")).unwrap()
         );
     }
 

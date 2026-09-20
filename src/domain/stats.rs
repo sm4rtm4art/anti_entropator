@@ -134,23 +134,37 @@ pub struct ProfileResult {
     pub errors: Vec<ProfileError>,
 }
 
-/// Duplicate estimation results
+/// Duplicate estimation results.
+///
+/// This is an estimate from file size plus a quick hash of the first 64 KiB
+/// of at most `hash_cap` files. Nothing here is a verified duplicate: two
+/// files with equal size and equal first 64 KiB may still differ in the tail.
+/// Full-content verification is what `ingest` does (SHA-256 of every byte).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DuplicateEstimate {
     /// Groups with same file size
     pub size_candidate_groups: u64,
 
-    /// Groups confirmed by quick-hash
+    /// Groups whose quick hash (first 64 KiB) also matches. Candidates, not
+    /// confirmed duplicates; the JSON name is kept for compatibility.
     pub quickhash_confirmed_groups: u64,
 
-    /// Files that were quick-hashed
+    /// Files that were quick-hashed (the examined subset)
     pub files_hashed: u64,
+
+    /// Maximum number of files the quick hash examines (`--max-hash-files`).
+    /// When `files_hashed` reaches it, the rest of the size candidates were
+    /// not examined.
+    #[serde(default)]
+    pub hash_cap: u64,
 
     /// Files where quick-hash failed (I/O error, permissions)
     #[serde(default)]
     pub hash_errors: u64,
 
-    /// Estimated bytes reclaimable
+    /// Upper bound on reclaimable bytes within the examined subset: sum over
+    /// candidate groups of `(count - 1) * size`. Files that differ after the
+    /// first 64 KiB are counted as if they were duplicates.
     pub reclaimable_bytes: u64,
 
     /// Top duplicate groups (count, size, sample paths)
@@ -244,6 +258,7 @@ mod tests {
             size_candidate_groups: 4,
             quickhash_confirmed_groups: 2,
             files_hashed: 9,
+            hash_cap: 5000,
             hash_errors: 2,
             reclaimable_bytes: 1024,
             top_groups: vec![],
@@ -271,5 +286,6 @@ mod tests {
         let parsed: DuplicateEstimate =
             serde_json::from_str(json).expect("deserialize without hash_errors");
         assert_eq!(parsed.hash_errors, 0);
+        assert_eq!(parsed.hash_cap, 0, "older reports carry no cap");
     }
 }

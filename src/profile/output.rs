@@ -1,6 +1,6 @@
 //! Output formatting for profile results
 
-use crate::domain::stats::ProfileResult;
+use crate::domain::stats::{DuplicateEstimate, ProfileResult};
 use anyhow::Result;
 use comfy_table::{presets::UTF8_FULL, Cell, Color, ContentArrangement, Table};
 use humansize::{format_size, BINARY, DECIMAL};
@@ -212,15 +212,15 @@ fn print_duplicate_estimate(result: &ProfileResult, decimal: bool) -> Result<()>
     println!();
     println!("  Size-candidate groups: {}", est.size_candidate_groups);
     println!(
-        "  Quick-hash confirmed groups: {}",
+        "  Quick-hash candidate groups: {} (first 64 KiB match; not full-content verified)",
         est.quickhash_confirmed_groups
     );
-    println!("  Files hashed: {}", est.files_hashed);
+    println!("  Files quick-hashed: {}", files_examined_value(est));
     if let Some(message) = hash_error_message(est.hash_errors) {
         println!("  {message}");
     }
     println!(
-        "  Estimated reclaimable: {}",
+        "  Reclaimable (upper bound, examined files only): {}",
         format_bytes(est.reclaimable_bytes, decimal)
     );
     println!();
@@ -341,14 +341,16 @@ pub fn generate_markdown_report(result: &ProfileResult, decimal: bool) -> Result
     let est = &result.duplicate_estimate;
     md.push_str("## Duplicate Estimate\n\n");
     md.push_str(&format!(
-        "- **Size-candidate groups:** {}\n- **Confirmed groups:** {}\n- **Estimated reclaimable:** {}\n\n",
+        "- **Size-candidate groups:** {}\n- **Quick-hash candidate groups:** {} (first 64 KiB match; not full-content verified)\n- **Files quick-hashed:** {}\n- **Reclaimable (upper bound, examined files only):** {}\n",
         est.size_candidate_groups,
         est.quickhash_confirmed_groups,
+        files_examined_value(est),
         format_bytes(est.reclaimable_bytes, decimal)
     ));
     if let Some(message) = hash_error_message(est.hash_errors) {
-        md.push_str(&format!("- **{message}**\n\n"));
+        md.push_str(&format!("- **{message}**\n"));
     }
+    md.push('\n');
 
     // Largest files
     md.push_str("## Largest Files\n\n");
@@ -362,6 +364,19 @@ pub fn generate_markdown_report(result: &ProfileResult, decimal: bool) -> Result
     md.push('\n');
 
     Ok(md)
+}
+
+/// "X (cap Y)" plus a note when the cap stopped the examination early (the
+/// remaining size candidates were not looked at).
+fn files_examined_value(est: &DuplicateEstimate) -> String {
+    let mut v = est.files_hashed.to_string();
+    if est.hash_cap > 0 {
+        v.push_str(&format!(" (cap {})", est.hash_cap));
+        if est.files_hashed >= est.hash_cap {
+            v.push_str("; cap reached, remaining size candidates not examined");
+        }
+    }
+    v
 }
 
 fn hash_error_message(hash_errors: u64) -> Option<String> {
@@ -437,6 +452,51 @@ mod tests {
 
         assert!(report.contains("Hash errors"));
         assert!(report.contains("3"));
+    }
+
+    #[test]
+    fn duplicate_estimate_is_reported_as_candidates_and_upper_bound() {
+        let mut result = make_test_profile_result();
+        result.duplicate_estimate = DuplicateEstimate {
+            size_candidate_groups: 3,
+            quickhash_confirmed_groups: 2,
+            files_hashed: 7,
+            hash_cap: 5000,
+            hash_errors: 0,
+            reclaimable_bytes: 2048,
+            top_groups: vec![],
+        };
+        let report = generate_markdown_report(&result, false).unwrap();
+        assert!(
+            report.contains("Quick-hash candidate groups:** 2"),
+            "{report}"
+        );
+        assert!(report.contains("not full-content verified"), "{report}");
+        assert!(report.contains("Reclaimable (upper bound"), "{report}");
+        assert!(
+            report.contains("Files quick-hashed:** 7 (cap 5000)"),
+            "{report}"
+        );
+        assert!(!report.contains("Confirmed groups"), "{report}");
+        assert!(!report.contains("cap reached"), "{report}");
+    }
+
+    #[test]
+    fn files_examined_value_says_when_the_cap_stopped_the_examination() {
+        let mut est = DuplicateEstimate {
+            files_hashed: 10,
+            hash_cap: 10,
+            ..DuplicateEstimate::default()
+        };
+        assert_eq!(
+            files_examined_value(&est),
+            "10 (cap 10); cap reached, remaining size candidates not examined"
+        );
+        est.files_hashed = 3;
+        assert_eq!(files_examined_value(&est), "3 (cap 10)");
+        // Reports written before the cap was recorded carry no cap.
+        est.hash_cap = 0;
+        assert_eq!(files_examined_value(&est), "3");
     }
 
     #[test]

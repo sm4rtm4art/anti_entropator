@@ -39,7 +39,10 @@ This shows:
 
 - File type distribution (by extension and MIME)
 - Size statistics with percentiles
-- Duplicate estimation
+- Duplicate estimate: groups of equal size whose first 64 KiB also match,
+  for at most `--max-hash-files` files. These are candidates, not verified
+  duplicates, and the reclaimable figure is an upper bound within the examined
+  files; full-content hashing happens in `ingest`
 - Name quality patterns (generic names, UUIDs, etc.)
 
 ### 2. Start the Lakehouse Stack
@@ -130,7 +133,9 @@ How a run is bounded: up to `--concurrency` files (default 4) are hashed,
 verified, and uploaded at the same time, and observation rows are committed
 every `--batch-size` rows (default 1000). Each batch is one Parquet file and
 one Iceberg snapshot, so a long run produces several snapshots and a query
-sees the rows of finished batches while the run is still going. If a commit
+sees the rows of finished batches while the run is still going. A run is not
+atomic: batch success means those rows are in the catalog, not that the run
+as a whole succeeded or will. If a commit
 returns an error, earlier batches stay committed, files already in flight
 finish (their blobs are content-addressed and safe), no further file is
 started, and the run exits non-zero with `status: commit_failed`. The failed
@@ -140,7 +145,11 @@ observes only the paths that have no row. Small batches mean many small
 Parquet files; compaction is a later maintenance feature.
 
 Peak memory does not grow with the size of the files: they are streamed, and
-only the file list and at most two batches of rows are held at once.
+at most two batches of rows are held at once. It does grow with the number of
+candidates (the file list is collected up front) and with the source's
+history (the latest observation per path is read into memory at run start).
+Worker concurrency is bounded; total memory is not independent of the
+dataset.
 
 How a run is recorded: every ingest that writes keeps a journal object at
 `_runs/<run_id>.json` in the data bucket and rewrites it on each transition:
@@ -173,11 +182,18 @@ same time are not yet prevented (a single-writer lease is a follow-up), so the
 reconciled count is a fact only if no other writer was active.
 
 What a `file_catalog` row means (ADR-009): one row is one observation of one
-path in one source during one run, appended-only. Ingest reads the latest
-observation per path for the source at run start and appends a row only when
-a path is new or its content changed; re-running an unchanged ingest appends
-nothing and attempts no commit. If the catalog cannot be read, the run stops
-rather than guess.
+path in one source during one run, appended-only. `COUNT(*)` over the table
+counts observations, not files or blobs: a path re-observed after a change has
+two rows, and one blob may back many rows. Ingest reads the latest observation
+per path for the source at run start and appends a row only when a path is
+new or its content changed; re-running an unchanged ingest appends nothing and
+attempts no commit. If the catalog cannot be read, the run stops rather than
+guess.
+
+"Latest" is by `observed_at`, the wall clock of the ingesting machine. A clock
+set back between runs, or two observations with the same timestamp, make the
+choice ambiguous; there is no `run_id` tie-breaker because none would imply a
+real ordering. One writer per source at a time is assumed (see below).
 
 - `source_id` defaults to the canonical absolute path of the ingested
   directory. Pass `--source <name>` to keep observing the same logical source
@@ -238,7 +254,9 @@ anti_entropator query "SELECT category, COUNT(*) FROM iceberg.anti_entropator.fi
 # Duplicate content today: group by hash in SQL
 anti_entropator query "SELECT content_hash, COUNT(*) AS copies FROM iceberg.anti_entropator.file_catalog GROUP BY content_hash HAVING COUNT(*) > 1"
 
-# Current state of one source: the latest present observation per path
+# Current state of one source: the latest present observation per path.
+# Ordering is by wall clock; deleted files are NOT detected (their last
+# present row stays), see "Deleted and renamed files" above.
 anti_entropator query "SELECT relative_path, content_hash, observed_at FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY relative_path ORDER BY observed_at DESC) AS rn FROM iceberg.anti_entropator.file_catalog WHERE source_id = 'downloads' AND observation_status = 'present') WHERE rn = 1"
 ```
 

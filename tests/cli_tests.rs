@@ -186,6 +186,34 @@ fn scan_help_shows_options() -> Result<()> {
     Ok(())
 }
 
+/// v0.3.1 slice 8: `scan --format` was accepted and ignored; it is gone. The
+/// closing line must not suggest that anything is persisted either way.
+#[test]
+fn scan_rejects_removed_format_flag_and_says_it_is_read_only() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("a.txt"), b"x")?;
+    cmd()?
+        .arg("scan")
+        .arg(temp.path())
+        .args(["--format", "json"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unexpected argument"));
+    for extra in [&[][..], &["--dry-run"][..]] {
+        cmd()?
+            .arg("scan")
+            .arg(temp.path())
+            .args(extra)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(
+                "Scan is read-only; nothing was written",
+            ))
+            .stdout(predicate::str::contains("persist").not());
+    }
+    Ok(())
+}
+
 #[test]
 fn scan_nonexistent_path_fails() -> Result<()> {
     cmd()?

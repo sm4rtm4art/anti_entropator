@@ -161,11 +161,8 @@ pub struct ScanArgs {
     #[arg(long)]
     pub limit: Option<usize>,
 
-    /// Output format
-    #[arg(long, value_enum, default_value = "table")]
-    pub format: OutputFormat,
-
-    /// Dry run - show what would be done without making changes
+    /// No effect: scan is read-only and never writes. Accepted so existing
+    /// `scan --dry-run` invocations keep working.
     #[arg(long)]
     pub dry_run: bool,
 }

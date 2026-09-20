@@ -227,12 +227,13 @@ This is a showcase project, so the process is part of what is on display.
   hardening, technical-debt audit, CI/CD delivery — each with a named quality
   gate and recorded validation evidence before it merges.
 - **Tests are the release floor.** Unit and CLI tests run on every change.
-  Three Docker-backed tests (`#[ignore]` locally) run in CI against a fresh
+  The Docker-backed tests (`#[ignore]` locally) run in CI against a fresh
   Compose stack on every code change and before anything is published from a
-  tag: `doctor`, the `init → ingest → query` flow, and a kill test that
-  `SIGKILL`s an ingest mid-run and checks that the journal, the catalog count,
-  and the recovery run agree. Line coverage is measured on `main` and weekly;
-  the build fails below 50%.
+  tag: `doctor`, the `init → ingest → query` flow, a kill test that `SIGKILL`s
+  an ingest mid-run and checks that the journal, the catalog count, and the
+  recovery run agree, and recovery of a run whose commit was not
+  acknowledged. Line coverage is measured on `main` and weekly; the build
+  fails below 50%.
 - **Everything checkable is checked automatically.** `cargo fmt`,
   `clippy -D warnings`, tests, coverage, `cargo audit`, Trivy filesystem and
   image scanning with a fixable HIGH/CRITICAL gate, `zizmor` workflow analysis,
@@ -263,8 +264,14 @@ This is a showcase project, so the process is part of what is on display.
   rename observations in the catalog, and a single-writer lease per source
   (two concurrent ingests of one source are not prevented). All are tracked in the
   [roadmap](docs/ROADMAP-v0.3.0.md).
+- **Known limitations of the catalog model:** `file_catalog` counts
+  observations, not files or blobs; the current-state query does not detect
+  deletions; "latest" is wall-clock ordering by `observed_at` (a clock set
+  back or equal timestamps make it ambiguous); batch success is not run
+  atomicity; memory scales with candidate count and history size.
 - **Blue/green delivery is a documented simulation**, not production
-  automation. It is labeled as such wherever it appears.
+  automation. It is labeled as such wherever it appears. Neither the local
+  stack nor the simulation establishes deployment readiness.
 
 ## Documentation
 

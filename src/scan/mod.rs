@@ -46,7 +46,6 @@ pub async fn run(args: ScanArgs) -> Result<()> {
     if let Some(limit) = args.limit {
         println!("  Limit: {} files", limit);
     }
-    println!("  Dry run: {}", if args.dry_run { "yes" } else { "no" });
     println!();
 
     // Count files first
@@ -197,17 +196,12 @@ pub async fn run(args: ScanArgs) -> Result<()> {
         anyhow::bail!("scan incomplete: {} files failed", errors.len());
     }
 
-    if args.dry_run {
-        println!(
-            "{}",
-            style("  Dry run - no changes made. Remove --dry-run to persist results.").dim()
-        );
-    } else {
-        println!(
-            "{}",
-            style("  Results ready for ingest. Run `anti_entropator ingest` to upload.").green()
-        );
-    }
+    // Scan persists nothing, with or without --dry-run.
+    println!(
+        "{}",
+        style("  Scan is read-only; nothing was written. Run `anti_entropator ingest <path>` to upload.")
+            .dim()
+    );
 
     println!();
 
