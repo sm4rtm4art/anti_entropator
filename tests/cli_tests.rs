@@ -874,6 +874,41 @@ fn ingest_then_query_flow() -> Result<()> {
         .expect("run_id in summary")
         .to_string();
 
+    // 3b. Independent readback of the multipart object: the stored bytes,
+    //     fetched from RustFS through a fresh operator (not the writer), must
+    //     be the source file byte for byte, and hash to the CAS key. Catalog
+    //     counts alone would not catch a part written out of order or a
+    //     truncated completion.
+    {
+        use anti_entropator::domain::ContentHash;
+        use anti_entropator::lakehouse::LakehouseConfig;
+        use anti_entropator::storage::create_operator;
+        use sha2::{Digest, Sha256};
+
+        let hex = |bytes: &[u8]| -> String {
+            Sha256::digest(bytes)
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect()
+        };
+        let key = ContentHash::new(hex(&big)).to_object_key();
+        let op = create_operator(&LakehouseConfig::default())?;
+        let rt = tokio::runtime::Runtime::new()?;
+        let meta = rt.block_on(op.stat(&key))?;
+        assert_eq!(
+            meta.content_length(),
+            big.len() as u64,
+            "stored multipart object has the source length"
+        );
+        let stored = rt.block_on(op.read(&key))?.to_vec();
+        assert_eq!(stored.len(), big.len());
+        assert!(
+            stored == big,
+            "stored multipart object differs from the source file"
+        );
+        assert_eq!(hex(&stored), hex(&big));
+    }
+
     // 4. Query with marker to isolate this run's rows. `files` is an alias
     //    table, so it and the qualified name count the same rows, and a
     //    string literal containing "FROM files" is returned as written

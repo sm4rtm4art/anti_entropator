@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Docker-gated `ingest_then_query_flow` reads the 9 MiB multipart object back
+  from RustFS through a fresh operator and compares length, bytes, and
+  SHA-256 with the source file. Until now the flow proved the upload by
+  catalog counts only; the byte-level round trip was covered by the in-memory
+  service alone.
+
 - Ingest recovery: a run that ended in `commit_failed` is now open for
   reconciliation like an interrupted run. The catalog may have applied the
   batch and lost the response, so the next ingest for the source counts the
