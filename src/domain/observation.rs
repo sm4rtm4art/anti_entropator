@@ -66,17 +66,43 @@ pub fn observation_id(
     Uuid::new_v5(&OBSERVATION_NAMESPACE, &name)
 }
 
+/// A path component that is not valid UTF-8 cannot become a catalog identity.
+///
+/// `relative_path` is part of the observation identity, so it is stored as a
+/// string byte-for-byte. A lossy conversion would map distinct on-disk names
+/// (possible on ext4/xfs; APFS forbids them) to one identity and let two
+/// files collide into one observation. Such a file is rejected instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NonUtf8Path {
+    /// Lossy rendering, for the error message only.
+    pub display: String,
+}
+
+impl std::fmt::Display for NonUtf8Path {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "path is not valid UTF-8 and cannot be a catalog identity: {}",
+            self.display
+        )
+    }
+}
+
+impl std::error::Error for NonUtf8Path {}
+
 /// Normalize a path relative to the ingest root into the catalog form:
-/// `/`-separated, no leading separator.
-pub fn normalize_relative_path(relative: &std::path::Path) -> String {
-    let parts: Vec<String> = relative
-        .components()
-        .filter_map(|c| match c {
-            std::path::Component::Normal(s) => Some(s.to_string_lossy().into_owned()),
-            _ => None,
-        })
-        .collect();
-    parts.join("/")
+/// `/`-separated, no leading separator. Fails for any component that is not
+/// valid UTF-8; valid paths are returned byte-for-byte.
+pub fn normalize_relative_path(relative: &std::path::Path) -> Result<String, NonUtf8Path> {
+    let mut parts: Vec<&str> = Vec::new();
+    for c in relative.components() {
+        if let std::path::Component::Normal(s) = c {
+            parts.push(s.to_str().ok_or_else(|| NonUtf8Path {
+                display: relative.display().to_string(),
+            })?);
+        }
+    }
+    Ok(parts.join("/"))
 }
 
 #[cfg(test)]
@@ -159,9 +185,32 @@ mod tests {
 
     #[test]
     fn normalize_relative_path_uses_forward_slashes_and_no_prefix() {
-        assert_eq!(normalize_relative_path(Path::new("a/b/c.txt")), "a/b/c.txt");
-        assert_eq!(normalize_relative_path(Path::new("./a/b.txt")), "a/b.txt");
-        assert_eq!(normalize_relative_path(Path::new("c.txt")), "c.txt");
-        assert_eq!(normalize_relative_path(Path::new("")), "");
+        let n = |p: &str| normalize_relative_path(Path::new(p)).unwrap();
+        assert_eq!(n("a/b/c.txt"), "a/b/c.txt");
+        assert_eq!(n("./a/b.txt"), "a/b.txt");
+        assert_eq!(n("c.txt"), "c.txt");
+        assert_eq!(n(""), "");
+        // Non-ASCII UTF-8 is an identity like any other: byte-for-byte.
+        assert_eq!(n("Übungen/Straße/日本語.txt"), "Übungen/Straße/日本語.txt");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn normalize_relative_path_rejects_non_utf8_instead_of_collapsing_it() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        // Two distinct byte sequences that `to_string_lossy` would both turn
+        // into "a/f\u{FFFD}.txt" and thus into one identity.
+        let a = Path::new(OsStr::from_bytes(b"a/f\xff.txt"));
+        let b = Path::new(OsStr::from_bytes(b"a/f\xfe.txt"));
+        assert_eq!(
+            a.to_string_lossy(),
+            b.to_string_lossy(),
+            "precondition: lossy conversion collides"
+        );
+        let ea = normalize_relative_path(a).unwrap_err();
+        let eb = normalize_relative_path(b).unwrap_err();
+        assert!(ea.to_string().contains("not valid UTF-8"), "{ea}");
+        assert!(eb.to_string().contains("not valid UTF-8"), "{eb}");
     }
 }

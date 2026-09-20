@@ -9,14 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Delivery simulation: `docker-compose.delivery.yml` no longer bind-mounts
-  `./data/<slot>/rustfs:/data`. Compose merges volumes by target, so that
-  bind replaced the base file's `rustfs-data` named volume and reintroduced
-  the Docker Desktop failure `docker-compose.yml` documents. RustFS data now
-  stays on the named volume, scoped per slot project
-  (`anti_entropator_<slot>_rustfs-data`). `scripts/delivery-sim.sh down
-  <slot> --destroy-data` removes that volume (`compose down --volumes` on the
-  slot's project only); plain `down` keeps it.
+- Ingest recovery: a run that ended in `commit_failed` is now open for
+  reconciliation like an interrupted run. The catalog may have applied the
+  batch and lost the response, so the next ingest for the source counts the
+  rows that run actually has (`reconciled`, the `commit_failed` entry stays in
+  the history) and supersedes it on completion. Until now such a run was
+  treated as terminal and never reconciled. `runs list --open` includes these
+  runs; `committed` in the summary is the acknowledged count and
+  `observed - committed` is an upper bound on missing rows, not an exact loss.
+  Docker-gated test `commit_failed_run_is_reconciled_by_the_next_ingest` uses a
+  v0.3.0-format journal fixture and proves the application path, not a
+  transport failure. (#226)
+- Path identity: file names and the default `source_id` (the canonical root)
+  are converted to catalog strings losslessly. A name that is not valid UTF-8
+  was previously passed through `to_string_lossy`, so two distinct on-disk
+  names could map to one `relative_path` and collide into one observation.
+  Such a file is now a per-file error (run ends `incomplete`, exit non-zero,
+  the file is neither observed nor counted as unchanged); a non-UTF-8 root
+  without `--source` refuses to start. Valid UTF-8 identities are unchanged.
+  Tests are Linux-only at the CLI level because APFS refuses such names.
 
 ### Added
 

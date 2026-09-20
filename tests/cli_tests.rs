@@ -664,6 +664,99 @@ fn ingest_partial_errors_json_exits_nonzero() -> Result<()> {
     Ok(())
 }
 
+/// v0.3.1 slice 2 (review finding 2): a file name that is not valid UTF-8 has
+/// no lossless catalog identity. Two such names that `to_string_lossy` would
+/// collapse into one string must both be rejected as per-file errors, never
+/// observed (and never counted as unchanged), and the valid neighbour is still
+/// observed. Linux only: APFS refuses such names, so the reference machine
+/// cannot create them; the test skips if the filesystem does.
+#[test]
+#[cfg(target_os = "linux")]
+fn ingest_rejects_non_utf8_paths_instead_of_collapsing_them() -> Result<()> {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("ok.txt"), b"valid identity")?;
+    let bad_a = temp.path().join(OsStr::from_bytes(b"f\xff.txt"));
+    let bad_b = temp.path().join(OsStr::from_bytes(b"f\xfe.txt"));
+    if std::fs::write(&bad_a, b"same bytes").is_err() {
+        eprintln!("filesystem refuses non-UTF-8 names; skipping");
+        return Ok(());
+    }
+    std::fs::write(&bad_b, b"same bytes")?;
+    assert_eq!(bad_a.to_string_lossy(), bad_b.to_string_lossy());
+
+    let output = cmd()?
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--dry-run", "--offline", "--format", "json"])
+        .output()?;
+
+    assert!(
+        !output.status.success(),
+        "invalid identities must not exit 0"
+    );
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["status"].as_str(), Some("incomplete"));
+    assert_eq!(json["candidates"].as_u64(), Some(3));
+    assert_eq!(json["observed"].as_u64(), Some(1), "only ok.txt");
+    assert_eq!(json["unchanged"].as_u64(), Some(0));
+    assert_eq!(json["failed"].as_u64(), Some(2), "both invalid names");
+    let errors = json["errors"].as_array().expect("errors");
+    assert_eq!(errors.len(), 2);
+    for e in errors {
+        let e = e.as_str().unwrap();
+        assert!(e.contains("not valid UTF-8"), "{e}");
+    }
+    Ok(())
+}
+
+/// Same defect at the root: without `--source` the canonical root path *is*
+/// the `source_id`, so a non-UTF-8 root must refuse to start; with `--source`
+/// it runs.
+#[test]
+#[cfg(target_os = "linux")]
+fn ingest_refuses_non_utf8_root_without_source() -> Result<()> {
+    use std::ffi::OsStr;
+    use std::os::unix::ffi::OsStrExt;
+
+    let temp = tempdir()?;
+    let root = temp.path().join(OsStr::from_bytes(b"r\xffoot"));
+    if std::fs::create_dir(&root).is_err() {
+        eprintln!("filesystem refuses non-UTF-8 names; skipping");
+        return Ok(());
+    }
+    std::fs::write(root.join("ok.txt"), b"valid")?;
+
+    cmd()?
+        .arg("ingest")
+        .arg(&root)
+        .args(["--dry-run", "--offline"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("not valid UTF-8"))
+        .stderr(predicate::str::contains("--source"));
+
+    let output = cmd()?
+        .arg("ingest")
+        .arg(&root)
+        .args([
+            "--source",
+            "named",
+            "--dry-run",
+            "--offline",
+            "--format",
+            "json",
+        ])
+        .output()?;
+    assert!(output.status.success());
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout)?;
+    assert_eq!(json["source_id"].as_str(), Some("named"));
+    assert_eq!(json["observed"].as_u64(), Some(1));
+    Ok(())
+}
+
 #[test]
 fn ingest_rejects_unsupported_format() -> Result<()> {
     let temp = tempdir()?;
