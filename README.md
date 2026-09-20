@@ -21,29 +21,26 @@ anti_entropator ingest  ~/Downloads --include '*.pdf'
 anti_entropator query   "SELECT category, COUNT(*) FROM iceberg.anti_entropator.file_catalog GROUP BY category"
 ```
 
-> **Status — v0.3.1, early public preview (updated 2026-09).**
-> The `profile → scan → ingest → query` path works end to end today, and
-> ingest is idempotent, mutation-safe, bounded, and recoverable (ADR-009). The
-> binary contains only implemented commands; interactive SQL, duplicate
-> management, and branch merge are roadmap items, not stubs. Maintenance
-> primitives and a single-writer ingest lease are v0.4.0 work.
+> **Status: v0.3.1, early public preview.** The `profile → scan → ingest →
+> query` path works end to end. Ingest is idempotent and recoverable: re-running
+> on unchanged input uploads nothing, and an interrupted run is reconciled by
+> the next one. The binary contains only implemented commands; see
+> [Scope and limits](#scope-and-limits) for what is not there yet.
 
 ---
 
 ## Why this exists
 
-The problem is small on a laptop and large in an organization: exports,
-reports, media, and intermediate artifacts pile up faster than anyone catalogs
-them. `~/Downloads` is the reference workload because it is the most familiar
-version of that swamp — the same shape as the terabyte-scale dumps data teams
-inherit, just small enough to reason about completely.
+Exports, reports, media, and intermediate artifacts accumulate faster than
+anyone catalogs them. The problem is the same on a laptop and in an
+organization; only the volume differs. `~/Downloads` is the reference workload
+because it has the shape of the large, unstructured dumps data teams inherit,
+at a size that can be reasoned about completely.
 
-The origin is more modest. My very first project was a Python script with `glob`
-and a lot of optimism to clean my Downloads folder. This is the same problem revisited with more experience
-and a deliberately serious toolchain. It is overbuilt for a downloads folder on
-purpose: the goal is to exercise real lakehouse patterns end to end — content
-addressing, catalog commits, snapshot semantics, query federation — and to keep
-every claim about them honest.
+Anti-Entropator applies the lakehouse pattern to that workload end to end:
+content-addressed storage, an Iceberg table as the catalog, snapshot semantics
+for every ingest, and SQL over the result, all from a single binary against a
+local Docker Compose stack.
 
 ## What works today
 
@@ -141,7 +138,7 @@ were rejected and why.
 | Catalog        | [Lakekeeper](https://github.com/lakekeeper/lakekeeper) | Iceberg REST catalog in Rust, Postgres-backed, no JVM ([ADR-004](docs/adr/ADR-004-lakekeeper-catalog.md)) |
 | Query engine   | [DataFusion](https://datafusion.apache.org/) | Embedded Arrow SQL engine, reads Iceberg in-process ([ADR-005](docs/adr/ADR-005-datafusion-query-engine.md)) |
 | I/O boundary   | [OpenDAL](https://opendal.apache.org/) | One abstraction for all object-store operations ([ADR-006](docs/adr/ADR-006-opendal-unified-io.md)) |
-| Pipeline       | Single staged engine  | Bounded `tokio` worker pool (`--concurrency`) feeding a batched commit stage (`--batch-size`); a failed batch stops the run and keeps earlier batches. Every writing run keeps a journal at `_runs/<run_id>.json`, so an interrupted run is identifiable afterwards and reconciled by the next run. A dataflow-rs second engine was considered and dropped ([ADR-007](docs/adr/ADR-007-dataflow-rs-orchestration.md), superseded) |
+| Pipeline       | Single staged engine  | Bounded `tokio` worker pool (`--concurrency`) feeding a batched commit stage (`--batch-size`); each writing run keeps a journal for recovery. A second engine was evaluated and rejected ([ADR-007](docs/adr/ADR-007-dataflow-rs-orchestration.md), superseded) |
 | Delivery       | Docker Compose        | One-command local stack; release path documented in [ADR-008](docs/adr/ADR-008-release-grade-ci-cd-delivery.md) |
 
 The whole stack is Rust or Rust-friendly by design: no JVM, no Spark, no
@@ -218,60 +215,51 @@ make query QUERY="SELECT category, COUNT(*) FROM files GROUP BY category"
 Point any target at a different folder with `DOWNLOADS=/path/to/folder`, for
 example `make profile DOWNLOADS=~/Desktop`.
 
-## Engineering practices
+## Quality and release process
 
-This is a showcase project, so the process is part of what is on display.
-
-- **Stabilization blocks over big-bang releases.** v0.3 work runs as small,
-  PR-sized blocks — correctness fixes, test pyramid, secrets and auth
-  hardening, technical-debt audit, CI/CD delivery — each with a named quality
-  gate and recorded validation evidence before it merges.
-- **Tests are the release floor.** Unit and CLI tests run on every change.
-  The Docker-backed tests (`#[ignore]` locally) run in CI against a fresh
-  Compose stack on every code change and before anything is published from a
-  tag: `doctor`, the `init → ingest → query` flow, a kill test that `SIGKILL`s
-  an ingest mid-run and checks that the journal, the catalog count, and the
-  recovery run agree, and recovery of a run whose commit was not
-  acknowledged. Line coverage is measured on `main` and weekly; the build
-  fails below 50%.
-- **Everything checkable is checked automatically.** `cargo fmt`,
-  `clippy -D warnings`, tests, coverage, `cargo audit`, Trivy filesystem and
-  image scanning with a fixable HIGH/CRITICAL gate, `zizmor` workflow analysis,
-  and Markdown/shell linting all run in GitHub Actions. Third-party actions are
-  SHA-pinned. Pre-commit and pre-push hooks catch the same failures locally.
-- **Decisions are written down.** Nine ADRs record the reasoning, including
-  what was rejected: MinIO, Nessie, DuckDB, a second pipeline engine, and
-  anything requiring a JVM. A superseded ADR stays in the tree with the reason.
-- **Honest documentation is a hard rule.** The binary contains only
-  implemented commands, planned work is labeled planned, and every security
-  control is classified as enforced today, human-verified, or planned.
+- **Tests.** Unit and CLI tests run on every change. Integration tests
+  (`#[ignore]` locally) run in CI against a fresh Docker Compose stack on every
+  code change and again before anything is published from a tag. They cover
+  `doctor`, the `init → ingest → query` flow including a multipart upload read
+  back from the store, an ingest killed mid-run and reconciled by the next run,
+  and recovery of a run whose catalog commit was not acknowledged. Line coverage
+  is measured on `main`; the build fails below 50%.
+- **Automated checks.** `cargo fmt`, `clippy -D warnings`, `cargo audit`, Trivy
+  filesystem and image scans with a fixable HIGH/CRITICAL gate, `zizmor`
+  workflow analysis, and Markdown/shell linting run in GitHub Actions.
+  Third-party actions are SHA-pinned. Pre-commit and pre-push hooks run the same
+  checks locally.
+- **Release path.** A version tag rebuilds the container image, runs
+  `init → ingest → query` inside it against an ephemeral stack, scans it, and
+  only then pushes the version tags and `latest` and publishes the binaries.
+  See [ADR-008](docs/adr/ADR-008-release-grade-ci-cd-delivery.md).
+- **Decisions are recorded.** Architecture Decision Records in
+  [docs/adr](docs/adr/) capture each technology choice and the alternatives
+  that were rejected. A superseded ADR stays in the tree with the reason.
+- **Documentation describes shipped behavior.** Planned work is labeled as
+  planned, and each security control is classified as enforced, human-verified,
+  or planned.
 
 ## Scope and limits
 
-- **Deployment scope is a single-developer local demo** via Docker Compose.
-  Compose services bind to `127.0.0.1` and the default credentials are
-  development-only.
-- **Catalog rows retain absolute source paths** for the local-first workflow.
-  Review or redact that field before sharing catalog data or query output.
-- **CI publishes container images** for release and reference use. `:latest`
-  and the version tags come only from the verified release path (smoke +
-  Trivy before push); `:edge` is the current `main` build after unit and CLI
-  tests, without that image scan. A shared or public deployment needs its own
-  threat model, non-local auth, managed secrets, and network review — see
-  [docs/security](docs/security/).
-- **Not implemented yet:** interactive SQL, duplicate management, ingest branch
-  merge, Iceberg maintenance primitives (`expire`, `vacuum`), deletion or
-  rename observations in the catalog, and a single-writer lease per source
-  (two concurrent ingests of one source are not prevented). All are tracked in the
+- **Local, single-user deployment.** The Compose stack binds to `127.0.0.1`
+  and its credentials are development-only. A shared or public deployment
+  needs its own threat model, authentication, secrets management, and network
+  review; see [docs/security](docs/security/).
+- **Catalog rows contain absolute source paths.** Review or redact that field
+  before sharing catalog data or query output.
+- **Container images.** Version tags and `latest` are published only from the
+  verified release path. `edge` is the current `main` build after unit and CLI
+  tests, without the image scan.
+- **Catalog model.** `file_catalog` records observations, one per file per
+  ingest run; it does not detect deletions or renames, and "latest" is ordered
+  by wall-clock `observed_at`. A batch commit is the unit of atomicity, not the
+  whole run. Two concurrent ingests of the same source are not prevented.
+- **Not implemented.** Interactive SQL, duplicate management, ingest branch
+  merge, and Iceberg maintenance (`expire`, `vacuum`). See the
   [roadmap](docs/ROADMAP-v0.3.0.md).
-- **Known limitations of the catalog model:** `file_catalog` counts
-  observations, not files or blobs; the current-state query does not detect
-  deletions; "latest" is wall-clock ordering by `observed_at` (a clock set
-  back or equal timestamps make it ambiguous); batch success is not run
-  atomicity; memory scales with candidate count and history size.
-- **Blue/green delivery is a documented simulation**, not production
-  automation. It is labeled as such wherever it appears. Neither the local
-  stack nor the simulation establishes deployment readiness.
+- **Blue/green delivery** (`scripts/delivery-sim.sh`) is a local simulation of
+  the rollout model, not production automation.
 
 ## Documentation
 

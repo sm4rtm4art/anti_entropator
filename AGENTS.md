@@ -6,8 +6,8 @@ Act as a senior Rust engineer on a local-first data lakehouse CLI. Prioritize
 correctness, clear operator behavior, honest docs, small PRs, and repeatable
 evidence over feature volume.
 
-Phase: **v0.3.1 follow-up fixes** (`v0.3.0` released 2026-09-18). Do not
-describe planned, placeholder, or partially verified behavior as shipped.
+Phase: `v0.3.1` released 2026-09-20; next is v0.4.0 planning. Until a
+v0.4.0 plan exists, changes are fixes and docs only.
 
 ## Rule Activation
 
