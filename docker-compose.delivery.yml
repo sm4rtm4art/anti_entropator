@@ -3,11 +3,17 @@
 #   docker compose -f docker-compose.yml -f docker-compose.delivery.yml ...
 #
 # Requires DELIVERY_SLOT to isolate bind-mounted runtime state per slot.
+#
+# RustFS data stays on the base file's named volume `rustfs-data`; Compose
+# scopes it per project (`anti_entropator_<slot>_rustfs-data`), so slots do
+# not share it. Do not bind-mount `/data` here: Compose merges volumes by
+# target, and a bind would replace the named volume and reintroduce the
+# Docker Desktop failure documented in docker-compose.yml (2026-09-17).
+# `scripts/delivery-sim.sh down <slot> --destroy-data` removes the volume.
 
 services:
   rustfs:
     volumes:
-      - ./data/${DELIVERY_SLOT:?set_delivery_slot}/rustfs:/data
       - ./logs/${DELIVERY_SLOT:?set_delivery_slot}/rustfs:/logs
 
   postgres:
