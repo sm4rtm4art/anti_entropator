@@ -1,7 +1,7 @@
 # Contributing to Anti-Entropator
 
 Thanks for contributing.
-This project is currently in a public-showcase stabilization phase, so correctness and honest documentation are prioritized over feature volume.
+The project is in an early public preview. Correctness and accurate documentation take priority over feature volume.
 
 ## Development Setup
 

@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Architecture Guard Rails
 
-Phase: **v0.3.1 follow-up fixes** (`v0.3.0` released 2026-09-18).
+Phase: `v0.3.1` released 2026-09-20; v0.4.0 planning.
 
 ## Stack (do not substitute)
 
