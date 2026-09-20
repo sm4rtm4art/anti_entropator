@@ -121,6 +121,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Free disk space
+        # The app smoke pulls the Compose stack images next to the built image.
+        uses: $/.github/actions/free-disk-space
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -151,11 +155,15 @@ jobs:
           echo "tag=${canonical_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Verify image security posture
+        # app-smoke runs init -> ingest -> query with this image against an
+        # ephemeral Compose slot, so what is scanned (and, on tags, pushed)
+        # has executed the end-to-end path, not only `--help`.
         uses: $/.github/actions/container-verify
         with:
           image-tag: ${{ steps.canonical.outputs.tag }}
           severity: HIGH,CRITICAL
           artifact-name: trivy-image-release-${{ github.run_id }}-${{ github.run_attempt }}
+          app-smoke: "true"
 
       - name: Clean runner workspace
         if: always()
@@ -179,6 +187,10 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Free disk space
+        # The app smoke pulls the Compose stack images next to the built image.
+        uses: $/.github/actions/free-disk-space
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -209,11 +221,15 @@ jobs:
           echo "tag=${canonical_tag}" >> "$GITHUB_OUTPUT"
 
       - name: Verify image security posture
+        # app-smoke runs init -> ingest -> query with this image against an
+        # ephemeral Compose slot, so what is scanned (and, on tags, pushed)
+        # has executed the end-to-end path, not only `--help`.
         uses: $/.github/actions/container-verify
         with:
           image-tag: ${{ steps.canonical.outputs.tag }}
           severity: HIGH,CRITICAL
           artifact-name: trivy-image-release-${{ github.run_id }}-${{ github.run_attempt }}
+          app-smoke: "true"
 
       - name: Log in to Container Registry
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0

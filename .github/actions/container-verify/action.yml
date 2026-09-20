@@ -13,6 +13,14 @@ inputs:
   artifact-name:
     description: "Uploaded artifact name for Trivy JSON evidence"
     required: true
+  app-smoke:
+    description: >-
+      "true" to also run the application smoke (init -> ingest -> query) with
+      the built image against an ephemeral Compose slot via
+      scripts/delivery-sim.sh. Needs a Docker daemon with Compose v2 and ~1 GiB
+      for the stack images. The slot is destroyed afterwards.
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
@@ -32,6 +40,33 @@ runs:
       env:
         IMAGE_TAG: ${{ inputs.image-tag }}
       run: docker run --rm "$IMAGE_TAG" --help
+
+    - name: Application smoke (init -> ingest -> query) on the built image
+      if: inputs.app-smoke == 'true'
+      shell: bash
+      env:
+        IMAGE_TAG: ${{ inputs.image-tag }}
+      # Same local image object that Trivy scans below and that
+      # publish-container re-tags and pushes: no rebuild in between. The
+      # delivery helper starts a green slot with generated throwaway
+      # credentials (--ephemeral-env), runs the image on the slot network, and
+      # checks init, an ingest of two fixtures, and a query that counts them.
+      run: |
+        ./scripts/delivery-sim.sh deploy green "$IMAGE_TAG" --ephemeral-env
+        cp .delivery/last-smoke-green.log trivy-results/app-smoke-green.log
+
+    - name: Tear down application smoke slot
+      if: always() && inputs.app-smoke == 'true'
+      shell: bash
+      run: ./scripts/delivery-sim.sh down green --destroy-data
+
+    - name: Upload application smoke log
+      if: always() && inputs.app-smoke == 'true'
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        name: ${{ inputs.artifact-name }}-app-smoke
+        path: trivy-results/app-smoke-green.log
+        if-no-files-found: warn
 
     - name: Trivy image scan (report mode)
       uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
