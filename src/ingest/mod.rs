@@ -69,7 +69,7 @@ pub async fn run(args: IngestArgs) -> Result<()> {
     let config = LakehouseConfig::default();
     let json_output = args.format == IngestOutputFormat::Json;
     let mode = IngestMode::from_flags(args.dry_run, args.offline);
-    let ctx = RunContext::new(&path, args.source.as_deref());
+    let ctx = RunContext::new(&path, args.source.as_deref())?;
     tracing::info!(run_id = %ctx.run_id, source_id = %ctx.source_id, mode = mode.label(), "Starting ingest run");
 
     if !json_output {
@@ -579,13 +579,26 @@ struct RunContext {
 
 impl RunContext {
     /// `source` overrides the default `source_id` (the canonical root path).
-    fn new(root: &Path, source: Option<&str>) -> Self {
-        Self {
+    /// Without `--source`, a root that is not valid UTF-8 has no lossless
+    /// string identity and the run refuses to start.
+    fn new(root: &Path, source: Option<&str>) -> Result<Self> {
+        let source_id = match source {
+            Some(s) => s.to_owned(),
+            None => root
+                .to_str()
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "Root path is not valid UTF-8 and cannot be the source identity: {}. \
+                         Pass --source <name> to name this source explicitly.",
+                        root.display()
+                    )
+                })?
+                .to_owned(),
+        };
+        Ok(Self {
             run_id: Uuid::new_v4(),
-            source_id: source
-                .map(str::to_owned)
-                .unwrap_or_else(|| root.to_string_lossy().into_owned()),
-        }
+            source_id,
+        })
     }
 }
 
@@ -699,12 +712,14 @@ async fn prepare_file(
     // 1. Scan file for initial metadata
     let mut info = scan_file(path).await?;
 
-    // 2. Path identity relative to the ingest root
+    // 2. Path identity relative to the ingest root. A component that is not
+    //    valid UTF-8 is a per-file error: the run ends `incomplete`, the file
+    //    is neither observed nor counted as unchanged.
     let relative = path.strip_prefix(root_path).unwrap_or(path);
-    if let Some(parent) = relative.parent() {
-        info = info.with_parent_dir(parent.to_string_lossy().to_string());
+    let relative_path = normalize_relative_path(relative)?;
+    if let Some(parent) = relative.parent().and_then(Path::to_str) {
+        info = info.with_parent_dir(parent.to_string());
     }
-    let relative_path = normalize_relative_path(relative);
 
     // 3. Content hash (scan_file only hashes small files inline)
     if info.content_hash.is_none() {
@@ -1010,21 +1025,34 @@ mod tests {
 
     #[test]
     fn run_context_defaults_source_id_to_root_path() {
-        let ctx = RunContext::new(Path::new("/data/downloads"), None);
+        let ctx = RunContext::new(Path::new("/data/downloads"), None).unwrap();
         assert_eq!(ctx.source_id, "/data/downloads");
     }
 
     #[test]
     fn run_context_uses_source_override() {
-        let ctx = RunContext::new(Path::new("/data/downloads"), Some("downloads"));
+        let ctx = RunContext::new(Path::new("/data/downloads"), Some("downloads")).unwrap();
         assert_eq!(ctx.source_id, "downloads");
     }
 
     #[test]
     fn run_context_generates_distinct_run_ids() {
-        let a = RunContext::new(Path::new("/x"), None);
-        let b = RunContext::new(Path::new("/x"), None);
+        let a = RunContext::new(Path::new("/x"), None).unwrap();
+        let b = RunContext::new(Path::new("/x"), None).unwrap();
         assert_ne!(a.run_id, b.run_id);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn run_context_refuses_non_utf8_root_unless_source_is_given() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+        let root = Path::new(OsStr::from_bytes(b"/data/d\xffownloads"));
+        let err = RunContext::new(root, None).unwrap_err().to_string();
+        assert!(err.contains("not valid UTF-8"), "{err}");
+        assert!(err.contains("--source"), "{err}");
+        let ctx = RunContext::new(root, Some("downloads")).unwrap();
+        assert_eq!(ctx.source_id, "downloads");
     }
 
     // ── finalize_ingest tests ──
