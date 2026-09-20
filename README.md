@@ -204,8 +204,9 @@ make ingest          # upload to RustFS and commit to Iceberg
 ### 5. Query
 
 The catalog table is the Iceberg table `file_catalog`, fully qualified as
-`iceberg.anti_entropator.file_catalog`. The `query` command also accepts `files`
-as shorthand in `FROM` and `JOIN` clauses and rewrites it to the qualified name.
+`iceberg.anti_entropator.file_catalog`. The `query` command also registers
+`files` as an alias of that table, so it resolves like any table name (a CTE
+named `files` shadows it; a string literal `'files'` is just a string).
 
 ```bash
 make query QUERY="SELECT category, COUNT(*) FROM iceberg.anti_entropator.file_catalog GROUP BY category"

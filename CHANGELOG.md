@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `query`: the `files` shorthand is an alias table registered in the
+  session's default schema instead of a regex rewrite of `FROM files` /
+  `JOIN files` in the SQL text. The rewrite also changed string literals,
+  comments, and CTE references; the SQL is now executed as written and
+  `files` follows normal name resolution (a CTE named `files` shadows it).
+  If the canonical table is missing, the alias is skipped with a warning and
+  a query that references `files` fails with DataFusion's own error.
+
 ### Added
 
 - CI: reusable `Stack Tests` workflow starts the Compose stack (RustFS,

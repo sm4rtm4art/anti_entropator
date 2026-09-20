@@ -215,9 +215,11 @@ Tables created by the current `init` are not affected.
 > **Note:** `query` is a one-shot command; there is no interactive SQL mode.
 >
 > Lakekeeper registers Iceberg table `file_catalog` (namespace
-> `anti_entropator`). The `query` command rewrites `FROM files` /
-> `JOIN files` to `iceberg.anti_entropator.file_catalog`. Prefer the
-> Iceberg name in docs; `files` is optional CLI sugar.
+> `anti_entropator`). The `query` command registers `files` as an alias of
+> `iceberg.anti_entropator.file_catalog` in the session's default schema, so
+> it follows SQL name resolution (literals and comments are untouched; a CTE
+> named `files` shadows it). Prefer the Iceberg name in docs; `files` is
+> optional CLI sugar.
 
 ```bash
 # One-shot query (shorthand)
