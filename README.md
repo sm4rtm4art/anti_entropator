@@ -251,9 +251,12 @@ This is a showcase project, so the process is part of what is on display.
   development-only.
 - **Catalog rows retain absolute source paths** for the local-first workflow.
   Review or redact that field before sharing catalog data or query output.
-- **CI publishes container images** for release and reference use. A shared or
-  public deployment needs its own threat model, non-local auth, managed
-  secrets, and network review — see [docs/security](docs/security/).
+- **CI publishes container images** for release and reference use. `:latest`
+  and the version tags come only from the verified release path (smoke +
+  Trivy before push); `:edge` is the current `main` build after unit and CLI
+  tests, without that image scan. A shared or public deployment needs its own
+  threat model, non-local auth, managed secrets, and network review — see
+  [docs/security](docs/security/).
 - **Not implemented yet:** interactive SQL, duplicate management, ingest branch
   merge, Iceberg maintenance primitives (`expire`, `vacuum`), deletion or
   rename observations in the catalog, and a single-writer lease per source

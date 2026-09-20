@@ -130,6 +130,12 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
+          # `latest` only from here, and only for non-prerelease semver tags
+          # (`v0.3.1-rc.1` gets `0.3.1-rc.1` and `sha-*`, nothing else). This
+          # is metadata-action's default; spelled out because ci.yml's `edge`
+          # publish must not compete for it.
+          flavor: |
+            latest=auto
 
       - name: Select canonical tag
         id: canonical
@@ -182,6 +188,12 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
+          # `latest` only from here, and only for non-prerelease semver tags
+          # (`v0.3.1-rc.1` gets `0.3.1-rc.1` and `sha-*`, nothing else). This
+          # is metadata-action's default; spelled out because ci.yml's `edge`
+          # publish must not compete for it.
+          flavor: |
+            latest=auto
 
       - name: Select canonical tag
         id: canonical
