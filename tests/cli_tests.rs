@@ -951,7 +951,14 @@ fn runs_show_rejects_non_uuid() -> Result<()> {
 
 /// Run a `COUNT(*)` query and read the single number out of the table output.
 fn query_count(sql: &str) -> Result<u64> {
-    let out = cmd()?.arg("query").arg(sql).output()?;
+    query_count_with(sql, &[])
+}
+
+/// `query_count` with extra environment (e.g. a non-default warehouse).
+fn query_count_with(sql: &str, env: &[(&str, &str)]) -> Result<u64> {
+    let mut c = cmd()?;
+    c.envs(env.iter().copied());
+    let out = c.arg("query").arg(sql).output()?;
     assert!(out.status.success(), "query failed: {sql}");
     let stdout = String::from_utf8(out.stdout)?;
     stdout
@@ -1127,6 +1134,83 @@ fn interrupted_ingest_is_recorded_and_reconciled() -> Result<()> {
         Some(total - in_catalog)
     );
 
+    Ok(())
+}
+
+/// v0.3.1 slice 3 (review finding 6): `ANTI_ENTROPATOR_WAREHOUSE` was read by
+/// the catalog config lookup but `init` listed, matched, and created the
+/// constant `anti-entropator`, so a non-default warehouse could never be
+/// initialised. The full path must work on a fresh non-default name, and a
+/// second `init` must find it instead of creating anything.
+#[test]
+#[ignore] // Requires: docker compose up -d && source .env
+fn init_ingest_query_work_on_a_non_default_warehouse() -> Result<()> {
+    let marker = &uuid::Uuid::new_v4().to_string()[..8];
+    let warehouse = format!("wh-{marker}");
+    // Own bucket too, so the fixture does not share storage with the default
+    // warehouse and can be told apart in the store.
+    let bucket = format!("ae-{marker}");
+    let env = [
+        ("ANTI_ENTROPATOR_WAREHOUSE", warehouse.as_str()),
+        ("ANTI_ENTROPATOR_BUCKET", bucket.as_str()),
+    ];
+    let with_env = |mut c: Command| {
+        c.envs(env);
+        c
+    };
+
+    // 1. Fresh warehouse: created, and the report names the configured one.
+    let first = with_env(cmd()?).arg("init").output()?;
+    assert!(
+        first.status.success(),
+        "{}",
+        String::from_utf8_lossy(&first.stderr)
+    );
+    let out = String::from_utf8_lossy(&first.stdout);
+    assert!(
+        out.contains(&format!("warehouse '{warehouse}'")),
+        "init must report the configured warehouse:\n{out}"
+    );
+    assert!(out.contains(&format!("Warehouse: {warehouse}")), "{out}");
+    assert!(!out.contains("warehouse 'anti-entropator'"), "{out}");
+
+    // 2. Idempotent: the second init finds the configured warehouse.
+    let second = with_env(cmd()?).arg("init").output()?;
+    assert!(second.status.success());
+    let out = String::from_utf8_lossy(&second.stdout);
+    let wh_line = out
+        .lines()
+        .find(|l| l.contains(&format!("warehouse '{warehouse}'")))
+        .expect("warehouse line");
+    assert!(wh_line.contains("already exists"), "{wh_line}");
+
+    // 3. Ingest and query against it.
+    let temp = tempdir()?;
+    for i in 0..2 {
+        std::fs::write(
+            temp.path().join(format!("wh_{marker}_{i}.txt")),
+            format!("warehouse fixture {marker} {i}"),
+        )?;
+    }
+    let source = format!("s3-warehouse-{marker}");
+    let ingest = with_env(cmd()?)
+        .arg("ingest")
+        .arg(temp.path())
+        .args(["--source", &source, "--format", "json"])
+        .output()?;
+    assert!(
+        ingest.status.success(),
+        "{}",
+        String::from_utf8_lossy(&ingest.stderr)
+    );
+    let json: serde_json::Value = serde_json::from_slice(&ingest.stdout)?;
+    assert_eq!(json["committed"].as_u64(), Some(2));
+
+    let count = query_count_with(
+        &format!("SELECT count(*) FROM files WHERE source_id = '{source}'"),
+        &env,
+    )?;
+    assert_eq!(count, 2);
     Ok(())
 }
 

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `init` honors `ANTI_ENTROPATOR_WAREHOUSE`. It listed, matched, and created
+  the constant `anti-entropator` while the catalog config lookup used the
+  configured name, so a non-default warehouse created the wrong one and then
+  failed. All warehouse operations now use the configured name; the
+  `/catalog/v1/config?warehouse=` URL is built with proper query encoding.
+  Docker-gated test `init_ingest_query_work_on_a_non_default_warehouse`
+  covers `init` (fresh and repeated) → `ingest` → `query` on a fresh name.
+
 ### Added
 
 - CI: reusable `Stack Tests` workflow starts the Compose stack (RustFS,

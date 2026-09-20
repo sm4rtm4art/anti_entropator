@@ -73,9 +73,6 @@ fn build_rest_catalog_props(
 static CHECK: Emoji<'_, '_> = Emoji("✅ ", "[OK] ");
 static CROSS: Emoji<'_, '_> = Emoji("❌ ", "[FAIL] ");
 
-/// The warehouse name in Lakekeeper
-const WAREHOUSE_NAME: &str = "anti-entropator";
-
 /// The project name in Lakekeeper
 const PROJECT_NAME: &str = "anti-entropator";
 
@@ -319,7 +316,7 @@ pub async fn init() -> Result<()> {
     }
 
     // Create Lakekeeper warehouse within the project
-    print!("  Creating Lakekeeper warehouse '{}'... ", WAREHOUSE_NAME);
+    print!("  Creating Lakekeeper warehouse '{}'... ", config.warehouse);
     match ensure_warehouse(&config, &project_id).await {
         Ok(created) => {
             if created {
@@ -392,7 +389,7 @@ pub async fn init() -> Result<()> {
     println!("{} Lakehouse initialized!", CHECK);
     println!();
     println!("  Bucket:    s3://{}", config.bucket);
-    println!("  Warehouse: {}", WAREHOUSE_NAME);
+    println!("  Warehouse: {}", config.warehouse);
     println!("  Catalog:   {}", config.catalog_endpoint);
     println!("  Table:     {}.{}", NAMESPACE, FILE_CATALOG_TABLE);
 
@@ -728,13 +725,13 @@ async fn ensure_warehouse(config: &LakehouseConfig, project_id: &str) -> Result<
         let warehouse_names: Vec<_> = list.warehouses.iter().map(|w| w.name.as_str()).collect();
         tracing::debug!(warehouses = ?warehouse_names, "Found warehouses");
 
-        if list.warehouses.iter().any(|w| w.name == WAREHOUSE_NAME) {
-            tracing::debug!(warehouse = %WAREHOUSE_NAME, "Warehouse already exists");
+        if list.warehouses.iter().any(|w| w.name == config.warehouse) {
+            tracing::debug!(warehouse = %config.warehouse, "Warehouse already exists");
             return Ok(false);
         }
     }
 
-    tracing::debug!(warehouse = %WAREHOUSE_NAME, "Creating warehouse");
+    tracing::debug!(warehouse = %config.warehouse, "Creating warehouse");
 
     // Create the warehouse
     let create_req = build_create_warehouse_request(config);
@@ -749,17 +746,17 @@ async fn ensure_warehouse(config: &LakehouseConfig, project_id: &str) -> Result<
 
     match resp.status().as_u16() {
         200 | 201 => {
-            tracing::info!(warehouse = %WAREHOUSE_NAME, "Created warehouse");
+            tracing::info!(warehouse = %config.warehouse, "Created warehouse");
             Ok(true)
         }
         409 => {
-            tracing::debug!(warehouse = %WAREHOUSE_NAME, "Warehouse already exists (409)");
+            tracing::debug!(warehouse = %config.warehouse, "Warehouse already exists (409)");
             Ok(false)
         }
         _ => {
             let status = resp.status();
             let body = resp.text().await.unwrap_or_default();
-            tracing::error!(warehouse = %WAREHOUSE_NAME, status = %status, body = %body, "Failed to create warehouse");
+            tracing::error!(warehouse = %config.warehouse, status = %status, body = %body, "Failed to create warehouse");
             bail!("Failed to create warehouse: {} - {}", status, body);
         }
     }
@@ -767,7 +764,7 @@ async fn ensure_warehouse(config: &LakehouseConfig, project_id: &str) -> Result<
 
 fn build_create_warehouse_request(config: &LakehouseConfig) -> CreateWarehouseRequest {
     CreateWarehouseRequest {
-        warehouse_name: WAREHOUSE_NAME.to_string(),
+        warehouse_name: config.warehouse.clone(),
         storage_profile: S3StorageProfile {
             profile_type: "s3".to_string(),
             bucket: config.bucket.clone(),
@@ -784,6 +781,18 @@ fn build_create_warehouse_request(config: &LakehouseConfig) -> CreateWarehouseRe
             aws_secret_access_key: config.s3_secret_key.clone(),
         },
     }
+}
+
+/// `GET /catalog/v1/config?warehouse=<name>` for the configured warehouse.
+/// The name is a query value; `url` percent-encodes what needs it, so a
+/// warehouse name with spaces, `&`, `/`, or non-ASCII survives.
+fn catalog_config_url(config: &LakehouseConfig) -> Result<url::Url> {
+    let base = config.catalog_endpoint.trim_end_matches('/');
+    let mut u = url::Url::parse(&format!("{base}/catalog/v1/config"))
+        .with_context(|| format!("Invalid catalog endpoint: {}", config.catalog_endpoint))?;
+    u.query_pairs_mut()
+        .append_pair("warehouse", &config.warehouse);
+    Ok(u)
 }
 
 /// Result of fetching catalog configuration from Lakekeeper.
@@ -803,13 +812,12 @@ pub async fn get_warehouse_prefix(config: &LakehouseConfig) -> Result<CatalogCon
         .timeout(Duration::from_secs(10))
         .build()?;
 
-    let base = config.catalog_endpoint.trim_end_matches('/');
-    let config_url = format!("{}/catalog/v1/config?warehouse={}", base, config.warehouse);
+    let config_url = catalog_config_url(config)?;
 
     tracing::debug!(url = %config_url, warehouse = %config.warehouse, project_id = %project_id, "Getting catalog config");
 
     let resp = client
-        .get(&config_url)
+        .get(config_url)
         .header("X-Project-Id", &project_id)
         .send()
         .await
@@ -1185,6 +1193,102 @@ mod tests {
         assert_eq!(request.storage_profile.region, "eu-central-1");
         assert_eq!(request.storage_profile.endpoint, "http://rustfs:9000");
         assert_eq!(request.storage_profile.bucket, "test-bucket");
+    }
+
+    #[test]
+    fn warehouse_request_uses_configured_name_not_the_default() {
+        let config = custom_region_config("eu-central-1");
+        let request = build_create_warehouse_request(&config);
+        assert_eq!(request.warehouse_name, "test-warehouse");
+        let body = serde_json::to_value(&request).unwrap();
+        assert_eq!(body["warehouse-name"], "test-warehouse");
+    }
+
+    #[test]
+    fn catalog_config_url_targets_the_configured_warehouse_with_encoding() {
+        let mut config = custom_region_config("eu-central-1");
+        assert_eq!(
+            catalog_config_url(&config).unwrap().as_str(),
+            "http://127.0.0.1:8181/catalog/v1/config?warehouse=test-warehouse"
+        );
+        // Trailing slash on the endpoint does not double up.
+        config.catalog_endpoint = "http://127.0.0.1:8181/".into();
+        assert_eq!(
+            catalog_config_url(&config).unwrap().as_str(),
+            "http://127.0.0.1:8181/catalog/v1/config?warehouse=test-warehouse"
+        );
+        // A name that needs encoding survives request construction intact.
+        config.warehouse = "team a/ä&b=c".into();
+        let u = catalog_config_url(&config).unwrap();
+        assert_eq!(u.query(), Some("warehouse=team+a%2F%C3%A4%26b%3Dc"), "{u}");
+        let (_, decoded) = u.query_pairs().next().unwrap();
+        assert_eq!(decoded, "team a/ä&b=c");
+    }
+
+    /// Before v0.3.1 `ensure_warehouse` matched and created the constant
+    /// `anti-entropator` regardless of `ANTI_ENTROPATOR_WAREHOUSE`, while the
+    /// catalog config lookup used the configured name: `init` on a
+    /// non-default warehouse created the wrong one and then failed to find it.
+    #[tokio::test]
+    async fn ensure_warehouse_matches_and_creates_the_configured_name() {
+        // Case 1: only the default-named warehouse exists -> must create ours.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (post_tx, post_rx) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut list_socket, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut list_socket).await;
+            write_json_response(
+                &mut list_socket,
+                "200 OK",
+                r#"{"warehouses":[{"name":"anti-entropator"}]}"#,
+            )
+            .await;
+            drop(list_socket);
+
+            let (mut create_socket, _) = listener.accept().await.unwrap();
+            let create_request = read_http_request(&mut create_socket).await;
+            let _ = post_tx.send(create_request);
+            write_json_response(&mut create_socket, "201 Created", "{}").await;
+        });
+        let mut config = custom_region_config("eu-central-1");
+        config.catalog_endpoint = format!("http://{addr}");
+        let created = ensure_warehouse(&config, "project-id").await.unwrap();
+        assert!(
+            created,
+            "default-named warehouse must not satisfy a custom name"
+        );
+        let post = post_rx.await.unwrap();
+        assert!(
+            post.contains(r#""warehouse-name":"test-warehouse""#),
+            "create body must carry the configured name, got:\n{post}"
+        );
+        assert!(!post.contains(r#""warehouse-name":"anti-entropator""#));
+        server.await.unwrap();
+
+        // Case 2: ours exists (next to the default) -> idempotent, no POST.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (mut list_socket, _) = listener.accept().await.unwrap();
+            let _ = read_http_request(&mut list_socket).await;
+            write_json_response(
+                &mut list_socket,
+                "200 OK",
+                r#"{"warehouses":[{"name":"anti-entropator"},{"name":"test-warehouse"}]}"#,
+            )
+            .await;
+            // Any second connection would be an unexpected create.
+            let second =
+                tokio::time::timeout(std::time::Duration::from_millis(300), listener.accept())
+                    .await;
+            assert!(second.is_err(), "no create request expected");
+        });
+        let mut config = custom_region_config("eu-central-1");
+        config.catalog_endpoint = format!("http://{addr}");
+        let created = ensure_warehouse(&config, "project-id").await.unwrap();
+        assert!(!created);
+        server.await.unwrap();
     }
 
     #[tokio::test]
