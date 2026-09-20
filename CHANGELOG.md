@@ -37,6 +37,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Release path: `container-verify` gains an opt-in `app-smoke` input, enabled
+  in `release.yml` for `verify-container` and `publish-container`. It runs
+  `init -> ingest -> query` with the built image against an ephemeral green
+  Compose slot (`scripts/delivery-sim.sh deploy green <image>
+  --ephemeral-env`) before the Trivy scan and destroys the slot afterwards, so
+  the image object that is scanned and pushed has executed the end-to-end
+  path (Stack Tests cover cargo-built binaries only). The smoke log is
+  uploaded as `<artifact>-app-smoke`. `security.yml` is unchanged (`--help`
+  smoke).
+
 - CI: reusable `Stack Tests` workflow starts the Compose stack (RustFS,
   Postgres, Lakekeeper) with per-run throwaway credentials and runs the
   Docker-gated CLI tests serialized. Required on code changes in `ci.yml`

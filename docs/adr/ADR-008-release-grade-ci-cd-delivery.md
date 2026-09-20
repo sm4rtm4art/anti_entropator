@@ -47,7 +47,12 @@ Implemented today:
   Docker-gated CLI tests (`stack-tests.yml`, fresh Compose stack with
   throwaway credentials) are a further gate; `publish-container` and
   `verify-container` depend on it. They were `#[ignore]`-only on the `v0.3.0`
-  tag.
+  tag. Amended 2026-09-20: the container smoke is no longer `--help` only; on
+  the release path `container-verify` runs `init -> ingest -> query` with the
+  built image against an ephemeral Compose slot (`scripts/delivery-sim.sh
+  deploy green <image> --ephemeral-env`) before Trivy, so the image object that
+  is scanned and pushed has executed the end-to-end path. Stack tests exercise
+  cargo-built binaries; this closes the gap for the published artifact.
 - Release-tag container images never rebuild between scan and push. Amended
   2026-06-24: the earlier three-job tarball handoff (`verify-container` ->
   `prepare-container-publish` -> `push-container`) was flattened into two in-job
