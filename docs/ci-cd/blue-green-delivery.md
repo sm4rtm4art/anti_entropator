@@ -60,6 +60,13 @@ S5-C Slice D implements the delivery simulation with:
   (`anti_entropator_<slot>_rustfs-data`). Until v0.3.1 the override
   bind-mounted `./data/<slot>/rustfs:/data`, which replaced the named volume
   and reintroduced the Docker Desktop failure `docker-compose.yml` documents.
+
+  **Upgrading a slot deployed before v0.3.1:** its objects are still under
+  `./data/<slot>/rustfs` while its catalog (Postgres, still bind-mounted)
+  references them. `deploy` detects a non-empty legacy directory and refuses
+  with the two options printed: `down <slot> --destroy-data` for a disposable
+  slot, or copy the directory into the named volume and move it aside. It
+  does not migrate automatically.
 - `scripts/delivery-sim.sh` as the orchestration helper for deploy/smoke,
   promotion, rollback marker handling, and teardown.
 

@@ -177,6 +177,52 @@ remove_slot_tree() {
     fi
 }
 
+rustfs_volume_name() {
+    # Compose scopes the base file's `rustfs-data` volume per project.
+    local project_name="$1"
+    echo "${project_name}_rustfs-data"
+}
+
+# Before v0.3.1 the delivery override bind-mounted ./data/<slot>/rustfs on
+# /data. Deploying over such a slot would start RustFS on the empty named
+# volume while the slot's Postgres (still bind-mounted) holds Iceberg
+# metadata that points at objects under the old directory. Nothing is lost,
+# but the slot would be broken, so deploy refuses until the operator has
+# chosen: reset the slot, or move the objects into the volume.
+refuse_legacy_rustfs_data() {
+    local slot="$1"
+    local project_name="$2"
+    local legacy_dir volume
+    legacy_dir="$(slot_data_root "$slot")/rustfs"
+    volume="$(rustfs_volume_name "$project_name")"
+    [[ -d "$legacy_dir" ]] || return 0
+    if [[ -z "$(ls -A "$legacy_dir" 2>/dev/null)" ]]; then
+        # Empty leftover from prepare_slot_directories of an older version.
+        rmdir "$legacy_dir" 2>/dev/null || true
+        return 0
+    fi
+    cat >&2 <<EOF
+Slot '${slot}' has RustFS data from before v0.3.1 at:
+  ${legacy_dir}
+RustFS now stores slot data on the named volume '${volume}'. Deploying would
+start with an empty store while the slot's catalog still references these
+objects. Choose one:
+
+  Disposable slot (drop its catalog, objects, and record):
+    scripts/delivery-sim.sh down ${slot} --destroy-data
+
+  Keep the slot's data (copy objects into the volume, then move the old
+  directory out of the way; run with the slot stopped):
+    docker volume create ${volume}
+    docker run --rm -v "${legacy_dir}:/from:ro" -v "${volume}:/to" alpine:3 \\
+      sh -c 'cp -a /from/. /to/ && chown -R 10001:10001 /to'
+    mv "${legacy_dir}" "${legacy_dir}.migrated-\$(date +%Y%m%d)"
+
+Then run deploy again.
+EOF
+    return 1
+}
+
 compose_cmd() {
     local project_name="$1"
     shift
@@ -320,9 +366,10 @@ cmd_deploy() {
     fi
     set_slot_ports "$slot"
     set_runtime_env_defaults
+    project_name="$(project_name_for_slot "$slot")"
+    refuse_legacy_rustfs_data "$slot" "$project_name"
     prepare_slot_directories "$slot"
 
-    project_name="$(project_name_for_slot "$slot")"
     compose_cmd "$project_name" up -d --wait
     run_smoke "$slot" "$image" "$project_name"
     digest="$(image_identity "$image")"
