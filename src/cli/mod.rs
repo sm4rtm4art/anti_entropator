@@ -161,13 +161,24 @@ pub struct ScanArgs {
     #[arg(long)]
     pub limit: Option<usize>,
 
-    /// Output format
+    /// Output format. Scan has one output; other values are rejected.
     #[arg(long, value_enum, default_value = "table")]
-    pub format: OutputFormat,
+    pub format: ScanOutputFormat,
 
-    /// Dry run - show what would be done without making changes
+    /// No effect: scan is read-only and never writes. Accepted so existing
+    /// `scan --dry-run` invocations keep working.
     #[arg(long)]
     pub dry_run: bool,
+}
+
+/// The only output `scan` produces. A separate enum from [`OutputFormat`] so
+/// clap rejects `json`/`markdown` instead of the command silently ignoring
+/// them (which it did until v0.3.1).
+#[derive(clap::ValueEnum, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ScanOutputFormat {
+    /// Human-readable summary
+    #[default]
+    Table,
 }
 
 #[derive(Parser, Debug)]

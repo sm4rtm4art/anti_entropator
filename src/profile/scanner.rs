@@ -254,7 +254,7 @@ pub async fn scan(
 
         estimate.size_candidate_groups = size_candidates.len() as u64;
 
-        // Quick-hash candidates to confirm
+        // Quick-hash the size candidates (first 64 KiB, capped)
         let mut quickhash_groups: HashMap<(u64, String), Vec<String>> = HashMap::new();
         let mut files_hashed = 0;
         let mut hash_errors = 0;
@@ -285,9 +285,19 @@ pub async fn scan(
         }
 
         estimate.files_hashed = files_hashed as u64;
+        estimate.hash_cap = Some(options.max_hash_files as u64);
         estimate.hash_errors = hash_errors;
+        // What the cap actually skipped: every size-candidate file was either
+        // hashed, failed, or never reached.
+        let candidate_files: u64 = size_candidates
+            .iter()
+            .map(|(_, paths)| paths.len() as u64)
+            .sum();
+        estimate.files_not_examined =
+            candidate_files.saturating_sub(files_hashed as u64 + hash_errors);
 
-        // Confirmed duplicate groups
+        // Quick-hash candidate groups: equal size and equal first 64 KiB.
+        // Not verified duplicates; the tail was not read.
         let mut confirmed: Vec<((u64, String), Vec<String>)> = quickhash_groups
             .into_iter()
             .filter(|(_, paths)| paths.len() > 1)
@@ -383,6 +393,101 @@ mod tests {
             result.is_empty(),
             "meaningful name should not match any pattern"
         );
+    }
+
+    /// The quick hash reads only the first 64 KiB. Two files of equal size
+    /// that agree there and differ in the tail are *not* duplicates, yet they
+    /// form a quick-hash group: the estimate must present such a group as a
+    /// candidate and its bytes as an upper bound, never as confirmed.
+    #[tokio::test]
+    async fn equal_prefix_different_tail_is_a_candidate_group_not_a_duplicate() {
+        let dir = tempfile::tempdir().unwrap();
+        let prefix = vec![0xABu8; 64 * 1024];
+        let mut a = prefix.clone();
+        a.extend_from_slice(b"tail-one");
+        let mut b = prefix;
+        b.extend_from_slice(b"tail-two");
+        assert_eq!(a.len(), b.len());
+        assert_ne!(a, b);
+        std::fs::write(dir.path().join("a.bin"), &a).unwrap();
+        std::fs::write(dir.path().join("b.bin"), &b).unwrap();
+
+        let options = ScanOptions {
+            detect_mime: false,
+            detect_duplicates: true,
+            max_hash_files: 10,
+        };
+        let result = scan(dir.path(), &options, None).await.unwrap();
+        let est = &result.duplicate_estimate;
+
+        assert_eq!(est.size_candidate_groups, 1);
+        assert_eq!(
+            est.quickhash_confirmed_groups, 1,
+            "same size and same first 64 KiB form one quick-hash group"
+        );
+        assert_eq!(
+            est.reclaimable_bytes,
+            a.len() as u64,
+            "counted as an upper bound although the files differ"
+        );
+        assert_eq!(est.files_hashed, 2);
+        assert_eq!(est.hash_cap, Some(10));
+        assert_eq!(est.files_not_examined, 0, "both candidates were examined");
+        // The full-content hashes differ: this is why the group is a candidate.
+        assert_ne!(
+            crate::file_hash::full_sha256(&dir.path().join("a.bin")).unwrap(),
+            crate::file_hash::full_sha256(&dir.path().join("b.bin")).unwrap()
+        );
+    }
+
+    /// The cap message must rest on a count of skipped candidates, not on
+    /// `files_hashed == cap`: an exactly exhausted candidate set reaches the
+    /// cap with nothing left, and a cap of zero examines nothing.
+    #[tokio::test]
+    async fn cap_reports_only_the_candidates_it_actually_skipped() {
+        let dir = tempfile::tempdir().unwrap();
+        // Two size groups of two files each: four size-candidate files.
+        for (name, content) in [
+            ("a1", "same-a"),
+            ("a2", "same-a"),
+            ("b1", "same-b!"),
+            ("b2", "same-b!"),
+        ] {
+            std::fs::write(dir.path().join(name), content).unwrap();
+        }
+        let opts = |cap| ScanOptions {
+            detect_mime: false,
+            detect_duplicates: true,
+            max_hash_files: cap,
+        };
+
+        // Exactly exhausted: cap == candidate count, nothing skipped.
+        let est = scan(dir.path(), &opts(4), None)
+            .await
+            .unwrap()
+            .duplicate_estimate;
+        assert_eq!((est.files_hashed, est.hash_cap), (4, Some(4)));
+        assert_eq!(est.files_not_examined, 0);
+        assert_eq!(est.quickhash_confirmed_groups, 2);
+
+        // Truncated: two of four never reached.
+        let est = scan(dir.path(), &opts(2), None)
+            .await
+            .unwrap()
+            .duplicate_estimate;
+        assert_eq!((est.files_hashed, est.hash_cap), (2, Some(2)));
+        assert_eq!(est.files_not_examined, 2);
+
+        // Zero cap: nothing examined, every candidate skipped, and the
+        // recorded cap is a real zero, not "unknown".
+        let est = scan(dir.path(), &opts(0), None)
+            .await
+            .unwrap()
+            .duplicate_estimate;
+        assert_eq!((est.files_hashed, est.hash_cap), (0, Some(0)));
+        assert_eq!(est.files_not_examined, 4);
+        assert_eq!(est.quickhash_confirmed_groups, 0);
+        assert_eq!(est.reclaimable_bytes, 0);
     }
 
     #[cfg(unix)]

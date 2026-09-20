@@ -89,8 +89,10 @@ ingest branch merge, Iceberg maintenance.
   rows (default 1000). Each batch is one Parquet file and one Iceberg
   snapshot. A failed commit stops the run: in-flight files finish, no new file
   starts, earlier batches stay committed, and the run exits non-zero with
-  `status: commit_failed`. Peak memory holds the file list and at most two
-  batches of rows; file bytes are streamed.
+  `status: commit_failed`. Batch success is not run atomicity. Peak memory
+  holds the file list, the source's latest-observation map, and at most two
+  batches of rows; file bytes are streamed, so memory scales with candidate
+  count and history size, not file size.
 - **Mutation-safe CAS upload** (`src/ingest/upload.rs`, ADR-009): a file is
   hashed once, written with OpenDAL `if_not_exists`, and re-hashed while
   streaming; if the bytes changed underneath, the write is aborted and the

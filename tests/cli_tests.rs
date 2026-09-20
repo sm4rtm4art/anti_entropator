@@ -186,6 +186,51 @@ fn scan_help_shows_options() -> Result<()> {
     Ok(())
 }
 
+/// v0.3.1 slice 8: `scan --format json|markdown` was accepted and silently
+/// answered with the table. The default and an explicit `--format table`
+/// keep working; anything else is rejected before the scan starts. The
+/// closing line must not suggest that anything is persisted either way.
+#[test]
+fn scan_keeps_table_format_and_rejects_the_rest() -> Result<()> {
+    let temp = tempdir()?;
+    std::fs::write(temp.path().join("a.txt"), b"x")?;
+    for unsupported in ["json", "markdown", "yaml"] {
+        cmd()?
+            .arg("scan")
+            .arg(temp.path())
+            .args(["--format", unsupported])
+            .assert()
+            .failure()
+            .stderr(predicate::str::contains("invalid value"))
+            .stderr(predicate::str::contains("possible values: table"))
+            .stdout(predicate::str::contains("Scan").not());
+    }
+    for extra in [
+        &[][..],
+        &["--format", "table"][..],
+        &["--dry-run"][..],
+        &["--format", "table", "--dry-run"][..],
+    ] {
+        cmd()?
+            .arg("scan")
+            .arg(temp.path())
+            .args(extra)
+            .assert()
+            .success()
+            .stdout(predicate::str::contains(
+                "Scan is read-only; nothing was written",
+            ))
+            .stdout(predicate::str::contains("persist").not());
+    }
+    cmd()?
+        .args(["scan", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--format"))
+        .stdout(predicate::str::contains("No effect: scan is read-only"));
+    Ok(())
+}
+
 #[test]
 fn scan_nonexistent_path_fails() -> Result<()> {
     cmd()?

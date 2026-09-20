@@ -1,6 +1,5 @@
 ---
 source: src/profile/output.rs
-assertion_line: 424
 expression: report
 ---
 # Anti-Entropator Swamp Profile
@@ -25,8 +24,9 @@ expression: report
 ## Duplicate Estimate
 
 - **Size-candidate groups:** 0
-- **Confirmed groups:** 0
-- **Estimated reclaimable:** 0 B
+- **Quick-hash candidate groups:** 0 (first 64 KiB match; not full-content verified)
+- **Files quick-hashed:** 0
+- **Reclaimable (upper bound, examined files only):** 0 B
 
 ## Largest Files
 
