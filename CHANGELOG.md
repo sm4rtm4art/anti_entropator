@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-09-20
+
 ### Fixed
 
 - Docker-gated `ingest_then_query_flow` reads the 9 MiB multipart object back
@@ -330,6 +332,7 @@ branch merge are v0.5.0+.
 - Iceberg catalog commit integration
 
 [Unreleased]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.3.0...HEAD
+[0.3.1]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/sm4rtm4art/anti_entropator/releases/tag/v0.1.0

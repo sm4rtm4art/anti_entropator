@@ -36,6 +36,7 @@ profile says otherwise.
 | Docs standards | `.cursor/rules/docs-standards.mdc` |
 | Docker/CI standards | `.cursor/rules/docker-ci-standards.mdc` |
 | S1 baseline evidence | `.local/2026-05-04-s1-baseline.md` |
+| v0.3.1 release candidate evidence | `docs/evidence/v0.3.1-release-candidate.md` |
 
 ## Repository Map
 
