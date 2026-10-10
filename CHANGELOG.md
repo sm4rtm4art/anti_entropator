@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   files with identical content inside one folder as separate uploads; the
   real ingest deduplicates them.
 
+### Changed
+
+- Pre-commit hook runs `markdownlint-cli2` when staged files include
+  `.md`/`.mdc` (skipped with a notice if the tool is not installed), so
+  markdown lint failures surface before CI.
+
 ## [0.3.1] - 2026-09-20
 
 ### Fixed
