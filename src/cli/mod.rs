@@ -63,7 +63,8 @@ pub enum Commands {
     /// Profile a directory to understand its contents (read-only, no Docker required)
     Profile(ProfileArgs),
 
-    /// Run preflight checks (Docker, endpoints, credentials, external tools)
+    /// Run preflight checks (Docker, endpoint reachability, credentials present in the
+    /// environment but not validated, external tools)
     Doctor,
 
     /// Check if the lakehouse stack is running and reachable

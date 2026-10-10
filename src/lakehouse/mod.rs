@@ -492,6 +492,15 @@ async fn ensure_project(config: &LakehouseConfig) -> Result<(String, bool)> {
     }
 }
 
+/// Whether an unauthenticated `GET` status proves the RustFS endpoint is up.
+///
+/// 403 counts: the server answered but refused the anonymous request. That
+/// says nothing about the configured credentials, so only the reachability
+/// checks may use this; credential claims belong to the credential check.
+pub(crate) fn rustfs_status_is_reachable(status: reqwest::StatusCode) -> bool {
+    status.is_success() || status == reqwest::StatusCode::FORBIDDEN
+}
+
 async fn check_rustfs(config: &LakehouseConfig) -> Result<()> {
     tracing::debug!(endpoint = %config.s3_endpoint, "Checking RustFS connectivity");
 
@@ -505,8 +514,7 @@ async fn check_rustfs(config: &LakehouseConfig) -> Result<()> {
         .await
         .context("Cannot connect to RustFS")?;
 
-    // 403 is expected without auth but means server is up
-    if resp.status().is_success() || resp.status().as_u16() == 403 {
+    if rustfs_status_is_reachable(resp.status()) {
         tracing::debug!("RustFS is available");
         Ok(())
     } else {
@@ -1022,6 +1030,18 @@ async fn create_file_catalog_table(config: &LakehouseConfig) -> Result<bool> {
 mod tests {
     use super::*;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    #[test]
+    fn forbidden_counts_as_reachable_but_other_errors_do_not() {
+        use reqwest::StatusCode;
+        assert!(rustfs_status_is_reachable(StatusCode::OK));
+        assert!(rustfs_status_is_reachable(StatusCode::FORBIDDEN));
+        assert!(!rustfs_status_is_reachable(StatusCode::UNAUTHORIZED));
+        assert!(!rustfs_status_is_reachable(StatusCode::NOT_FOUND));
+        assert!(!rustfs_status_is_reachable(
+            StatusCode::INTERNAL_SERVER_ERROR
+        ));
+    }
 
     async fn read_http_request(socket: &mut tokio::net::TcpStream) -> String {
         let mut request = Vec::new();
