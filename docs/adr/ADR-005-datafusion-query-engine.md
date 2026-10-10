@@ -38,8 +38,9 @@ We will use **Apache DataFusion** as the query engine.
 - `query` runs one SQL statement per invocation over
   `iceberg.anti_entropator.file_catalog` using `iceberg-datafusion` for the
   catalog provider and `object_store_opendal` for Parquet reads (ADR-006).
-- The `FROM files` / `JOIN files` shorthand is rewritten by the CLI to the
-  qualified name; nothing else is rewritten.
+- `files` is registered as an alias table for the qualified name
+  (`register_files_alias` in `src/query/mod.rs`). SQL text is not rewritten:
+  string literals, comments, and CTEs named `files` are left untouched.
 - An interactive SQL REPL is not implemented. Output is a printed record
   batch; format options (JSON/CSV) are roadmap work.
 
@@ -48,10 +49,10 @@ We will use **Apache DataFusion** as the query engine.
 Canonical Iceberg identity (Lakekeeper): namespace `anti_entropator`, table
 `file_catalog` → `iceberg.anti_entropator.file_catalog`.
 
-The `query` command optionally rewrites `FROM files` / `JOIN files` to that
-qualified name. Prefer the Iceberg identity in design docs; use `files` only
-as labeled CLI sugar. Do not present bare `FROM file_catalog` as the primary
-form (it is not rewritten).
+The `query` command registers `files` as an alias table for that qualified
+name; SQL text is not rewritten. Prefer the Iceberg identity in design docs;
+use `files` only as labeled CLI sugar. Do not present bare
+`FROM file_catalog` as the primary form (it is not registered).
 
 ```sql
 -- Find all duplicates (CLI shorthand)
