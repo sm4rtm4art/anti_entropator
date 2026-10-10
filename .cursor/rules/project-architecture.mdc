@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Architecture Guard Rails
 
-Phase: `v0.3.1` released 2026-09-20; v0.4.0 planning.
+Phase: `v0.3.1` released 2026-09-20; v0.3.2 patch in progress; v0.4.0 planned.
 
 ## Stack (do not substitute)
 
@@ -18,7 +18,7 @@ Phase: `v0.3.1` released 2026-09-20; v0.4.0 planning.
 | Catalog DB | Postgres (Lakekeeper backend only) | SQLite; CLI/query must not use Postgres |
 | Local orchestration | Docker Compose | Kubernetes; bare `docker run` as docs default |
 | SQL queries | DataFusion (over Iceberg) | Direct Postgres queries |
-| Pipeline engine | Single procedural engine; bounded `tokio` stages planned (M4) | `dataflow-rs` (ADR-007 superseded: it is a JSONLogic rules engine), `--engine`, any second engine |
+| Pipeline engine | Single procedural engine; bounded `tokio` worker pool + batched commit stage (shipped v0.3.0, `src/ingest/pipeline.rs`); per-stage tracing is planned | `dataflow-rs` (ADR-007 superseded: it is a JSONLogic rules engine), `--engine`, any second engine |
 
 ## Lakehouse identity
 
@@ -43,7 +43,7 @@ Allowed adapters over that operator: `object_store_opendal`,
 ## Hard Stops
 
 - Do not add MinIO, Nessie, JVM deps, or Kubernetes guidance for v0.3.
-- Do not present planned features as implemented (bounded stage concurrency, SQL REPL, etc.).
+- Do not present planned features as implemented (per-stage tracing/event schema, SQL REPL, maintenance commands, etc.).
 - Do not reintroduce `dataflow-rs` or a dual-engine `--engine` switch; ADR-007 is superseded.
 - Do not bypass OpenDAL for object-store read, write, list, head, or delete.
 

@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Docs and agent rules truth pass: architecture rule no longer lists bounded
+  stage concurrency as planned (it shipped in v0.3.0); `AGENTS.md` phase and
+  active-plan pointers updated; `docs/ROADMAP-v0.3.0.md` marked closed and
+  historical.
+
 ## [0.3.1] - 2026-09-20
 
 ### Fixed
