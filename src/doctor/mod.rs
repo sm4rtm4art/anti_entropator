@@ -2,6 +2,8 @@
 //!
 //! Verifies that all required services and tools are available and configured.
 
+use crate::config::LakehouseConfig;
+use crate::lakehouse::validate_s3_credentials;
 use anyhow::Result;
 use console::{style, Emoji};
 use std::process::Command;
@@ -97,6 +99,10 @@ pub async fn run() -> Result<()> {
     println!("{} Checking Docker...", INFO);
     results.push(check_docker().await);
 
+    // Check credentials are present in the environment (not their validity)
+    println!("{} Checking S3 credentials in the environment...", INFO);
+    results.push(check_credentials(&LakehouseConfig::default()));
+
     // Check RustFS
     println!("{} Checking RustFS (S3)...", INFO);
     results.push(check_rustfs().await);
@@ -150,8 +156,7 @@ pub async fn run() -> Result<()> {
     } else if has_warnings {
         println!(
             "{}",
-            style("All critical checks passed, but some optional features are unavailable.")
-                .yellow()
+            style("All critical checks passed; review the warnings above.").yellow()
         );
     } else {
         println!(
@@ -181,6 +186,19 @@ async fn check_docker() -> CheckResult {
             "Docker",
             "Docker is not installed",
             "Install Docker from https://docs.docker.com/get-docker/",
+        ),
+    }
+}
+
+/// Check that S3 credentials are set. Presence only: the RustFS reachability
+/// check below is unauthenticated, so wrong values surface in `init`.
+fn check_credentials(config: &LakehouseConfig) -> CheckResult {
+    match validate_s3_credentials(config) {
+        Ok(()) => CheckResult::ok("Credentials", "S3 credentials are set in the environment"),
+        Err(_) => CheckResult::error(
+            "Credentials",
+            "RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY are not set in the environment",
+            "The CLI does not read .env; run `set -a; source .env; set +a` or use the Makefile targets",
         ),
     }
 }
@@ -434,5 +452,33 @@ mod tests {
         ];
         let err = doctor_outcome(&results).unwrap_err();
         assert!(err.to_string().contains("failed"));
+    }
+
+    fn config_with_credentials(access: &str, secret: &str) -> LakehouseConfig {
+        LakehouseConfig {
+            s3_access_key: access.to_string(),
+            s3_secret_key: secret.to_string(),
+            ..LakehouseConfig::default()
+        }
+    }
+
+    #[test]
+    fn credentials_check_passes_when_both_keys_are_set() {
+        let result = check_credentials(&config_with_credentials("key", "secret"));
+        assert_eq!(result.status, CheckStatus::Ok);
+    }
+
+    #[test]
+    fn missing_credentials_fail_doctor_with_an_export_hint() {
+        for (access, secret) in [("", "secret"), ("key", ""), ("  ", "  ")] {
+            let result = check_credentials(&config_with_credentials(access, secret));
+            assert_eq!(result.status, CheckStatus::Error, "{access:?}/{secret:?}");
+            assert!(result
+                .suggestion
+                .as_deref()
+                .unwrap()
+                .contains("source .env"));
+            assert!(doctor_outcome(&[result]).is_err());
+        }
     }
 }

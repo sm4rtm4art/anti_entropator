@@ -1,11 +1,24 @@
 SHELL := /bin/bash
 
 DOWNLOADS ?= $(HOME)/Downloads
+# Extra CLI flags, e.g. ARGS="--source downloads --include '*.pdf'"
+ARGS ?=
 # Iceberg table is file_catalog. `files` is a CLI alias `query` registers for
 # iceberg.anti_entropator.file_catalog (see src/query/mod.rs).
 QUERY ?= SELECT * FROM files LIMIT 10
 
-.PHONY: help setup up down doctor init profile scan ingest-dry-run ingest query fmt clippy test check docs-shell
+# The CLI reads credentials from the environment only; export .env for it.
+WITH_ENV := set -a; if [ -f .env ]; then . ./.env; fi; set +a;
+
+TARGETS := help setup up down doctor init profile scan ingest-dry-run ingest query fmt clippy test check docs-shell
+.PHONY: $(TARGETS)
+
+# `make scan ~/Documents` would treat the path as a target and silently scan
+# $(DOWNLOADS); fail instead.
+UNKNOWN_GOALS := $(filter-out $(TARGETS),$(MAKECMDGOALS))
+ifneq ($(UNKNOWN_GOALS),)
+$(error Unknown target(s): $(UNKNOWN_GOALS). Pass a folder as DOWNLOADS=<path> and CLI flags as ARGS="...")
+endif
 
 help:
 	@echo "Anti-Entropator local commands"
@@ -23,6 +36,10 @@ help:
 	@echo "  make ingest-dry-run Preview ingest DOWNLOADS=$(DOWNLOADS)"
 	@echo "  make ingest         Ingest DOWNLOADS=$(DOWNLOADS)"
 	@echo "  make query          Run QUERY='$(QUERY)'"
+	@echo ""
+	@echo "  Folder and flags are variables, not arguments:"
+	@echo "    make ingest DOWNLOADS=~/Desktop ARGS=\"--source desktop --include '*.pdf'\""
+	@echo "  CLI targets export .env automatically."
 	@echo ""
 	@echo "Quality checks:"
 	@echo "  make check          Run fmt, clippy, and tests"
@@ -42,25 +59,25 @@ down:
 	docker compose down
 
 doctor:
-	cargo run -- doctor
+	@$(WITH_ENV) cargo run -- doctor $(ARGS)
 
 init:
-	cargo run -- init
+	@$(WITH_ENV) cargo run -- init $(ARGS)
 
 profile:
-	cargo run --release -- profile "$(DOWNLOADS)"
+	cargo run --release -- profile "$(DOWNLOADS)" $(ARGS)
 
 scan:
-	cargo run -- scan "$(DOWNLOADS)" --dry-run
+	@$(WITH_ENV) cargo run -- scan "$(DOWNLOADS)" --dry-run $(ARGS)
 
 ingest-dry-run:
-	cargo run -- ingest "$(DOWNLOADS)" --dry-run
+	@$(WITH_ENV) cargo run -- ingest "$(DOWNLOADS)" --dry-run $(ARGS)
 
 ingest:
-	cargo run -- ingest "$(DOWNLOADS)"
+	@$(WITH_ENV) cargo run -- ingest "$(DOWNLOADS)" $(ARGS)
 
 query:
-	cargo run -- query "$(QUERY)"
+	@$(WITH_ENV) cargo run -- query "$(QUERY)" $(ARGS)
 
 fmt:
 	cargo fmt --all -- --check

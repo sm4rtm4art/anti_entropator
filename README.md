@@ -47,7 +47,7 @@ local Docker Compose stack.
 | Command      | Status  | What it does                                                    |
 | ------------ | ------- | --------------------------------------------------------------- |
 | `profile`    | Ready   | Read-only directory analysis. No Docker, no writes.               |
-| `doctor`     | Ready   | Preflight checks for Docker, endpoints, credentials, CLI tools.   |
+| `doctor`     | Ready   | Preflight checks: Docker, endpoints, ports, credentials present in the environment, CLI tools. |
 | `up`         | Ready   | Verify the lakehouse services are reachable.                      |
 | `init`       | Ready   | Create bucket, Lakekeeper project/warehouse, namespace, table.    |
 | `scan`       | Ready   | Metadata enrichment without uploading anything.                   |
@@ -181,6 +181,10 @@ make up       # start RustFS, Lakekeeper, and Postgres
 make doctor   # verify health and preflight requirements
 ```
 
+Docker Compose reads `.env`; the CLI does not. The `make` targets export it
+for you. When you call `anti_entropator` directly, export it first:
+`set -a; source .env; set +a`.
+
 ### 3. Initialize the lakehouse
 
 ```bash
@@ -194,7 +198,7 @@ warehouse, the Iceberg namespace, and the `file_catalog` table.
 
 ```bash
 make scan            # enrich metadata, read-only
-make ingest-dry-run  # preview exactly what would be uploaded
+make ingest-dry-run  # preview what would be observed and uploaded
 make ingest          # upload to RustFS and commit to Iceberg
 ```
 
@@ -212,8 +216,14 @@ make query QUERY="SELECT category, COUNT(*) FROM iceberg.anti_entropator.file_ca
 make query QUERY="SELECT category, COUNT(*) FROM files GROUP BY category"
 ```
 
-Point any target at a different folder with `DOWNLOADS=/path/to/folder`, for
-example `make profile DOWNLOADS=~/Desktop`.
+Point any target at a different folder with `DOWNLOADS=/path/to/folder` and
+pass CLI flags with `ARGS`, for example
+`make ingest DOWNLOADS=~/Desktop ARGS="--source desktop --include '*.pdf'"`.
+Positional arguments (`make scan ~/Desktop`) are rejected.
+
+The dry-run preview counts every file whose blob is not yet in the store as an
+upload; files with identical content inside the same folder are deduplicated
+only by the real ingest.
 
 ## Quality and release process
 

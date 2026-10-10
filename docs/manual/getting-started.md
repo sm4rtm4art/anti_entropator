@@ -60,9 +60,16 @@ chown -R 10001:10001 logs/rustfs
 # Start services
 docker compose up -d
 
+# The CLI reads credentials from the environment, not from .env
+# (Docker Compose reads .env; the make targets export it for you)
+set -a; source .env; set +a
+
 # Verify everything is running
 anti_entropator doctor
 ```
+
+`doctor` checks that the credentials are set, not that they are valid; wrong
+values surface in `init`.
 
 ### 3. Initialize the Lakehouse
 
@@ -297,6 +304,15 @@ For local development only:
 - `LAKEKEEPER_AUTHZ_BACKEND=allowall`
 
 ## Troubleshooting
+
+### "Missing S3 credentials" although `.env` is filled in
+
+The CLI does not read `.env`. Export it into the shell, or use the `make`
+targets, which do:
+
+```bash
+set -a; source .env; set +a
+```
 
 ### "Docker daemon is not running"
 
