@@ -47,7 +47,7 @@ local Docker Compose stack.
 | Command      | Status  | What it does                                                    |
 | ------------ | ------- | --------------------------------------------------------------- |
 | `profile`    | Ready   | Read-only directory analysis. No Docker, no writes.               |
-| `doctor`     | Ready   | Preflight checks: Docker, endpoints, ports, credentials present in the environment, CLI tools. |
+| `doctor`     | Ready   | Preflight checks: Docker, endpoint reachability, ports, credentials present in the environment (not validated; `init` finds wrong keys), CLI tools. |
 | `up`         | Ready   | Verify the lakehouse services are reachable.                      |
 | `init`       | Ready   | Create bucket, Lakekeeper project/warehouse, namespace, table.    |
 | `scan`       | Ready   | Metadata enrichment without uploading anything.                   |

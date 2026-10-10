@@ -3,7 +3,7 @@
 //! Verifies that all required services and tools are available and configured.
 
 use crate::config::LakehouseConfig;
-use crate::lakehouse::validate_s3_credentials;
+use crate::lakehouse::{rustfs_status_is_reachable, validate_s3_credentials};
 use anyhow::Result;
 use console::{style, Emoji};
 use std::process::Command;
@@ -194,7 +194,10 @@ async fn check_docker() -> CheckResult {
 /// check below is unauthenticated, so wrong values surface in `init`.
 fn check_credentials(config: &LakehouseConfig) -> CheckResult {
     match validate_s3_credentials(config) {
-        Ok(()) => CheckResult::ok("Credentials", "S3 credentials are set in the environment"),
+        Ok(()) => CheckResult::ok(
+            "Credentials",
+            "S3 credentials are set in the environment (presence only, not validated)",
+        ),
         Err(_) => CheckResult::error(
             "Credentials",
             "RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY are not set in the environment",
@@ -224,9 +227,14 @@ async fn check_rustfs() -> CheckResult {
 
     match client.get(&endpoint).send().await {
         Ok(resp) => {
-            if resp.status().is_success() || resp.status().as_u16() == 403 {
-                // 403 is expected without auth, but means server is up
-                CheckResult::ok("RustFS", format!("RustFS is reachable at {}", endpoint))
+            if rustfs_status_is_reachable(resp.status()) {
+                CheckResult::ok(
+                    "RustFS",
+                    format!(
+                        "RustFS is reachable at {} (credentials are not validated here)",
+                        endpoint
+                    ),
+                )
             } else {
                 CheckResult::warn(
                     "RustFS",
@@ -466,6 +474,11 @@ mod tests {
     fn credentials_check_passes_when_both_keys_are_set() {
         let result = check_credentials(&config_with_credentials("key", "secret"));
         assert_eq!(result.status, CheckStatus::Ok);
+        assert!(
+            result.message.contains("not validated"),
+            "credential check must not claim the keys work: {}",
+            result.message
+        );
     }
 
     #[test]

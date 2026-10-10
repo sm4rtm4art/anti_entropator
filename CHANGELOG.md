@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   registered alias table); `rust-standards.mdc` no longer lists stack tests as
   planned; `AGENTS.md` states what pre-commit and pre-push actually run.
 
+- `doctor`: the RustFS check and `init` now share one reachability rule (HTTP
+  403 means the endpoint is up), and `doctor` says what each check proves:
+  RustFS "reachable, credentials not validated", credentials "set, presence
+  only". Help text and README row say both.
+
 ### Fixed
 
 - Onboarding: the documented setup failed at `init` with "Missing S3
