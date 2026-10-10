@@ -396,9 +396,15 @@ pub async fn init() -> Result<()> {
     Ok(())
 }
 
-fn validate_s3_credentials(config: &LakehouseConfig) -> Result<()> {
+/// The CLI reads credentials from the process environment only; it does not
+/// load `.env` (Docker Compose does, for the containers).
+pub(crate) fn validate_s3_credentials(config: &LakehouseConfig) -> Result<()> {
     if config.s3_access_key.trim().is_empty() || config.s3_secret_key.trim().is_empty() {
-        bail!("Missing S3 credentials. Set RUSTFS_ACCESS_KEY and RUSTFS_SECRET_KEY in .env")
+        bail!(
+            "Missing S3 credentials: RUSTFS_ACCESS_KEY and RUSTFS_SECRET_KEY are not set in the \
+             environment. The CLI does not read .env itself; export it first: \
+             `set -a; source .env; set +a` (the Makefile targets do this)"
+        )
     } else {
         Ok(())
     }
