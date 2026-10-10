@@ -141,9 +141,11 @@ The job is dispatch-only, uses generated non-secret values, and publishes
 nothing. It validates rollout simulation behavior without changing tag-push
 release semantics.
 
-Run `scripts/check-compose-local-bindings.sh` after Compose changes to confirm
-both default and delivery-override rendered configs keep published ports bound
-to localhost and preserve the expected service/target/published port mappings.
+`scripts/check-compose-local-bindings.sh` runs in the Docs & Shell Quality CI
+job on every Compose change (run it locally too). It confirms both default and
+delivery-override rendered configs keep published ports bound to localhost,
+preserve the expected service/target/published port mappings, and do not
+bind-mount RustFS `/data` (it must stay on the named volume).
 
 ## Health Check Gates
 
