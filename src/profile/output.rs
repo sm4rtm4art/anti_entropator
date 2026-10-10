@@ -112,7 +112,7 @@ fn print_extension_table(result: &ProfileResult, decimal: bool) -> Result<()> {
 }
 
 fn print_category_table(result: &ProfileResult, decimal: bool) -> Result<()> {
-    println!("─── By Category ────────────────────────────────────────────────");
+    println!("─── By Category (from file extension) ──────────────────────────");
     println!();
 
     let mut table = Table::new();

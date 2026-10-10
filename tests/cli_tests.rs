@@ -114,7 +114,11 @@ fn profile_directory_with_files_shows_stats() -> Result<()> {
         .assert()
         .success()
         .stdout(predicate::str::contains("Files:"))
-        .stdout(predicate::str::contains("3")); // 3 files
+        .stdout(predicate::str::contains("3")) // 3 files
+        // Profile has no MIME type; its categories come from extensions only.
+        .stdout(predicate::str::contains(
+            "By Category (from file extension)",
+        ));
     Ok(())
 }
 

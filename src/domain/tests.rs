@@ -407,3 +407,26 @@ fn file_category_display_all_variants() {
     assert_eq!(format!("{}", FileCategory::Data), "data");
     assert_eq!(format!("{}", FileCategory::Other), "other");
 }
+
+// ==================== FileCategory::classify ====================
+
+#[test]
+fn classify_without_mime_follows_the_extension() {
+    assert_eq!(FileCategory::classify("pdf", None), FileCategory::Document);
+    assert_eq!(FileCategory::classify(".MP4", None), FileCategory::Video);
+    assert_eq!(FileCategory::classify("", None), FileCategory::Other);
+}
+
+#[test]
+fn classify_with_mime_follows_the_mime_even_when_the_extension_disagrees() {
+    // A `.txt` file that is really a JPEG: MIME wins.
+    assert_eq!(
+        FileCategory::classify("txt", Some("image/jpeg")),
+        FileCategory::Image
+    );
+    // And the reverse: an unknown MIME does not fall back to the extension.
+    assert_eq!(
+        FileCategory::classify("pdf", Some("application/octet-stream")),
+        FileCategory::Other
+    );
+}

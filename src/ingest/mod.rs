@@ -534,7 +534,7 @@ fn collect_files(path: &Path, args: &IngestArgs) -> Result<Vec<std::path::PathBu
                 .map(|e| e.to_string_lossy().to_lowercase())
                 .unwrap_or_default();
 
-            let category = FileCategory::from_extension(&ext).to_string();
+            let category = FileCategory::classify(&ext, None).to_string();
 
             if !types.contains(&category) && !types.contains(&ext) {
                 continue;

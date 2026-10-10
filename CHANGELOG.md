@@ -25,6 +25,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   403 means the endpoint is up), and `doctor` says what each check proves:
   RustFS "reachable, credentials not validated", credentials "set, presence
   only". Help text and README row say both.
+- File category is decided in one place, `FileCategory::classify(extension,
+  mime)`: a MIME type wins when present, otherwise the extension decides.
+  `from_extension` and `from_mime` are private. `ingest --type` and `profile`
+  have no MIME at that point and keep their extension-based behavior; the
+  `profile` category table is now labelled "from file extension". Scan and
+  ingest still store the MIME-derived category.
 
 ### Removed
 
