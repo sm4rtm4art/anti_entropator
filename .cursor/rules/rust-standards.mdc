@@ -105,10 +105,11 @@ is the block objective.
 ## Testing
 
 - Unit-test pure logic in `domain/`, `config/`, `lakehouse/schema.rs`.
-- Container-backed integration tests are planned (S2). Do not add testcontainers
-  until accepted.
-- Until then: keep `#[ignore]` stack tests named and documented; do not claim
-  end-to-end coverage from unit tests alone.
+- Container-backed integration tests run as a CI gate: `#[ignore]` tests in
+  `tests/cli_tests.rs` execute against a Compose stack in
+  `.github/workflows/stack-tests.yml`. Do not add testcontainers until accepted.
+- Keep `#[ignore]` stack tests named and documented; do not claim end-to-end
+  coverage from unit tests alone.
 - Use `tempfile`. No hardcoded machine paths.
 - `#[tokio::test]` for async; `#[test]` for sync.
 - Positive and negative assertions for changed user-facing behavior.

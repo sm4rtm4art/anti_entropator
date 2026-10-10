@@ -103,8 +103,9 @@ only when its behavior, tests, and docs exist.
 - "Done" means behavior, tests, docs, evidence, and PR workflow agree.
 - Keep `Cargo.lock` committed; treat lockfile changes as dependency review.
 - Use conventional commit prefixes (`feat`, `fix`, `chore`, `docs`).
-- V0 = `fmt`, `clippy`, and tests via hooks; each block inherits the S1
-  baseline in `.local/2026-05-04-s1-baseline.md`.
+- V0 = `fmt`, `clippy`, and tests: pre-commit runs fmt, clippy, and a test
+  typecheck (`--no-run`); pre-push runs the full test suite. Each block
+  inherits the S1 baseline in `.local/2026-05-04-s1-baseline.md`.
 - Pre-commit/pre-push hooks count only for checks they actually run. Note gaps
   such as `cargo audit` or coverage in the PR description.
 

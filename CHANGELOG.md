@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Docs: ADR-005 no longer says the CLI rewrites `FROM files` (it is a
+  registered alias table); `rust-standards.mdc` no longer lists stack tests as
+  planned; `AGENTS.md` states what pre-commit and pre-push actually run.
+
 ### Fixed
 
 - Onboarding: the documented setup failed at `init` with "Missing S3
