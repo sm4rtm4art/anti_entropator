@@ -1,8 +1,8 @@
 # Roadmap to v0.3.0
 
-> **Status: closed, historical record.** v0.3.0 shipped 2026-09-18 and v0.3.1
-> on 2026-09-20. Items marked v0.4.0 or later below are superseded by the
-> internal v0.4.0 plan; do not read this file as the current roadmap.
+**Status: closed, historical record.** v0.3.0 shipped 2026-09-18 and v0.3.1
+on 2026-09-20. Items marked v0.4.0 or later below are superseded by the
+internal v0.4.0 plan; do not read this file as the current roadmap.
 
 > **Goal (v0.3.0, re-scoped 2026-09-17):** a **correct local lakehouse for
 > file ingest and query**: one I/O boundary (OpenDAL), ingest that is
