@@ -113,6 +113,10 @@ pub async fn run(args: IngestArgs) -> Result<()> {
                 );
             }
         }
+
+        // A pre-v0.3.0 table would otherwise fail later in the catalog-state
+        // query with an opaque missing-column error.
+        crate::lakehouse::check_table_schema(&config).await?;
     }
 
     // Connected modes share one OpenDAL operator (blobs, journals) and one

@@ -11,19 +11,18 @@ pub const NAMESPACE: &str = "anti_entropator";
 /// The file catalog table name
 pub const FILE_CATALOG_TABLE: &str = "file_catalog";
 
-/// Number of fields in the current schema. Legacy tables created before the
-/// ADR-009 observation columns have [`LEGACY_FIELD_COUNT`] fields.
+/// Number of fields in the current schema. Tables from before v0.3.0 have
+/// [`LEGACY_FIELD_COUNT`] fields and are refused.
 #[cfg(test)]
 pub const FIELD_COUNT: usize = 25;
-/// Field count of tables created before the observation columns were added.
+/// Field count of pre-v0.3.0 tables (before the observation columns); refused.
 #[cfg(test)]
 pub const LEGACY_FIELD_COUNT: usize = 20;
 
 /// Build the file_catalog schema matching FileInfo structure.
 ///
 /// Fields 1-20 are the original catalog columns. Fields 21-25 are the ADR-009
-/// observation columns; they are optional so tables and rows created before
-/// them remain readable, and `init` adds them to existing tables in place.
+/// observation columns (optional).
 pub fn build_file_catalog_schema() -> Result<Schema> {
     let fields = vec![
         Arc::new(NestedField::required(
@@ -166,8 +165,7 @@ pub fn build_file_catalog_schema() -> Result<Schema> {
 /// same id and type. Extra table fields are tolerated (they read as absent).
 ///
 /// The writer builds Arrow batches from the code schema, so a table that lags
-/// behind it (created before the ADR-009 columns) must be upgraded by `init`
-/// before ingest can commit.
+/// behind it (created before v0.3.0) is refused; there is no in-place upgrade.
 pub fn verify_table_schema(table_schema: &Schema) -> Result<()> {
     let expected = build_file_catalog_schema()?;
     let mut missing = Vec::new();
@@ -188,7 +186,9 @@ pub fn verify_table_schema(table_schema: &Schema) -> Result<()> {
 
     if !missing.is_empty() {
         anyhow::bail!(
-            "table schema is missing column(s) {}; run `anti_entropator init` to upgrade it",
+            "table schema is missing column(s) {}: this file_catalog was created \
+             before v0.3.0 and cannot be upgraded in place; reset the stack and \
+             re-ingest (docs/manual/getting-started.md, \"Upgrading from RustFS\")",
             missing.join(", ")
         );
     }
@@ -199,19 +199,6 @@ pub fn verify_table_schema(table_schema: &Schema) -> Result<()> {
         );
     }
     Ok(())
-}
-
-/// Fields from [`build_file_catalog_schema`] that `table_schema` lacks, in
-/// schema order. Used by `init` to evolve legacy tables additively.
-pub fn missing_fields(table_schema: &Schema) -> Result<Vec<Arc<NestedField>>> {
-    let expected = build_file_catalog_schema()?;
-    Ok(expected
-        .as_struct()
-        .fields()
-        .iter()
-        .filter(|f| table_schema.field_by_name(&f.name).is_none())
-        .cloned()
-        .collect())
 }
 
 #[cfg(test)]
@@ -238,8 +225,8 @@ mod tests {
 
     #[test]
     fn observation_fields_are_optional_and_appended() {
-        // ADR-009 columns must be optional (legacy rows have no value) and
-        // must come after the legacy columns with stable ids 21-25.
+        // ADR-009 columns must be optional and come after the original
+        // columns with stable ids 21-25.
         let schema = build_file_catalog_schema().unwrap();
         let fields = schema.as_struct().fields();
         let expected = [
@@ -322,7 +309,9 @@ mod tests {
         assert!(err.contains("missing column(s)"), "{err}");
         assert!(err.contains("source_id"), "{err}");
         assert!(err.contains("observed_at"), "{err}");
-        assert!(err.contains("anti_entropator init"), "{err}");
+        assert!(err.contains("before v0.3.0"), "{err}");
+        assert!(err.contains("re-ingest"), "{err}");
+        assert!(!err.contains("to upgrade it"), "{err}");
     }
 
     #[test]
@@ -354,29 +343,6 @@ mod tests {
         let err = verify_table_schema(&drifted).unwrap_err().to_string();
         assert!(err.contains("does not match"), "{err}");
         assert!(err.contains("run_id"), "{err}");
-    }
-
-    #[test]
-    fn missing_fields_lists_observation_columns_for_legacy_schema() {
-        let missing = missing_fields(&legacy_schema()).unwrap();
-        let names: Vec<&str> = missing.iter().map(|f| f.name.as_str()).collect();
-        assert_eq!(
-            names,
-            [
-                "source_id",
-                "relative_path",
-                "run_id",
-                "observation_status",
-                "observed_at"
-            ]
-        );
-        assert!(missing.iter().all(|f| !f.required));
-    }
-
-    #[test]
-    fn missing_fields_is_empty_for_current_schema() {
-        let schema = build_file_catalog_schema().unwrap();
-        assert!(missing_fields(&schema).unwrap().is_empty());
     }
 
     #[test]

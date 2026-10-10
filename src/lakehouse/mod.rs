@@ -2,7 +2,6 @@
 //!
 //! Handles connectivity to RustFS and Lakekeeper, and initializes the warehouse.
 
-pub mod evolve;
 pub mod schema;
 pub mod writer;
 
@@ -365,20 +364,11 @@ pub async fn init() -> Result<()> {
         }
     }
 
-    // Tables created before the ADR-009 observation columns are upgraded in
-    // place; a current table is verified and left untouched.
+    // Tables created before v0.3.0 lack the ADR-009 columns and are refused;
+    // there is no in-place upgrade.
     print!("  Checking table schema... ");
-    match evolve::ensure_table_schema(&config).await {
-        Ok(added) if added.is_empty() => println!("{}", style("up to date").yellow()),
-        Ok(added) => println!(
-            "{}",
-            style(format!(
-                "added {} column(s): {}",
-                added.len(),
-                added.join(", ")
-            ))
-            .green()
-        ),
+    match check_table_schema(&config).await {
+        Ok(()) => println!("{}", style("up to date").yellow()),
         Err(e) => {
             println!("{}", style(format!("error: {}", e)).red());
             return Err(e);
@@ -944,6 +934,14 @@ async fn create_namespace(config: &LakehouseConfig) -> Result<bool> {
             bail!("Failed to create namespace: {} - {}", status, body);
         }
     }
+}
+
+/// Verify the live `file_catalog` schema against the code schema. Used by
+/// `init` and connected `ingest`; tables from before v0.3.0 are refused.
+pub(crate) async fn check_table_schema(config: &LakehouseConfig) -> Result<()> {
+    let catalog = build_rest_catalog(config).await?;
+    let table = writer::load_table(&catalog).await?;
+    schema::verify_table_schema(table.metadata().current_schema())
 }
 
 /// Create the file_catalog table using direct HTTP (Lakekeeper REST API)

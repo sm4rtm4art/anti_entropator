@@ -115,11 +115,6 @@ pub async fn load_current_state(ctx: &SessionContext, source_id: &str) -> Result
 
 /// How many observation rows the catalog holds for one run. Used to resolve
 /// an interrupted run's unknown commit outcome (ADR-009 slice 4).
-///
-/// The `source_id` predicate is not redundant: data files written before the
-/// observation columns existed have no `run_id`, and iceberg-rust 0.10 cannot
-/// null-fill a `FixedSizeBinary(16)` column for them. `source_id = …` prunes
-/// those files by their (absent) column statistics before they are read.
 pub async fn count_rows_for_run(
     ctx: &SessionContext,
     source_id: &str,

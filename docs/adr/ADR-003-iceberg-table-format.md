@@ -58,10 +58,10 @@ We will use **Apache Iceberg** as the table format for the file catalog.
   time of writing: the original 20 plus the optional ADR-009 observation
   columns with ids 21-25; identifier field `id`). This ADR intentionally does
   not duplicate the field list; an earlier version did and drifted.
-- **Additive evolution is exercised**: `init` adds missing optional columns to
-  an existing table through the Iceberg `UpdateSchema` transaction
-  (`src/lakehouse/evolve.rs`) and verifies the resulting ids and types. The
-  writer refuses to commit into a table that lags behind the code schema.
+- **No in-place evolution**: `init` and the writer verify the live table
+  against the code schema (`verify_table_schema`). Tables from before v0.3.0
+  lack the ADR-009 columns and are refused with reset instructions; the
+  in-place upgrade was removed on 2026-10-10.
 - Unpartitioned; no sort order.
 - The `is_duplicate` / `duplicate_of` columns predate ADR-009. Under ADR-009
   a row is an append-only file observation, and duplicate content is expressed

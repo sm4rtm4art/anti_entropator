@@ -228,17 +228,10 @@ How an upload is made safe:
   the object's `sha256` metadata when present). A mismatch is reported as an
   error for that file; the stored object is never overwritten.
 
-Tables created before the observation columns existed are upgraded in place
-the next time you run `anti_entropator init`; until then `ingest` stops with
-`run anti_entropator init to upgrade it`. Older rows keep `NULL` in the new
-columns and are observed again once.
-
-Known limitation for such upgraded tables: a query that reads `run_id` over
-those older data files fails with `unexpected target column type
-FixedSizeBinary(16)`, because iceberg-rust 0.10 cannot fill a missing UUID
-column with nulls. Adding `source_id = '<name>'` to the `WHERE` clause prunes
-those files before they are read. Ingest's own reconciliation query does this.
-Tables created by the current `init` are not affected.
+A `file_catalog` created before v0.3.0 is refused by `init` and `ingest` with
+"cannot be upgraded in place". Reset the stack as described in
+[Upgrading from RustFS](#upgrading-from-rustfs-100-beta2-bind-mount-to-100-named-volume)
+and ingest again. Source files are untouched; blobs are uploaded again once.
 
 ### 5. Query Your Catalog
 
