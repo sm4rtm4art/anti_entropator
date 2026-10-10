@@ -207,29 +207,6 @@ impl FileInfo {
     }
 }
 
-/// Lightweight file entry for profiling (minimal memory)
-#[allow(dead_code)] // Kept as lightweight profile DTO scaffold (post-v0.3).
-#[derive(Debug, Clone)]
-pub struct FileEntry {
-    pub path: PathBuf,
-    pub filename: String,
-    pub extension: String,
-    pub size_bytes: u64,
-    pub modified_at: Option<DateTime<Utc>>,
-    pub mime_type: Option<String>,
-}
-
-impl FileEntry {
-    #[allow(dead_code)] // Used by planned profile output extensions.
-    pub fn category(&self) -> FileCategory {
-        if let Some(ref mime) = self.mime_type {
-            FileCategory::from_mime(mime)
-        } else {
-            FileCategory::from_extension(&self.extension)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,47 +426,5 @@ mod tests {
         assert!(json.get("source_id").is_none());
         assert!(json.get("run_id").is_none());
         assert!(json.get("observation_status").is_none());
-    }
-
-    // ── FileEntry ──
-
-    #[test]
-    fn file_entry_category_from_mime() {
-        let entry = FileEntry {
-            path: PathBuf::from("/test/file.dat"),
-            filename: "file.dat".to_string(),
-            extension: ".dat".to_string(),
-            size_bytes: 100,
-            modified_at: None,
-            mime_type: Some("video/mp4".to_string()),
-        };
-        assert_eq!(entry.category(), FileCategory::Video);
-    }
-
-    #[test]
-    fn file_entry_category_falls_back_to_extension() {
-        let entry = FileEntry {
-            path: PathBuf::from("/test/song.mp3"),
-            filename: "song.mp3".to_string(),
-            extension: ".mp3".to_string(),
-            size_bytes: 100,
-            modified_at: None,
-            mime_type: None,
-        };
-        assert_eq!(entry.category(), FileCategory::Audio);
-    }
-
-    #[test]
-    fn file_entry_category_mime_takes_precedence() {
-        let entry = FileEntry {
-            path: PathBuf::from("/test/file.txt"),
-            filename: "file.txt".to_string(),
-            extension: ".txt".to_string(),
-            size_bytes: 100,
-            modified_at: None,
-            mime_type: Some("image/jpeg".to_string()),
-        };
-        // MIME says image, extension says document — MIME wins
-        assert_eq!(entry.category(), FileCategory::Image);
     }
 }
