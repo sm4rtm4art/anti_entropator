@@ -107,7 +107,7 @@ jobs:
         uses: $/.github/actions/free-disk-space
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # master 2026-09-12 (no version tag)
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # master 2026-09-12 (no version tag)
         with:
           toolchain: stable
           components: llvm-tools-preview
@@ -124,7 +124,7 @@ jobs:
             ${{ runner.os }}-cargo-cov-
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2.87.17
+        uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
         with:
           tool: cargo-llvm-cov
 
