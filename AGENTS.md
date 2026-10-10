@@ -6,10 +6,10 @@ Act as a senior Rust engineer on a local-first data lakehouse CLI. Prioritize
 correctness, clear operator behavior, honest docs, small PRs, and repeatable
 evidence over feature volume.
 
-Phase: `v0.3.1` released 2026-09-20; `v0.3.2` patch (onboarding, docs/rules
-truth pass, legacy-catalog fix) in progress; `v0.4.0` ("Know what you have")
-planned in `.local/v0.4.0-plan.md`. Until v0.4.0 work is explicitly started,
-changes are fixes and docs only.
+Phase: `v0.3.2` release candidate prepared 2026-10-10 (onboarding, docs/rules
+truth pass, legacy-catalog fix; tag pending the maintainer); `v0.4.0` ("Know
+what you have") planned in `.local/v0.4.0-plan.md`. Until v0.4.0 work is
+explicitly started, changes are fixes and docs only.
 
 ## Rule Activation
 
@@ -39,6 +39,7 @@ profile says otherwise.
 | Docker/CI standards | `.cursor/rules/docker-ci-standards.mdc` |
 | S1 baseline evidence | `.local/2026-05-04-s1-baseline.md` |
 | v0.3.1 release candidate evidence | `docs/evidence/v0.3.1-release-candidate.md` |
+| v0.3.2 release candidate evidence | `docs/evidence/v0.3.2-release-candidate.md` |
 
 ## Repository Map
 

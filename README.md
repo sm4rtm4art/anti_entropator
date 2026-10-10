@@ -21,7 +21,7 @@ anti_entropator ingest  ~/Downloads --include '*.pdf'
 anti_entropator query   "SELECT category, COUNT(*) FROM iceberg.anti_entropator.file_catalog GROUP BY category"
 ```
 
-> **Status: v0.3.1, early public preview.** The `profile → scan → ingest →
+> **Status: v0.3.2, early public preview.** The `profile → scan → ingest →
 > query` path works end to end. Ingest is idempotent and recoverable: re-running
 > on unchanged input uploads nothing, and an interrupted run is reconciled by
 > the next one. The binary contains only implemented commands; see

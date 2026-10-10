@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-10-10
+
 ### Changed
 
+- Dependencies: `tokio` 1.53.2, `uuid` 1.27.0, `comfy-table` 8.0.1,
+  `test-case` 3.4.0, `tokio-test` 0.4.6, `insta` 1.49.0 (patch and minor,
+  `Cargo.lock` only); CI actions `dtolnay/rust-toolchain` and
+  `taiki-e/install-action` 2.87.21.
 - Docs: ADR-005 no longer says the CLI rewrites `FROM files` (it is a
   registered alias table); `rust-standards.mdc` no longer lists stack tests as
   planned; `AGENTS.md` states what pre-commit and pre-push actually run.
@@ -392,7 +398,8 @@ branch merge are v0.5.0+.
 - `duplicates` - Find and report duplicate files
 - Iceberg catalog commit integration
 
-[Unreleased]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.3.2...HEAD
+[0.3.2]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.3.1...v0.3.2
 [0.3.1]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/sm4rtm4art/anti_entropator/compare/v0.1.0...v0.2.0
