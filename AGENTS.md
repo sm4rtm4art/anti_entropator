@@ -6,8 +6,10 @@ Act as a senior Rust engineer on a local-first data lakehouse CLI. Prioritize
 correctness, clear operator behavior, honest docs, small PRs, and repeatable
 evidence over feature volume.
 
-Phase: `v0.3.1` released 2026-09-20; next is v0.4.0 planning. Until a
-v0.4.0 plan exists, changes are fixes and docs only.
+Phase: `v0.3.1` released 2026-09-20; `v0.3.2` patch (onboarding, docs/rules
+truth pass, legacy-catalog fix) in progress; `v0.4.0` ("Know what you have")
+planned in `.local/v0.4.0-plan.md`. Until v0.4.0 work is explicitly started,
+changes are fixes and docs only.
 
 ## Rule Activation
 
@@ -26,11 +28,11 @@ profile says otherwise.
 
 | Need | Source |
 |---|---|
-| Active execution plan | `.local/v0.3.1.md` |
+| Active execution plan | `.local/v0.4.0-plan.md` (v0.3.2 patch slices, then v0.4.0) |
 | Closed S6A record (v0.3.0 ingest correctness and recovery) | `.local/followup-v0.3-stabilization-plan.md` |
 | Closed S1-S6 stabilization record | `.local/v0.3-stabilization-plan.md` |
 | Archived documentation cleanup record | `.local/v0.3-doc-plan.md` |
-| Release contract | `docs/ROADMAP-v0.3.0.md` |
+| v0.3.0 release contract (closed, historical) | `docs/ROADMAP-v0.3.0.md` |
 | Architecture guard rails | `.cursor/rules/project-architecture.mdc` |
 | Rust standards | `.cursor/rules/rust-standards.mdc` |
 | Docs standards | `.cursor/rules/docs-standards.mdc` |
