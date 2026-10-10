@@ -8,7 +8,7 @@ simulation. Keep this directory flat; do not add nested package layouts.
 | [`install-hooks.sh`](install-hooks.sh) | Copy `hooks/*` into `.git/hooks/` (executable). |
 | [`hooks/pre-commit`](hooks/pre-commit) | Local gate: `fmt`, `clippy`, `cargo test --no-run`. |
 | [`hooks/pre-push`](hooks/pre-push) | Local gate: full `cargo test --all-features`. |
-| [`check-compose-local-bindings.sh`](check-compose-local-bindings.sh) | Assert default/delivery Compose configs keep ports local-only. |
+| [`check-compose-local-bindings.sh`](check-compose-local-bindings.sh) | Assert default/delivery Compose configs keep ports local-only and RustFS `/data` on the named volume (runs in CI). |
 | [`ci-cleanup.sh`](ci-cleanup.sh) | Best-effort runner workspace cleanup (CI / forced local). |
 | [`delivery-sim.sh`](delivery-sim.sh) | Blue/green delivery **simulation** helper (reference, not production). |
 | [`build-and-push.sh`](build-and-push.sh) | Manual GHCR image build/push (needs `GITHUB_TOKEN` with `write:packages`). |

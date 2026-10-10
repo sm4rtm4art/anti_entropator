@@ -11,6 +11,7 @@ on:
       - 'SECURITY.md'
       - 'docs/**'
       - 'scripts/**'
+      - 'docker-compose*.yml'
       - '.github/workflows/docs-shell.yml'
       - '.cursor/rules/**'
       - '.config/lint/**'
@@ -24,6 +25,7 @@ on:
       - 'SECURITY.md'
       - 'docs/**'
       - 'scripts/**'
+      - 'docker-compose*.yml'
       - '.github/workflows/docs-shell.yml'
       - '.cursor/rules/**'
       - '.config/lint/**'
@@ -63,3 +65,9 @@ jobs:
 
       - name: Run shfmt check
         run: shfmt -i 4 -d scripts/ scripts/hooks/
+
+      # `docker compose config` only renders the merged files; no daemon or
+      # stack is started. Fails on non-local port bindings or a RustFS /data
+      # bind mount (default file and delivery override).
+      - name: Check Compose local bindings
+        run: scripts/check-compose-local-bindings.sh

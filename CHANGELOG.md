@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Docs: ADR-005 no longer says the CLI rewrites `FROM files` (it is a
   registered alias table); `rust-standards.mdc` no longer lists stack tests as
   planned; `AGENTS.md` states what pre-commit and pre-push actually run.
+- `scripts/check-compose-local-bindings.sh` now also fails when the `rustfs`
+  service bind-mounts `/data` (default file or delivery override), and the
+  Docs & Shell Quality workflow runs it on Compose changes. Until now the
+  script was never executed by CI, and the bind mount removed in #230 was
+  protected only by a comment.
+- Pre-commit hook runs `markdownlint-cli2` when staged files include
+  `.md`/`.mdc` (skipped with a notice if the tool is not installed), so
+  markdown lint failures surface before CI.
 
 ### Fixed
 
@@ -32,12 +40,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README: the dry-run is no longer described as an exact preview. It counts
   files with identical content inside one folder as separate uploads; the
   real ingest deduplicates them.
-
-### Changed
-
-- Pre-commit hook runs `markdownlint-cli2` when staged files include
-  `.md`/`.mdc` (skipped with a notice if the tool is not installed), so
-  markdown lint failures surface before CI.
 
 ## [0.3.1] - 2026-09-20
 

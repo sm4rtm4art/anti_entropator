@@ -85,9 +85,10 @@ simulation, but defaults the bind host to `127.0.0.1`.
 This allows blue/green-style local slots to use different ports without
 accidentally publishing services on all interfaces.
 
-Run `scripts/check-compose-local-bindings.sh` after compose changes.
-The check renders the default Compose config and fails if any published service
-port is not bound to `127.0.0.1`.
+`scripts/check-compose-local-bindings.sh` runs in CI (Docs & Shell Quality) on
+compose changes; run it locally too. The check renders the default and
+delivery-override Compose configs and fails if any published service port is
+not bound to `127.0.0.1` or if RustFS `/data` is bind-mounted.
 
 ## CI/CD Secret Boundary
 

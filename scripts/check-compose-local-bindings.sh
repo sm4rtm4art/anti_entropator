@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 # Validate that the default and delivery-override Compose configs keep
-# published ports local-only and map the expected published->target ports.
+# published ports local-only, map the expected published->target ports, and
+# keep RustFS data (`/data`) on a named volume. Compose merges volumes by
+# target, so an override that bind-mounts `/data` silently replaces the named
+# volume (RustFS 1.0.0 fails durable renames on macOS bind mounts; see #215,
+# #230).
+#
+# DELIVERY_COMPOSE_FILE overrides the delivery file so a historical revision
+# can be checked without touching the tree.
 set -euo pipefail
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -32,7 +39,7 @@ export RUSTFS_API_PORT="${RUSTFS_API_PORT_GREEN:-9200}"
 export RUSTFS_CONSOLE_PORT="${RUSTFS_CONSOLE_PORT_GREEN:-9210}"
 export POSTGRES_PORT="${POSTGRES_PORT_GREEN:-9300}"
 export LAKEKEEPER_PORT="${LAKEKEEPER_PORT_GREEN:-9100}"
-delivery_config_json="$(docker compose -f docker-compose.yml -f docker-compose.delivery.yml config --format json)"
+delivery_config_json="$(docker compose -f docker-compose.yml -f "${DELIVERY_COMPOSE_FILE:-docker-compose.delivery.yml}" config --format json)"
 
 DEFAULT_CONFIG_JSON="$default_config_json" \
     DELIVERY_CONFIG_JSON="$delivery_config_json" \
@@ -76,6 +83,13 @@ def collect_violations(config_name, config, expected):
                     f"{config_name}::{service_name}: expected published port "
                     f"{published} for target {target}, got {actual.get(target)}"
                 )
+    rustfs = services.get("rustfs", {})
+    for volume in rustfs.get("volumes", []) or []:
+        if volume.get("type") == "bind" and volume.get("target") == "/data":
+            violations.append(
+                f"{config_name}::rustfs: bind mount {volume.get('source')}:/data "
+                "(RustFS data must stay on the named volume)"
+            )
     return violations
 
 default_expected = expected_ports(
@@ -100,19 +114,20 @@ violations.extend(
 )
 
 if violations:
-    print("Compose port bindings violate the local-only contract:", file=sys.stderr)
+    print("Compose config violates the local-only contract:", file=sys.stderr)
     for violation in violations:
         print(f"  - {violation}", file=sys.stderr)
     print(
         "Default/local and delivery-override compose configs must bind "
         "published ports to 127.0.0.1 and keep the expected service port "
-        "mappings. Use a reviewed deployment profile before exposing services.",
+        "mappings, and RustFS /data must stay on the named volume. Use a "
+        "reviewed deployment profile before exposing services.",
         file=sys.stderr,
     )
     sys.exit(1)
 
 print(
     "Compose published ports are bound to 127.0.0.1 with expected mappings "
-    "(default + delivery override)"
+    "and RustFS /data is not bind-mounted (default + delivery override)"
 )
 PY

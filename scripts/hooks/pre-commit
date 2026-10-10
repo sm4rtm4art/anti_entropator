@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Local pre-commit gate: fmt, clippy, cargo test --no-run, and markdownlint
-# when markdown files are staged.
+# Local pre-commit gate: fmt, clippy, a test typecheck (cargo test --no-run),
+# and markdownlint when markdown files are staged. The tests themselves run in
+# the pre-push hook.
 set -euo pipefail
 
 echo "==> pre-commit: cargo fmt --check"
