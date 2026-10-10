@@ -191,7 +191,7 @@ pub async fn scan(
                 .add(size, &path_str);
 
             // Stats by category
-            let category = FileCategory::from_extension(&extension);
+            let category = FileCategory::classify(&extension, None);
             result
                 .by_category
                 .entry(category.to_string())

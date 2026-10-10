@@ -102,7 +102,7 @@ impl FileInfo {
         modified_at: Option<DateTime<Utc>>,
         created_at: Option<DateTime<Utc>>,
     ) -> Self {
-        let category = FileCategory::from_extension(&extension);
+        let category = FileCategory::classify(&extension, None);
 
         Self {
             id: Uuid::new_v4(),
@@ -161,7 +161,7 @@ impl FileInfo {
 
     /// Update category based on MIME type
     pub fn with_mime_type(mut self, mime: String) -> Self {
-        self.category = FileCategory::from_mime(&mime);
+        self.category = FileCategory::classify(&self.extension, Some(&mime));
         self.mime_type = Some(mime);
         self
     }

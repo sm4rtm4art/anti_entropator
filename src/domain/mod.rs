@@ -75,8 +75,20 @@ pub enum FileCategory {
 }
 
 impl FileCategory {
+    /// The one place a category is decided.
+    ///
+    /// A MIME type wins when present; otherwise the extension decides. Callers
+    /// that have no MIME yet (the `ingest --type` walk, `profile`) pass `None`
+    /// and get an extension-based category; `scan` passes the detected MIME.
+    pub fn classify(extension: &str, mime: Option<&str>) -> Self {
+        match mime {
+            Some(mime) => Self::from_mime(mime),
+            None => Self::from_extension(extension),
+        }
+    }
+
     /// Determine category from MIME type
-    pub fn from_mime(mime: &str) -> Self {
+    fn from_mime(mime: &str) -> Self {
         let mime_lower = mime.to_lowercase();
 
         if mime_lower.starts_with("image/") {
@@ -135,7 +147,7 @@ impl FileCategory {
     }
 
     /// Determine category from file extension (fallback)
-    pub fn from_extension(ext: &str) -> Self {
+    fn from_extension(ext: &str) -> Self {
         let ext_lower = ext.to_lowercase();
         let ext_clean = ext_lower.trim_start_matches('.');
 
