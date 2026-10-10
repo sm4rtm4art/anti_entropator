@@ -37,7 +37,7 @@ pub async fn commit_files(files: Vec<FileInfo>, config: &LakehouseConfig) -> Res
     let batch = files_to_batch(&files)?;
 
     // 2. Initialize Catalog & Load Table. The batch was built from the code
-    //    schema; refuse to write into a table that has not been upgraded.
+    //    schema; refuse to write into a table whose schema does not match it.
     let catalog = init_catalog(config).await?;
     let table = load_table(&catalog).await?;
     verify_table_schema(table.metadata().current_schema())?;

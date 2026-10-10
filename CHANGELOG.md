@@ -28,6 +28,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 
+- `init` no longer upgrades pre-v0.3.0 `file_catalog` tables in place. Upgraded
+  tables could not be queried with `SELECT *` (iceberg-rust 0.10 cannot
+  null-fill the missing `run_id` UUID column). Such a table cannot exist after
+  the 0.3.0 upgrade reset and is now refused with reset instructions by `init`
+  and by connected `ingest`, which checks the table schema before reading
+  catalog state (it used to fail there with an opaque missing-column error).
 - Dead code: `Config`, `Config::load` and the unused `ProfileConfig`,
   `IgnoreConfig`, `ExternalToolsConfig` types (no caller; the CLI reads the
   environment only), the unused `FileEntry` scaffold, and the `toml`
