@@ -5,7 +5,7 @@ alwaysApply: true
 
 # Architecture Guard Rails
 
-Phase: `v0.3.1` released 2026-09-20; v0.3.2 patch in progress; v0.4.0 planned.
+Phase: `v0.3.2` release candidate prepared 2026-10-10 (tag pending); v0.4.0 planned.
 
 ## Stack (do not substitute)
 
