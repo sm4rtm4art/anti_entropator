@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Onboarding: the documented setup failed at `init` with "Missing S3
+  credentials. Set ... in .env" although `.env` was filled in. Docker Compose
+  reads `.env`; the CLI reads the process environment only and never loaded
+  it. The `make` targets that talk to the stack now export `.env`, the manual
+  adds the `set -a; source .env; set +a` step, and the error message says the
+  CLI does not read `.env`.
+- `doctor` now fails when `RUSTFS_ACCESS_KEY` / `RUSTFS_SECRET_KEY` are not
+  set in the environment (presence only; the RustFS check is unauthenticated,
+  so wrong values still surface in `init`). Until now it passed while `init`
+  failed, and the README claimed it checked credentials. The warnings footer
+  no longer says "some optional features are unavailable" for any warning.
+- `make`: a positional path (`make scan ~/Documents`) was taken as a target
+  and the default folder was scanned instead; unknown targets now fail with a
+  hint. CLI flags are passed with `ARGS="..."`.
+- README: the dry-run is no longer described as an exact preview. It counts
+  files with identical content inside one folder as separate uploads; the
+  real ingest deduplicates them.
+
 ## [0.3.1] - 2026-09-20
 
 ### Fixed
