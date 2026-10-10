@@ -26,6 +26,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   RustFS "reachable, credentials not validated", credentials "set, presence
   only". Help text and README row say both.
 
+### Removed
+
+- Dead code: `Config`, `Config::load` and the unused `ProfileConfig`,
+  `IgnoreConfig`, `ExternalToolsConfig` types (no caller; the CLI reads the
+  environment only), the unused `FileEntry` scaffold, and the `toml`
+  dependency (`Cargo.lock` changes accordingly). `LakehouseConfig` stays and
+  is no longer serde-deserializable.
+
 ### Fixed
 
 - Onboarding: the documented setup failed at `init` with "Missing S3
@@ -45,6 +53,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README: the dry-run is no longer described as an exact preview. It counts
   files with identical content inside one folder as separate uploads; the
   real ingest deduplicates them.
+- The `observed_at` tie comment in `src/ingest/state.rs` claimed ties cannot
+  occur; it now states the wall-clock ordering limitation.
 
 ## [0.3.1] - 2026-09-20
 

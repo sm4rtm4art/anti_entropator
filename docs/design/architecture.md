@@ -192,21 +192,11 @@ Benefits:
 
 ## Configuration
 
-Config file loading is **deferred to post-v0.3**. The `--config` CLI flag and
-`ANTI_ENTROPATOR_CONFIG` env var have been removed in v0.3 as part of the CLI
-contract honesty pass (S4-A). The underlying config module (`src/config/mod.rs`)
-remains in the codebase but is not wired to any command.
-
-All commands use `LakehouseConfig::default()`, which reads runtime configuration
-from environment variables directly (see Environment Variables in the manual).
-
-Planned config file loading paths (not yet active, deferred post-v0.3):
-
-1. `--config` CLI flag
-2. `ANTI_ENTROPATOR_CONFIG` environment variable
-3. `./anti_entropator.toml`
-4. Platform config directory (e.g., `~/.config/anti_entropator/` on Linux,
-   `~/Library/Application Support/` on macOS)
+The CLI has no config file. `--config` and `ANTI_ENTROPATOR_CONFIG` were removed
+in v0.3 (S4-A) and the unused loader code was deleted afterwards. All commands
+use `LakehouseConfig::default()` (`src/config/mod.rs`), which reads runtime
+configuration from environment variables (see Environment Variables in the
+manual). A config file or a `.env` loader would be a new decision.
 
 ## State
 

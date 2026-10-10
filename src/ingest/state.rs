@@ -62,8 +62,10 @@ pub fn decide(
 }
 
 /// Reduce observation rows to the latest per path by `observed_at`.
-/// Ties keep the first row seen; they cannot occur for a single writer with
-/// microsecond timestamps.
+/// Ties keep the first row seen. `observed_at` is the writer's wall clock taken
+/// before the commit, so a clock that moves backwards between runs (or two
+/// writers) can make an older observation win. Ordering by commit sequence
+/// needs an Iceberg schema change and is deferred.
 pub fn reduce_latest(rows: impl IntoIterator<Item = ObservationRow>) -> CurrentState {
     let mut state = CurrentState::new();
     for row in rows {

@@ -99,7 +99,7 @@ pub async fn resolve_project_id(config: &LakehouseConfig) -> Result<String> {
 const LEGACY_STATE_FILE: &str = ".lakehouse_state.json";
 
 /// Compute the stable state file path using the platform data directory.
-/// Reuses the same ProjectDirs identity as config (`src/config/mod.rs`).
+/// Uses the `com`/`anti-entropator`/`anti_entropator` ProjectDirs identity.
 fn state_file_path() -> Option<std::path::PathBuf> {
     directories::ProjectDirs::from("com", "anti-entropator", "anti_entropator")
         .map(|p| p.data_dir().join("lakehouse_state.json"))
