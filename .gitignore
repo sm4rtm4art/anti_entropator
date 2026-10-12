@@ -20,6 +20,8 @@ logs/
 .cursor/*
 !.cursor/rules/
 !.cursor/rules/*.mdc
+!.cursor/commands/
+!.cursor/commands/*.md
 .idea/
 .vscode/
 

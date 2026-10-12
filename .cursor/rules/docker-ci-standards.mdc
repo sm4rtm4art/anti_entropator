@@ -1,87 +1,90 @@
 ---
-description: Docker, Compose, and CI delivery guardrails for v0.3 stabilization.
-globs: ["Dockerfile", "Dockerfile.*", "docker-compose*.yml", "compose.yaml", ".dockerignore", ".github/workflows/*.yml", ".github/workflows/*.yaml", ".github/dependabot.yml", "scripts/check-compose*.sh", "docs/security/docker-hardening-review.md", "docs/security/deployment-profiles.md", "docs/security/go-public-checklist.md", "docs/ci-cd/blue-green-delivery.md"]
+description: Docker, Compose, CI, and release guardrails.
+globs: ["Dockerfile", "Dockerfile.*", "docker-compose*.yml", "compose.yaml", ".dockerignore", ".github/workflows/*.yml", ".github/workflows/*.yaml", ".github/actions/**/*.yml", ".github/dependabot.yml", "Makefile", "env.example", "scripts/check-compose*.sh", "scripts/delivery-sim.sh", "scripts/ci-cleanup.sh", "scripts/build-and-push.sh", "scripts/hooks/*", "docs/security/docker-hardening-review.md", "docs/security/deployment-profiles.md", "docs/security/go-public-checklist.md", "docs/ci-cd/blue-green-delivery.md"]
 alwaysApply: false
 ---
 
-# Docker And CI Delivery Standards
+# Docker And CI Standards
 
-Use for local stack, container, workflow, Dependabot, compose-check scripts,
-release, and deployment documentation. Keep v0.3 stability ahead of release expansion.
+Contents: Principle | Deliberate conventions | Not enabled yet | Dockerfile | Compose | Actions | CI correctness | Destructive commands | Docs
 
-## Operating Principle
+## Principle
 
-- Do not weaken Docker, Compose, CI, or delivery controls to make local workflows
-  easier or CI greener.
-- Preserve reproducibility, least privilege, and honest release posture.
-- Migrate touched delivery code toward the standard when local and testable.
+- Do not weaken Docker, Compose, CI, or delivery controls to make a workflow easier or CI green.
+- Keep builds reproducible and least-privilege. Keep release claims honest.
 
-## Activation Policy
+## Deliberate conventions
 
-- Release-grade delivery needs explicit activation: multi-arch images, blocking
-  vulnerability scans, SBOM/provenance, and release gating.
-- Until enabled, document the gap; do not make release-grade claims.
-- Blue/green remains a reference simulation until real target infrastructure exists.
+Do not change these as a side effect of another task.
+
+- Compose file is `docker-compose.yml` (no `compose.yaml` rename).
+- Default image target is `runtime` (`FROM runtime-bookworm AS runtime`). `runtime-distroless` is experimental.
+- RustFS `/data` is the named volume `rustfs-data`. A bind mount fails on Docker Desktop and would replace the volume in `docker-compose.delivery.yml`.
+
+```yaml
+# BAD
+- ./data/rustfs:/data
+# GOOD
+- rustfs-data:/data
+```
+
+## Not enabled yet
+
+Activating any of these needs an explicit decision. Until then, document the gap and make no release-grade claim.
+
+- Base-image digest pinning, multi-arch publishing, SBOM/provenance enforcement, full HIGH/CRITICAL blocking.
+- Current scan posture: fixable HIGH/CRITICAL may fail the job; the full baseline is report-only. Image scanning is required before public release-grade claims.
+- Exceptions and next steps: `docs/security/docker-hardening-review.md`. Do not copy them here.
+- Blue/green is a reference simulation until real target infrastructure exists.
 
 ## Dockerfile
 
-- Runtime images run as non-root.
-- Pin base images to tested versions or digests before release-grade publishing.
-- Floating tags are temporary: document reason, date, and removal condition next
-  to the tag or in `docs/security/docker-hardening-review.md`.
-- No secrets in `ENV`, `ARG`, labels, layers, or examples.
-- Builds must be reproducible on GitHub-hosted runners.
-- Prefer multi-stage builds; keep runtime images free of build-only tooling.
-- Use `.dockerignore` when context size or secret exposure risk grows.
-- No host-local paths, caches, or machine-specific state in image builds.
+- Runtime image runs as non-root, built multi-stage, without build-only tooling.
+- `.dockerignore` keeps excluding `.env`, `.env.*`, `.git`, `target`, `data`, `logs`.
+- No secrets in `ENV`, `ARG`, labels, layers, or examples. No host-local paths or caches.
+- A floating tag needs reason, date, and removal condition next to it or in the hardening review.
 
-## Docker Compose
+## Compose
 
-- Ports bind to `127.0.0.1` by default (`${ANTI_BIND_HOST:-127.0.0.1}`).
-- Do not switch to `0.0.0.0` without a reviewed deployment profile.
-- After port-binding changes, run or document
-  `scripts/check-compose-local-bindings.sh`.
-- Required secrets: `${VAR:?}` where practical.
-- `allowall` authorization is local-demo only.
-- Do not add runtime services absent from architecture docs /
-  `.cursor/rules/project-architecture.mdc`.
-- Init helpers (e.g. `lakekeeper-migrate`) OK when tied to a documented runtime
-  service and not a new system dependency.
-- Prefer healthchecks over fixed sleeps.
-- Volumes/test data disposable unless persistence is documented.
-- No new host ports without a documented CLI, operator, or health-check need.
+- Ports bind to `${ANTI_BIND_HOST:-127.0.0.1}`. Do not use `0.0.0.0` without a reviewed deployment profile.
+- After port-binding changes, run `scripts/check-compose-local-bindings.sh`.
+- Required secrets use `${VAR:?}`. `allowall` authorization is local-demo only.
+- Third-party images use an explicit version tag, never `latest`.
+- `depends_on` uses `service_healthy` or `service_completed_successfully`. One-shot init services use `restart: "no"`.
+- Prefer healthchecks over sleeps.
+- New services must appear in the architecture rule; init helpers must serve a documented service.
+- No new host ports without a CLI, operator, or health-check need.
+- Volumes and test data are disposable unless persistence is documented.
 
-## GitHub Actions And Dependabot
+## Actions and Dependabot
 
-- Preserve least-privilege `permissions` and concurrency controls unless
-  documented otherwise.
-- Correctness checks (`fmt`, `clippy`, tests, audit, coverage) stay on
-  GitHub-hosted runners.
-- Workflow changes: run or document `actionlint` / `zizmor` status.
-- Release claims must match the actual release workflow (including whether
-  audit, tests, image scan, SBOM, or provenance gate release).
-- Dependabot/audit findings: fix or record severity and owner.
+- Keep least-privilege `permissions` and concurrency settings.
+- Pin third-party actions to full commit SHAs. `actions/checkout` sets `persist-credentials: false`.
+- `packages: write` only on publishing jobs. Tag rules (including `:latest`) live in `ci.yml` and `release.yml`; do not restate them.
+- fmt, clippy, tests, audit, and coverage run on GitHub-hosted runners.
+- After workflow changes, run or note `actionlint` and `zizmor`.
+- Release claims match the release workflow.
+- Fix Dependabot and audit findings, or record severity and an owner for each exception.
 
-## CI Correctness
+## CI correctness
 
-- Do not hide failures with `|| true`, broad `continue-on-error`, or undocumented
-  non-blocking placeholders.
-- Do not weaken fmt, clippy, test, audit, coverage, or scan jobs only to go green.
-- CI must fail when the checked behavior fails.
-- Cache misses must still produce correct builds.
+- CI fails when the checked behavior fails. Do not weaken fmt, clippy, test, audit, coverage, or scan jobs to go green.
+- No `|| true` or `continue-on-error` on checks. Best-effort diagnostic collection is allowed (see `stack-tests.yml` log capture, `release.yml` delivery logs); label it as diagnostics.
+- A cache miss must still build correctly.
 
-## Supply Chain
+## Destructive commands
 
-- Image vulnerability scanning required before public release-grade claims.
-- Describe scan posture accurately: fixable-only HIGH/CRITICAL may be enforced
-  while the full baseline stays report-only. Do not claim full HIGH/CRITICAL
-  blocking until that gate is actually enabled.
-- Disabled SBOM/provenance must stay documented as an accepted exception until
-  re-enabled.
+Name the data to be deleted and get an explicit yes first.
 
-## Documentation
+- `docker compose down -v`: deletes this project's `rustfs-data`. Bind mounts `./data/postgres` and `./logs/rustfs` survive.
+- `rm -rf data/postgres`, `logs/rustfs`, `data/<slot>`, `logs/<slot>`, including the reset `docker compose down -v && rm -rf data/postgres`.
+- `docker volume rm` of a project volume.
+- Host-wide: `docker volume|image|system prune` and unscoped container or image removal.
+- `scripts/delivery-sim.sh down <slot> --destroy-data`: deletes that slot's volume, `data/<slot>`, `logs/<slot>`, `.delivery/slots/<slot>.env`, and `.delivery/active-slot*` when they name the slot.
+- `docker compose down` without `-v` is the restart path and needs no confirmation.
 
-- Distinguish local demo, shared internal, and public deployment profiles.
-- Do not call the local compose stack production-ready.
-- Rollback / blue-green docs must say simulated, manual, or automated.
-- Hardening exceptions need a next step, not open-ended wording.
+## Docs
+
+- Distinguish local demo, shared internal, and public deployment profiles. The local stack is not production-ready.
+- Rollback and blue/green docs say simulated, manual, or automated.
+- Each hardening exception has a next step.

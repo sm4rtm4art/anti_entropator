@@ -1,115 +1,67 @@
 ---
-description: Rust stabilization standards for Anti-Entropator.
+description: Rust standards for Anti-Entropator: errors, async safety, CLI contract, tests.
 globs: ["**/*.rs", "Cargo.toml"]
 alwaysApply: false
 ---
 
-# Rust Stabilization Rules
+# Rust Standards
 
-## Operating Principle
+Contents: Errors | Async | Boundaries and secrets | Exit codes | CLI contract | Structure | Dependencies | Tests
 
-During v0.3 stabilization, enforce direction without normalizing legacy debt:
-do not add new violations, and migrate touched code toward the standard when the
-change is local and testable.
-Do not expand stabilization PRs into broad maintainability refactors unless that
-is the block objective.
+Touched code moves toward these rules. Do not add new violations; do not widen a change into a broad refactor.
 
-## Maintainability
+## Errors
 
-- Prefer small, focused functions over large orchestration blocks.
-- Do not grow `lakehouse/mod.rs`; when touching it, split HTTP bootstrap,
-  signing, or init orchestration into focused modules instead.
-- Avoid boolean parameters for behavior selection; prefer enums or separate functions.
-- Keep trait interfaces narrow and boundary-oriented.
-- Keep visibility minimal: private, then `pub(crate)`, then `pub`.
-- Encapsulate invariants behind constructors and narrow public methods.
-- Comments explain invariants, tradeoffs, safety, or non-obvious behavior — not
-  restatements of the code.
-- No TODO/FIXME without reason, owner, or tracking reference.
+- Treat filesystem, object-store, catalog, subprocess, crypto, and config operations as fallible.
+- No new `.unwrap()` or `.expect()` on runtime I/O paths. They are fine in `#[cfg(test)]` and in `LazyLock::new` with a clear message.
+- `anyhow::Result` in `main.rs`, `cli/`, and top-level runners (`ingest::run`, `scan::run`, `profile::run`, `query::run`). Typed errors in `domain/`, `storage/`, `lakehouse/schema.rs`.
+- At command boundaries add `.context` naming the operation and resource (path, bucket, table, endpoint).
 
-## Error Boundaries
+## Async
 
-- Treat filesystem, object-store, catalog, subprocess, crypto, and config
-  operations as fallible.
-- Do not introduce new `.unwrap()` / `.expect()` on runtime I/O, catalog,
-  object-store, subprocess, or crypto paths.
-- `.unwrap()` / `.expect()` OK in `#[cfg(test)]` when they keep tests clear.
-- Static invariant `.expect()` in `LazyLock::new` (or equivalent) OK with a
-  clear message.
-- `anyhow::Result` OK in `main.rs`, `cli/`, and top-level command runners
-  (`ingest::run`, `scan::run`, `profile::run`, `query::run`).
-- Library internals (`domain/`, `storage/`, `lakehouse/schema.rs`) prefer typed
-  errors when touched. Do not expand broad `anyhow` without reason.
-- At command boundaries, attach `.context` naming the operation and resource
-  (path, bucket, table, endpoint).
+- No blocking work inside `async fn`: no `std::fs`, sync `WalkDir`, or `std::process::Command` without `spawn_blocking` or tokio process APIs.
+- CPU-heavy work (hashing, compression) runs in `spawn_blocking`.
+- Object-store and catalog calls need explicit timeouts.
+- External tools (`exiftool`, `ffprobe`, `pdfinfo`) need bounded execution.
+- Never hold a mutex or RwLock guard across `.await`.
 
-## Boundaries And Secrets
+## Boundaries and secrets
 
-- Keep domain logic separate from CLI, I/O, subprocess, catalog, and object-store
-  execution where practical.
-- Prefer typed domain values over raw `String` / `bool` / `PathBuf` across layers.
-- Object-store read/write/list/head/delete via OpenDAL (`storage::create_operator`).
-  Details: `.cursor/rules/project-architecture.mdc`.
-- Direct HTTP only for Lakekeeper bootstrap, doctor/health, ingest preflight,
-  and narrow signed setup. Keep fallible.
-- Never put secret fields on `Debug` / `Display`. Credentials must not appear in
-  logs, CLI dumps, or `{:?}` of config structs. Prefer redacted types when touched.
-- Catalog/store consistency failures are command-level failures unless an
-  explicit partial-success policy is documented and tested.
+- Object-store access and HTTP boundaries: `.cursor/rules/project-architecture.mdc`.
+- Keep domain logic apart from CLI, I/O, and subprocess code. Prefer typed domain values over raw `String`, `bool`, `PathBuf` across layers.
+- No secret fields in `Debug` or `Display`; use redacted types. No credentials in logs or CLI output.
 
-## Exit And Partial Success
+## Exit codes
 
-- Mutating commands with per-item failures must return non-success unless an
-  explicit partial-success exit policy is documented and tested.
-- Do not treat “completed with errors” + exit 0 as the desired default when
-  touching ingest/scan exit semantics.
-- Non-dry-run ingest/query should preflight object store and catalog, or
-  document the gap when changing connectivity checks.
+- Mutating commands with per-item failures exit non-zero unless a partial-success policy is documented and tested.
+- Catalog/store inconsistency fails the command.
+- Non-dry-run ingest and query preflight the store and catalog, or document the gap.
 
-## Async Safety
+## CLI contract
 
-- No blocking work on the async runtime: no `std::fs::*`, sync `WalkDir`, or
-  sync `std::process::Command` inside `async fn` without `spawn_blocking` (or
-  tokio process APIs).
-- CPU-heavy work (hashing, compression): `spawn_blocking`.
-- Object-store and catalog-backed ingest/query paths need explicit timeouts
-  (OpenDAL layers and/or request budgets), not only HTTP health clients.
-- External tools (`exiftool`, `ffprobe`, `pdfinfo`) need bounded execution
-  before being described as hardened.
-- Do not hold mutex / RwLock / RefCell guards across `.await`.
+- Every public flag has runtime behavior, tests, and docs. No inert flags.
+- Mutating commands support `--dry-run` or say "not implemented".
+- Placeholder commands exit non-zero.
+- Help text, behavior, tests, and docs agree.
 
-## CLI Contract
+## Structure
 
-- No new inert flags or placeholder success semantics.
-- Every public CLI flag needs runtime behavior, tests, and docs — or hide/remove
-  before calling it stable.
-- Placeholder commands must return non-success once exit semantics are touched.
-- Mutating ops need `--dry-run` or an explicit “not implemented yet” statement.
-- CLI help, runtime behavior, tests, and docs must agree for changed commands.
-
-## Legacy Debt
-
-- No broad `#[allow(dead_code)]` without inline rationale.
-- No new `println!` / `eprintln!` in reusable library-style modules. Operator UX
-  may print; lakehouse I/O diagnostics should use `tracing` when touched.
-- Do not migrate existing `println!` unless that migration is the block objective.
-- Avoid unnecessary `.clone()` in hot paths, but do not contort simple code for
-  cheap clones.
+- Do not grow `lakehouse/mod.rs`; put new HTTP, signing, or init code in focused modules.
+- Prefer enums over boolean parameters that select behavior.
+- Keep visibility minimal; prefer `pub(crate)` over `pub`.
+- Comments explain invariants and tradeoffs, not the code. A TODO needs a reason and a tracking reference.
+- No broad `#[allow(dead_code)]`; a narrow one needs an inline reason.
+- Use `tracing` for I/O diagnostics in library modules; leave existing `println!` alone unless migrating it is the task.
 
 ## Dependencies
 
-- Check `Cargo.toml` before adding external `use`s.
-- Prefer `std`, then existing crates, then Ask first for heavy additions.
-- Remove unused crates when touched, or document why they stay.
+- Check `Cargo.toml` before adding a `use`. Prefer `std`, then existing crates; ask before heavy additions.
+- Remove unused crates when touched, or say why they stay.
 
-## Testing
+## Tests
 
 - Unit-test pure logic in `domain/`, `config/`, `lakehouse/schema.rs`.
-- Container-backed integration tests run as a CI gate: `#[ignore]` tests in
-  `tests/cli_tests.rs` execute against a Compose stack in
-  `.github/workflows/stack-tests.yml`. Do not add testcontainers until accepted.
-- Keep `#[ignore]` stack tests named and documented; do not claim end-to-end
-  coverage from unit tests alone.
-- Use `tempfile`. No hardcoded machine paths.
-- `#[tokio::test]` for async; `#[test]` for sync.
-- Positive and negative assertions for changed user-facing behavior.
+- Stack tests are `#[ignore]` tests in `tests/cli_tests.rs`, run against Compose by `.github/workflows/stack-tests.yml`. Name and document them; do not claim end-to-end coverage from unit tests. No testcontainers without approval.
+- Use `tempfile`, never hardcoded machine paths.
+- `#[tokio::test]` for async, `#[test]` for sync.
+- Assert both the positive and the negative case for changed user-facing behavior.

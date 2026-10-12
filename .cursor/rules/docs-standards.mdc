@@ -1,113 +1,70 @@
 ---
-description: Documentation truth and verification standards.
-globs: ["README.md", "AGENTS.md", "docs/**/*.md", "SECURITY.md", "CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/*.md", ".github/ISSUE_TEMPLATE/*.yml"]
+description: Documentation truth, verification, and upkeep standards.
+globs: ["README.md", "AGENTS.md", "CHANGELOG.md", "docs/**/*.md", "SECURITY.md", "CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/*.md", ".github/ISSUE_TEMPLATE/*.yml"]
 alwaysApply: false
 ---
 
 # Documentation Standards
 
-## Core Posture
+Contents: Posture | Upkeep | Status accuracy | Verification | Style | Diagrams | Security claims | ADRs
 
-- Write for a technical reviewer evaluating repository credibility.
-- Prefer accuracy, reproducibility, and explicit limitations over polished claims.
-- If code and docs disagree, code, workflows, and configuration win.
+## Posture
 
-## Change Discipline
+- Write for a technical reviewer judging repository credibility. Accuracy and stated limitations beat polish.
+- Code, workflows, and configuration win over docs.
+- Make small, targeted edits. Delete or narrow a wrong claim rather than rewriting the section.
+- Do not rewrite for style alone or expand into adjacent sections.
 
-- Do not rewrite docs for style alone unless that is the explicit task.
-- Prefer small, targeted edits. Fix nearby stale claims only when local and verifiable.
-- Do not broaden claims beyond what code, workflows, compose, or security docs support.
-- Prefer **delete or narrow** a wrong claim over rewriting the surrounding section.
-- Do not expand into adjacent “helpful” sections the task did not ask for.
+## Upkeep
 
-## Anti-Slop
+- A behavior change updates the README, manual, and `CHANGELOG.md` `[Unreleased]` in the same PR.
+- Fix a nearby stale claim when it is local and verifiable.
 
-- No filler openers (“It’s worth noting…”, “In order to…”, “This ensures…”).
-- Lead with the fact, command, or limitation.
-- No new emoji or decorative diagram chrome unless the file already uses it.
-- No comparative or absolute performance/security claims without a cited
-  measurement or existing security/delivery doc.
-- Do not paraphrase the whole stack when a pointer or table already exists.
+## Status accuracy
 
-## Status Accuracy
-
-- Lead with what works today.
-- Mark planned, placeholder, experimental, and incomplete behavior clearly.
-- Do not describe roadmap items as shipped.
-- Keep limitations next to capabilities.
-- Status labels when useful: Implemented, Placeholder, Planned, Experimental, Unknown.
+- Lead with what works today. Keep limitations next to capabilities.
+- Label planned, placeholder, and experimental behavior. Never describe roadmap items as shipped.
+- Labels: Implemented, Placeholder, Planned, Experimental, Unknown.
 
 ## Verification
 
-- CLI examples: check `src/cli/mod.rs`, runtime behavior, or named manual verification.
-- SQL examples: fields from `src/lakehouse/schema.rs`; prefer FQN
-  `iceberg.anti_entropator.file_catalog` (`files` is optional sugar only).
-- Workflow / coverage / audit / release / container claims: match
-  `.github/workflows/*`.
-- Docker / deployment claims: match `Dockerfile`, `docker-compose.yml`,
-  `docs/security/*`.
-- Do not claim tests, scans, audits, coverage, or workflows passed unless run
-  or explicitly marked not run.
+- CLI examples: check `src/cli/mod.rs` or run them.
+- SQL examples: use columns from `src/lakehouse/schema.rs` and the FQN `iceberg.anti_entropator.file_catalog`.
+- Workflow, coverage, audit, release, and container claims: match `.github/workflows/*`.
+- Docker and deployment claims: match `Dockerfile`, `docker-compose.yml`, `docs/security/*`.
+- Do not claim a test, scan, or audit passed unless it ran; otherwise write "not run".
 
-## Banned Or Risky Language
+## Style
 
-| Avoid | Prefer |
-|---|---|
-| "blazing fast", "revolutionary", "enterprise-grade" | Measured facts or omit |
-| "simply", "just", "easily", "leverage" | Actual steps and assumptions |
-| "robust", "seamless", "comprehensive" | Name the behavior and limitation |
-| "production-ready" | Local-first or deployment-profile wording |
-| Planned feature as shipped | Explicit status label |
-| Absolute repo-doc URLs | Relative links |
+- One document, one mode: tutorial, how-to, reference, or explanation. Do not mix modes; split and link.
+- Lead with the fact, command, or limitation. No filler openers.
+- Use the real symbol, file, flag, or command name. Call each thing by one name everywhere.
+- Put the condition before the instruction. One instruction per sentence.
+- Be specific: "a column rename fails the build", not "schema changes can cause issues".
+- No performance or security claims without a measurement or an existing doc.
+- Avoid "simply", "just", "robust", "seamless", "enterprise-grade", "production-ready". Say the behavior or the deployment profile.
+- Use relative links for repository docs. Keep heading levels sequential.
+- Quick-start commands must work on a fresh clone.
+- Rust examples use `?` with `anyhow::Result`, semantic names (`landing_zone`), and no `.unwrap()`.
+- Bold a core technology on first mention only when editing nearby text.
 
-## Architecture And Diagrams
+## Diagrams
 
-- Label diagrams `current`, `target`, or `current with planned elements`.
-- Do not put per-stage tracing, maintenance commands, or full SQL REPL
-  in current-state diagrams unless marked planned. Do not put `dataflow-rs` or
-  `--engine` in any diagram; ADR-007 is superseded.
-- Keep OpenDAL, Lakekeeper, RustFS, DataFusion, Iceberg, and Postgres roles
-  consistent with `.cursor/rules/project-architecture.mdc`.
-- Prefer short-label Mermaid for multi-step flows.
+- Label each `current`, `target`, or `current with planned elements`.
+- Keep planned items (per-stage tracing, maintenance commands, full SQL REPL) out of current diagrams.
+- Never put `dataflow-rs` or `--engine` in a diagram.
+- Roles match `.cursor/rules/project-architecture.mdc`. Prefer short-label Mermaid.
 
-## Security And Delivery Claims
+## Security and delivery claims
 
 - Label controls `enforced today`, `required for shared/public deployment`, or `planned`.
-- `.env` is local convenience, not a security boundary.
-- No secrets, tokens, private endpoints, real credentials, or copied `.env` values.
-- Compose ports: localhost-bound by default.
-- Blue/green remains a reference simulation unless real infrastructure exists.
-- If SBOM, provenance, image scanning, or release gating are disabled/planned, say so.
-
-## Formatting
-
-- Bold first mention of core tech only when editing nearby text
-  (**Iceberg**, **Lakekeeper**, **DataFusion**, **OpenDAL**, **RustFS**, **Postgres**).
-  No cosmetic-only capitalization churn.
-- One sentence per line when it improves diffs; do not force it.
-- Heading hierarchy: H1 → H2 → H3. No skipping.
-- README / getting-started commands must be copy-paste safe for a fresh clone.
-- Relative links for repository docs.
+- `.env` is a local convenience, not a security boundary. No secrets or real credentials in docs.
+- Compose ports are localhost-bound by default. Blue/green is a reference simulation.
+- State when SBOM, provenance, scanning, or release gating is disabled or planned.
 
 ## ADRs
 
-New ADRs in `docs/adr/`: follow the shape of recent ADRs (Context, Decision,
-Current State, Consequences, Alternatives, References). Preserve historical
-decisions; add current-state notes for stale commands, schema, ports, or tables.
-Do not silently rewrite history into inaccurate current-state docs.
-
-Every ADR carries a `Status:` line (`accepted`, `accepted, not yet
-implemented`, `superseded on <date>`) and a dated `Current State` section.
-External facts (licenses, maintenance status, crate versions, links) must be
-verified on the date written and dated in the text. Do not cite GitHub star
-counts, download numbers, or vendor benchmarks; they rot and are not evidence.
-Schemas live in code; an ADR points to the module, it does not duplicate the
-field list. ADR-007's dead link and wrongly identified crate are the reference
-failure this rule prevents.
-
-## Rust In Markdown
-
-- Avoid `.unwrap()` in examples; prefer `?` with `anyhow::Result`.
-- Semantic names (`landing_zone`, not `foo`).
-- Standalone async: `#[tokio::main] async fn main() -> Result<()>`.
-- Standalone sync fallible: `fn main() -> Result<()>`.
+- Shape: Context, Decision, Current State, Consequences, Alternatives, References. Include a `Status:` line (`accepted`, `accepted, not yet implemented`, `superseded on <date>`).
+- Preserve history. Add a dated Current State note for stale commands, schema, ports, or tables.
+- Verify and date external facts. No star counts, download numbers, or vendor benchmarks.
+- Point to the code module instead of copying schemas.

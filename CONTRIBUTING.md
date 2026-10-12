@@ -49,7 +49,12 @@ If your change touches Markdown, shell scripts, or `.cursor/rules`, also run:
 
 ## Commit and PR Guidelines
 
-- Keep PRs single-purpose and reviewable in one sitting.
+- Keep PRs single-purpose and reviewable in one sitting. Squash merge is the default.
+- Branch from current `origin/main` and rebase before pushing.
+- Structure larger work with a tracking issue (task list or sub-issues) and small PRs that each target `main`.
+- When a slice depends on an unmerged one, stack the PRs and retarget to `main` after the base merges. Open work-in-progress as a draft PR.
+- Avoid long-lived integration branches that land as one large PR.
+- Link the tracking issue; put validation evidence and deferred follow-ups in the PR description.
 - Prefer small, testable increments over broad refactors.
 - Use clear commit messages (Conventional Commits style is recommended, e.g. `feat: ...`, `fix: ...`, `docs: ...`, `chore: ...`).
 - Do not describe planned or placeholder behavior as shipped in docs.
@@ -61,4 +66,4 @@ If your change touches Markdown, shell scripts, or `.cursor/rules`, also run:
 - [Architecture Overview](docs/design/architecture.md)
 - [Security Policy](SECURITY.md)
 - [Go-Public Security Checklist](docs/security/go-public-checklist.md)
-- [Agent Workflow Notes](AGENTS.md) (if present in your branch/workspace)
+- [Agent Workflow Notes](AGENTS.md) for AI-assisted work
