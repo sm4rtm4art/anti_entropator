@@ -1,54 +1,26 @@
 # AGENTS.md - Anti-Entropator
 
-## Role And Frame
+Contents:
 
-Act as a senior Rust engineer on a local-first data lakehouse CLI. Prioritize
-correctness, clear operator behavior, honest docs, small PRs, and repeatable
-evidence over feature volume.
+- Project
+- Status
+- Commands
+- Boundaries
+- Definition of done
+- Communication
+- Git and PRs
 
-Phase: `v0.3.2` release candidate prepared 2026-10-10 (onboarding, docs/rules
-truth pass, legacy-catalog fix; tag pending the maintainer); `v0.4.0` ("Know
-what you have") planned in `.local/v0.4.0-plan.md`. Until v0.4.0 work is
-explicitly started, changes are fixes and docs only.
+## Project
 
-## Rule Activation
+- Rust-native, local-first data lakehouse CLI for unstructured files: **RustFS** (objects), **Lakekeeper** + **Iceberg** (catalog), **DataFusion** (queries), **OpenDAL** (all object-store I/O).
+- This is a showcase repository. Correctness, honest docs, and small reviewable changes outrank feature volume.
+- Stack, table identity, and hard stops: `.cursor/rules/project-architecture.mdc`. Scoped rules in `.cursor/rules/` load by file type.
 
-| Rule | When it applies |
-|---|---|
-| `AGENTS.md` (this file) | Always — role, commands, Always/Ask/Never, workflow |
-| `.cursor/rules/project-architecture.mdc` | Always — stack, identity, OpenDAL, correctness |
-| `.cursor/rules/rust-standards.mdc` | `**/*.rs`, `Cargo.toml` |
-| `.cursor/rules/docs-standards.mdc` | Docs, README, AGENTS, templates |
-| `.cursor/rules/docker-ci-standards.mdc` | Compose, Dockerfile, workflows, Dependabot, compose scripts |
+## Status
 
-Do not reprint rule bodies here. Defaults remain local-first unless a deployment
-profile says otherwise.
-
-## Canonical References
-
-| Need | Source |
-|---|---|
-| Active execution plan | `.local/v0.4.0-plan.md` (v0.3.2 patch slices, then v0.4.0) |
-| Closed S6A record (v0.3.0 ingest correctness and recovery) | `.local/followup-v0.3-stabilization-plan.md` |
-| Closed S1-S6 stabilization record | `.local/v0.3-stabilization-plan.md` |
-| Archived documentation cleanup record | `.local/v0.3-doc-plan.md` |
-| v0.3.0 release contract (closed, historical) | `docs/ROADMAP-v0.3.0.md` |
-| Architecture guard rails | `.cursor/rules/project-architecture.mdc` |
-| Rust standards | `.cursor/rules/rust-standards.mdc` |
-| Docs standards | `.cursor/rules/docs-standards.mdc` |
-| Docker/CI standards | `.cursor/rules/docker-ci-standards.mdc` |
-| S1 baseline evidence | `.local/2026-05-04-s1-baseline.md` |
-| v0.3.1 release candidate evidence | `docs/evidence/v0.3.1-release-candidate.md` |
-| v0.3.2 release candidate evidence | `docs/evidence/v0.3.2-release-candidate.md` |
-
-## Repository Map
-
-```text
-.local/                    # active plans, baselines, evidence
-src/{cli,config,doctor,domain,ingest,lakehouse,profile,query,scan,storage}
-docs/{adr,ci-cd,design,manual,security}
-tests/  scripts/  .github/workflows/  .cursor/rules/
-```
+- Current phase, active plan, and next step: `.local/README.md` (private, gitignored).
+- If `.local/` is absent, use `CHANGELOG.md` `[Unreleased]` and open GitHub issues.
+- Do not copy phase or version information into rules or this file.
 
 ## Commands
 
@@ -57,123 +29,69 @@ cargo build --release
 cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
-cargo llvm-cov --all-features --workspace --summary-only
 cargo audit
-cargo machete # optional, if installed
+cargo llvm-cov --all-features --workspace --summary-only
 
 cargo run -- profile <path>
 cargo run -- doctor
 docker compose up -d
+cargo run -- up
 cargo run -- init
 cargo run -- scan <path>
-cargo run -- ingest <path> --dry-run           # checks store, writes nothing
-cargo run -- ingest <path> --dry-run --offline # no network, store not checked
+cargo run -- ingest <path> --dry-run             # checks store, writes nothing
+cargo run -- ingest <path> --dry-run --offline   # no network
 cargo run -- ingest <path>
-# Canonical Iceberg table (preferred in docs / agent examples):
+cargo run -- runs list
 cargo run -- query "SELECT * FROM iceberg.anti_entropator.file_catalog LIMIT 10"
-# Optional CLI shorthand (alias table registered for the qualified name above):
-cargo run -- query "SELECT * FROM files LIMIT 10"
 ```
 
-Interactive SQL, duplicate management, and branch merge are roadmap items and
-are **not** in the binary. Do not add placeholder subcommands; a command exists
-only when its behavior, tests, and docs exist.
+- `files` is optional CLI sugar for the table above; prefer the qualified name in docs and examples.
+- Interactive SQL, duplicate management, and maintenance commands are not in the binary. Add a subcommand only when behavior, tests, and docs exist.
+- Check `src/cli/mod.rs` for the current command list.
 
 ## Boundaries
 
 | Level | Rule |
 |---|---|
-| Always | Search existing code before adding abstractions. |
-| Always | Keep CLI help, runtime behavior, tests, and docs aligned. |
-| Always | Add/update evidence when changing behavior or public claims. |
-| Always | Record deferred items with scope, risk, and next step. |
+| Always | Search existing code before adding abstractions or files. |
+| Always | Keep CLI help, behavior, tests, and docs aligned. |
+| Always | Record deferred work with scope, risk, and next step. |
 | Ask first | New crate dependencies. |
-| Ask first | Iceberg schema, table layout, Docker Compose service, or CI workflow changes. |
-| Ask first | ADR changes; ADRs record deliberate decisions. |
+| Ask first | Iceberg schema or table layout, Compose services, CI workflows. |
+| Ask first | ADR edits (ADRs record deliberate decisions). |
+| Ask first | Recursive or bulk deletes (see Deletion guard). |
 | Never | Commit secrets, tokens, `.env`, private paths, or personal filenames. |
-| Never | Force push to `main`. |
-| Never | Skip hooks or CI with `--no-verify` unless explicitly approved. |
-| Never | Add Kubernetes guidance for v0.3. |
+| Never | Force push to `main`, merge PRs, or skip hooks with `--no-verify`. |
 
-## Working Rules
+### Deletion guard
 
-- Work in one small, testable block at a time.
-- Prefer established local patterns over new frameworks or abstractions.
-- Stop and split if a block grows into a feature project.
-- Tests must prove the actual risk, not just pass.
-- "Done" means behavior, tests, docs, evidence, and PR workflow agree.
+- Before any recursive or bulk delete, name the exact resolved path and get an explicit yes. This covers `rm -r`, `rm -rf`, `find ... -delete`, `git clean -fd`, `git reset --hard`, `git checkout -- .`, and deleting a directory with the Delete tool.
+- Stay inside the workspace. Never target `/`, `~`, the repo root, or a path built from a variable that may be unset or empty.
+- Prefer `git rm` (recoverable from history) or deleting single named files. `.local/archive/` is for private planning notes only, never for tracked files.
+- Docker data: `docker compose down -v`, `docker volume rm`, `docker system|volume|image prune`, `rm -rf data/*` or `logs/*`, and `scripts/delivery-sim.sh ... --destroy-data` need the same confirmation. Details: `.cursor/rules/docker-ci-standards.mdc`.
+- `docker compose down` without `-v` is safe.
+
+## Definition of done
+
+- Behavior, tests, docs, and `CHANGELOG.md` `[Unreleased]` agree.
+- Tests cover the actual risk, not only the happy path.
+- Checks that did not run (audit, coverage, stack tests) are named in the PR description.
+- The status board in `.local/README.md` is updated when a slice finishes.
+
+## Communication
+
+- Lead with the outcome or the answer, then the evidence.
+- Use full sentences. Avoid arrow chains, invented labels, and decorative tables.
+- Keep the answer proportional to the question.
+- The maintainer decides product boundaries; push back when code, tests, or docs disagree.
+- Skills and plugins are optional tools. Do not announce them or build checklists for them.
+- Ask a short question when a decision is the maintainer's; otherwise pick the sensible default and say so.
+
+## Git and PRs
+
+- Commit and open PRs only when asked. Use conventional prefixes (`feat`, `fix`, `chore`, `docs`).
+- Branch, rebase, and PR conventions: `CONTRIBUTING.md`. Use `.github/PULL_REQUEST_TEMPLATE.md`.
+- After rebasing your own pushed feature branch, use `git push --force-with-lease`, and only when asked.
 - Keep `Cargo.lock` committed; treat lockfile changes as dependency review.
-- Use conventional commit prefixes (`feat`, `fix`, `chore`, `docs`).
-- V0 = `fmt`, `clippy`, and tests: pre-commit runs fmt, clippy, and a test
-  typecheck (`--no-run`); pre-push runs the full test suite. Each block
-  inherits the S1 baseline in `.local/2026-05-04-s1-baseline.md`.
-- Pre-commit/pre-push hooks count only for checks they actually run. Note gaps
-  such as `cargo audit` or coverage in the PR description.
-
-## Documentation Posture
-
-Honesty, verification, and anti-slop rules live in
-`.cursor/rules/docs-standards.mdc`. Lead with what works today; never present
-planned or placeholder behavior as shipped.
-
-## AI-Assisted Workflow
-
-Standard stabilization loop:
-
-1. Ask mode: discuss scope, risks, blind spots, grouping.
-2. Plan mode: draft slices, tests, and done criteria.
-3. Review: findings-first plan/code review.
-4. Agent mode: implement slice by slice.
-5. Ask mode: review implementation against plan.
-6. Agent mode: fix review findings.
-7. Commit and PR when explicitly requested.
-
-Collaboration rules:
-
-- Human decides product boundaries; AI pressure-tests them.
-- Pushback is welcome when grounded in code, tests, docs, or agreed boundaries.
-- Flag process drift and keep momentum.
-- Cross-model review is normal; accept findings only when evidence-backed.
-
-## Review Format
-
-When `/review` is invoked:
-
-1. Lead with findings, sorted High -> Medium -> Low.
-2. Number each finding.
-3. Include impact, location, why it matters, and suggested fix.
-4. Use code references for concrete issues.
-5. Use tables only when they improve scanability.
-6. End with a brief conclusion and next step.
-7. If there are no findings, say so and name residual risks or test gaps.
-
-Preferred shape:
-
-```text
-## Findings
-
-### 1. High: <Headline>
-<Issue, impact, location, and suggested fix.>
-
-### 2. Medium: <Headline>
-...
-
-## Conclusion
-<Confidence summary, required fixes, and next step.>
-```
-
-## Stabilization PR Workflow
-
-- Prefer one standalone PR per sub-block targeting `main`.
-- Branch from current `origin/main`; avoid stale pre-created branches.
-- Rebase before push if `main` has advanced.
-- Use `.github/PULL_REQUEST_TEMPLATE.md`.
-- Use `.github/ISSUE_TEMPLATE/stabilization_block.yml` for parent tracking
-  issues.
-- Link the parent stabilization issue, relevant findings, validation evidence,
-  and deferred follow-ups.
-- Squash merge is the default for stabilization PRs.
-- Agents may prepare commits/PRs only when requested; do not merge PRs or run
-  dangerous git operations. Human remains merge authority.
-- Do not use umbrella/integration PRs for stabilization blocks unless approved.
-- Do not mix workflow/template changes into implementation PRs unless approved.
+- Hooks (`scripts/hooks/`) run fmt, clippy, and a test typecheck on commit and the full tests on push. Hooks do not run audit or coverage.
+- Review format on request: `.cursor/commands/findings-review.md`.
