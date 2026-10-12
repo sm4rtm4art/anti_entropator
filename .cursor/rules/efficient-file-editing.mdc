@@ -1,17 +1,15 @@
 ---
-description: Prefer efficient native file editing and minimize unnecessary tool calls.
+description: Tool-use habits that keep token use low: targeted reads, native edits, one verification pass.
 alwaysApply: true
 ---
 
 # Efficient Editing
 
-- For ordinary source code, Markdown, JSON, YAML and text files, **ALWAYS** prefer Cursor's native Edit/Patch tools.
-- Do **NOT** use Python, sed, shell commands or temporary scripts to edit these files if native editing is available.
-- Use scripting for generated files, binary document formats, complex structured transformations or genuine batch operations.
-- Read only the files and sections needed for the requested task.
-- Avoid repeatedly reading unchanged files.
-- Group related edits whenever practical.
-- After editing, perform one focused verification pass.
-- Do not repeatedly verify unchanged results.
-- If a native edit fails, diagnose the cause before retrying.
-- Never replace an entire file when a small patch is sufficient.
+- Edit with the native edit tools. Do not edit files through sed, awk, heredocs, or throwaway scripts. Scripts are for generated files, binary formats, and real batch transforms.
+- Read with the Read tool, not `cat`, `head`, or `tail`. Search with Grep and Glob, not `rg` or `find` in the shell.
+- Read large files with `offset` and `limit`. Read only the section the task needs.
+- Do not re-read a file you just edited or one that has not changed.
+- Make all edits to one file in one pass.
+- Verify once after editing. Do not repeat a check whose inputs did not change.
+- If an edit fails, find the cause before retrying.
+- Do not rewrite a whole file when a patch is enough.

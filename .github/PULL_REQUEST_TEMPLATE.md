@@ -12,8 +12,8 @@
 
 ## Tracking
 
-- Stabilization block / issue:
-- Inventory finding(s):
+- Tracking issue:
+- Related finding(s):
 
 ## Validation
 
