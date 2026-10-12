@@ -1,68 +1,50 @@
 ---
-description: Always-on architecture guard rails for the v0.3.x line.
+description: Always-on architecture guard rails: stack, table identity, I/O boundaries, data correctness.
 alwaysApply: true
 ---
 
 # Architecture Guard Rails
 
-Phase: `v0.3.2` release candidate prepared 2026-10-10 (tag pending); v0.4.0 planned.
+Contents: Stack | Lakehouse identity | Object-store I/O | HTTP boundaries | Hard stops | Data correctness
 
-## Stack (do not substitute)
+## Stack
 
-| Component | Is | Is NOT |
+| Component | Is | Not |
 |---|---|---|
-| Object store | RustFS | MinIO / second S3 stack (rejected; not in tree — Ask first) |
-| Catalog | Lakekeeper (Iceberg REST) | Nessie |
-| Object-store data I/O | OpenDAL via `storage::create_operator` | `aws-sdk-s3`, raw signed S3 HTTP, second Operator factories |
-| Query engine | DataFusion | DuckDB, Polars |
-| Catalog DB | Postgres (Lakekeeper backend only) | SQLite; CLI/query must not use Postgres |
-| Local orchestration | Docker Compose | Kubernetes; bare `docker run` as docs default |
-| SQL queries | DataFusion (over Iceberg) | Direct Postgres queries |
-| Pipeline engine | Single procedural engine; bounded `tokio` worker pool + batched commit stage (shipped v0.3.0, `src/ingest/pipeline.rs`); per-stage tracing is planned | `dataflow-rs` (ADR-007 superseded: it is a JSONLogic rules engine), `--engine`, any second engine |
+| Object store | RustFS | a second S3 stack (ask first) |
+| Catalog | Lakekeeper (Iceberg REST) | another catalog |
+| Object-store I/O | OpenDAL via `storage::create_operator` | `aws-sdk-s3`, raw signed S3 HTTP, a second operator factory |
+| Query engine | DataFusion over Iceberg | another engine, direct Postgres queries |
+| Catalog DB | Postgres (Lakekeeper backend only) | used by the CLI or query path |
+| Orchestration | Docker Compose | Kubernetes; bare `docker run` as docs default |
+| Pipeline | One procedural engine: bounded `tokio` worker pool plus batched commit (`src/ingest/pipeline.rs`) | a second engine, `--engine` flag, `dataflow-rs` (ADR-007 superseded) |
 
 ## Lakehouse identity
 
-Canonical object (`src/lakehouse/schema.rs`): namespace `anti_entropator`,
-table `file_catalog`, FQN `iceberg.anti_entropator.file_catalog`.
-`files` is CLI sugar only (`src/query/mod.rs`). Prefer the FQN in docs; do not
-use bare `FROM file_catalog` as the primary example.
+- Namespace `anti_entropator`, table `file_catalog`, FQN `iceberg.anti_entropator.file_catalog` (`src/lakehouse/schema.rs`).
+- `files` is CLI sugar (`src/query/mod.rs`). Use the FQN in docs and examples.
 
-## Object-store I/O contract
+## Object-store I/O
 
-```text
-// BAD — parallel S3 client / second factory
-let client = aws_sdk_s3::Client::new(&cfg);
+- Read, write, list, head, and delete go through `storage::create_operator(&config)?`.
+- Allowed adapters over that operator: `object_store_opendal`, `iceberg-storage-opendal`.
 
-// GOOD — shared OpenDAL boundary
-let op = storage::create_operator(&config)?;
-```
+## HTTP boundaries
 
-Allowed adapters over that operator: `object_store_opendal`,
-`iceberg-storage-opendal`.
+- `reqwest` only in `lakehouse/` bootstrap, `doctor/` health checks, ingest connectivity preflight, and narrow signed setup calls.
+- Keep those paths fallible and tested.
 
-## Hard Stops
+## Hard stops
 
-- Do not add MinIO, Nessie, JVM deps, or Kubernetes guidance for v0.3.
-- Do not present planned features as implemented (per-stage tracing/event schema, SQL REPL, maintenance commands, etc.).
-- Do not reintroduce `dataflow-rs` or a dual-engine `--engine` switch; ADR-007 is superseded.
-- Do not bypass OpenDAL for object-store read, write, list, head, or delete.
+- Do not add JVM dependencies or Kubernetes guidance.
+- Do not present planned features as implemented (per-stage tracing, SQL REPL, maintenance commands).
+- Do not bypass OpenDAL for object-store access.
 
-## Allowed HTTP boundaries
-
-Direct HTTP (`reqwest`) only in: `lakehouse/` bootstrap, `doctor/` health
-checks, ingest connectivity preflight, and narrow signed setup calls. Keep
-fallible and tested when touched.
-
-## Data Correctness
+## Data correctness
 
 - Catalog/store consistency is a correctness requirement.
-- Ingest must not report full success if upload succeeds but Iceberg metadata
-  commit fails.
-- Re-running unchanged ingest/query flows should be deterministic or document
-  the known limitation.
-- Placeholder workflows must not return success semantics once touched.
+- Ingest must not report full success when upload succeeds but the Iceberg commit fails.
+- Re-running unchanged ingest or query is deterministic, or the limitation is documented.
+- Placeholder workflows must not return success.
 
-## Delivery Boundary
-
-Compose, CI, release, and deployment docs:
-`.cursor/rules/docker-ci-standards.mdc`. Do not duplicate those rules here.
+Delivery rules (Compose, CI, release): `.cursor/rules/docker-ci-standards.mdc`.
