@@ -34,7 +34,7 @@ x-lakekeeper-db: &lakekeeper-db
 services:
   # S3-compatible object storage
   rustfs:
-    image: rustfs/rustfs:1.0.0
+    image: rustfs/rustfs:1.0.1
     ports:
       - "${ANTI_BIND_HOST:-127.0.0.1}:${RUSTFS_API_PORT:-8200}:9000" # S3 API (Organized port)
       - "${ANTI_BIND_HOST:-127.0.0.1}:${RUSTFS_CONSOLE_PORT:-8210}:9001" # Web Console (Organized port)
