@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Updated transitive `rustls` to 0.23.46, `quinn` to 0.11.12, and `quinn-proto`
+  to 0.11.19 (`Cargo.lock` only) to resolve `RUSTSEC-2026-0338` through
+  `RUSTSEC-2026-0342` and `RUSTSEC-2026-0346` through `RUSTSEC-2026-0349`.
+
 ### Changed
 
 - Agent guidance: `AGENTS.md` and `.cursor/rules/*.mdc` rewritten as short,
