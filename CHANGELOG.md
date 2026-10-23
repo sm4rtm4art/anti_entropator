@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated transitive `rustls` to 0.23.46, `quinn` to 0.11.12, and `quinn-proto`
   to 0.11.19 (`Cargo.lock` only) to resolve `RUSTSEC-2026-0338` through
   `RUSTSEC-2026-0342` and `RUSTSEC-2026-0346` through `RUSTSEC-2026-0349`.
+- Updated transitive `ctutils` to 0.4.5, `rustls-webpki` to 0.103.16,
+  `webpki-roots` to 1.0.11, and `webpki-root-certs` to 1.0.11 (`Cargo.lock`
+  only) to resolve `RUSTSEC-2026-0385`, `RUSTSEC-2026-0382`,
+  `RUSTSEC-2026-0381`, and `RUSTSEC-2026-0383`.
 
 ### Changed
 
