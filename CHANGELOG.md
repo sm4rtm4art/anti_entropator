@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Docs: `docs/evidence/v0.3.2-release-candidate.md` records the `v0.3.2` tag
+  run (release workflow `38090289370`).
 - Agent guidance: `AGENTS.md` and `.cursor/rules/*.mdc` rewritten as short,
   version-free rules (status no longer lives in rules). `AGENTS.md` adds a
   deletion guard and a definition of done. The review format moves to
