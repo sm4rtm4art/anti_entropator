@@ -29,6 +29,32 @@ ignore = [
     # transitive `thrift 0.17` (GHSA-2f9f-gq7v-9h6m, moderate) via parquet 58
     # has no RUSTSEC id. parquet 59 dropped the thrift crate; that arrives with
     # iceberg 0.12 (arrow/parquet 59, datafusion 55). Tracked in CHANGELOG.
+    #
+    # RUSTSEC-2026-0391 — zstd < 0.14.3: data from an abandoned stream leaks
+    # into the next stream on a reused context.
+    #
+    # RUSTSEC-2026-0398 — zstd-safe < 8.2.0: Seekable::decompress sets a Vec
+    # length beyond its capacity for offsets past the end.
+    #
+    # RUSTSEC-2026-0403 — zstd-safe < 8.2.0: uninitialized memory exposed when
+    # streaming decompression of a legacy frame fails.
+    # Same crate line and same fix as 0398; ignored together with 0391.
+    #
+    # Why ignored (temporary):
+    # - Transitive via parquet 58.4.0 (feature `zstd`) -> zstd 0.13.3 ->
+    #   zstd-safe 7.2.4. The CLI enables that feature for Parquet read/write.
+    # - parquet 57, 58, and 59 require zstd ^0.13, and zstd 0.13 requires
+    #   zstd-safe ^7. The fixed line is zstd 0.14.3 / zstd-safe 8.2.0.
+    #   parquet 60.0.0 is the first release that allows zstd ^0.14.
+    # - RUSTSEC-2026-0410 (zstd-sys) is not ignored. zstd-safe 7.2.4 allows
+    #   zstd-sys ^2.0.15, so Cargo.lock bumps zstd-sys to 2.1.2.
+    #
+    # Exit criteria (checked 2026-10-26 against crates.io):
+    # - Move to a parquet release that depends on zstd ^0.14, re-run
+    #   `cargo audit`, then delete these three ignores.
     "RUSTSEC-2026-0195",
     "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0391",
+    "RUSTSEC-2026-0398",
+    "RUSTSEC-2026-0403",
 ]
