@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `webpki-roots` to 1.0.11, and `webpki-root-certs` to 1.0.11 (`Cargo.lock`
   only) to resolve `RUSTSEC-2026-0385`, `RUSTSEC-2026-0382`,
   `RUSTSEC-2026-0381`, and `RUSTSEC-2026-0383`.
+- Updated transitive `zstd-sys` to 2.1.2 (`Cargo.lock` only) to resolve
+  `RUSTSEC-2026-0410`. `RUSTSEC-2026-0391`, `RUSTSEC-2026-0398`, and
+  `RUSTSEC-2026-0403` (`zstd` 0.13.3 / `zstd-safe` 7.2.4) are temporarily
+  ignored: Parquet 57 through 59 require `zstd ^0.13`, and Parquet 60.0.0 is
+  the first release that allows `zstd ^0.14`.
 
 ### Changed
 
