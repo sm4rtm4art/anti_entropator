@@ -1,6 +1,7 @@
 ---
 description: Rust standards for Anti-Entropator: errors, async safety, CLI contract, tests.
 globs: ["**/*.rs", "Cargo.toml"]
+paths: ["**/*.rs", "Cargo.toml"]
 alwaysApply: false
 ---
 

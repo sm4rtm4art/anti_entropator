@@ -15,6 +15,7 @@ Contents:
 - Rust-native, local-first data lakehouse CLI for unstructured files: **RustFS** (objects), **Lakekeeper** + **Iceberg** (catalog), **DataFusion** (queries), **OpenDAL** (all object-store I/O).
 - This is a showcase repository. Correctness, honest docs, and small reviewable changes outrank feature volume.
 - Stack, table identity, and hard stops: `.cursor/rules/project-architecture.mdc`. Scoped rules in `.cursor/rules/` load by file type.
+- Tools without path-scoped rules: before editing Rust, docs, or Docker/CI files, read `rust-standards.mdc`, `docs-standards.mdc`, or `docker-ci-standards.mdc` in `.cursor/rules/`.
 
 ## Status
 

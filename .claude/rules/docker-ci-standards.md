@@ -1,0 +1,1 @@
+../../.cursor/rules/docker-ci-standards.mdc
