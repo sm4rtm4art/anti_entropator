@@ -113,7 +113,7 @@ pub async fn upload_verified(
         .writer_with(&key)
         .chunk(UPLOAD_CHUNK_BYTES)
         .if_not_exists(true);
-    if op.info().full_capability().write_with_user_metadata {
+    if op.info().capability().write_with_user_metadata {
         writer_builder = writer_builder.user_metadata([
             (METADATA_SHA256.to_string(), expected.0.clone()),
             (METADATA_SIZE.to_string(), expected_len.to_string()),
