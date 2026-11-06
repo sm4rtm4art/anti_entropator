@@ -22,11 +22,7 @@ pub fn create_operator(config: &LakehouseConfig) -> Result<Operator> {
         .access_key_id(&config.s3_access_key)
         .secret_access_key(&config.s3_secret_key);
 
-    let op = Operator::new(builder)
-        .context("Failed to build OpenDAL S3 operator")?
-        .finish();
-
-    Ok(op)
+    Operator::new(builder).context("Failed to build OpenDAL S3 operator")
 }
 
 /// Build an OpenDAL [`Operator`] backed by in-memory storage (for tests).
@@ -34,11 +30,7 @@ pub fn create_operator(config: &LakehouseConfig) -> Result<Operator> {
 pub fn create_memory_operator() -> Result<Operator> {
     use opendal::services::Memory;
 
-    let op = Operator::new(Memory::default())
-        .context("Failed to build OpenDAL memory operator")?
-        .finish();
-
-    Ok(op)
+    Operator::new(Memory::default()).context("Failed to build OpenDAL memory operator")
 }
 
 #[cfg(test)]

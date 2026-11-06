@@ -3,28 +3,6 @@
 
 [advisories]
 ignore = [
-    # RUSTSEC-2026-0195 — quick-xml < 0.41: unbounded namespace-declaration
-    # allocation in NsReader (DoS / memory exhaustion). Severity 7.5 (high).
-    #
-    # RUSTSEC-2026-0194 — quick-xml < 0.41: quadratic run time checking
-    # duplicate attribute names on start tags. Severity 7.5 (high).
-    # Same dependency path and same fix as 0195; ignored together.
-    #
-    # Why ignored (temporary):
-    # - Transitive via opendal-core 0.57 -> quick-xml 0.39.4 (the S3 signing
-    #   path already resolves reqsign-aws-v4 3.3 -> quick-xml 0.41.0).
-    # - iceberg-storage-opendal 0.10.1 requires opendal ^0.57; opendal 0.58
-    #   is the first line on quick-xml ^0.41. Bumping opendal alone would add a
-    #   second opendal copy and leave the vulnerable 0.39.4 in the tree.
-    # - Exposure is limited, not zero: the affected parser only consumes S3
-    #   XML responses from the operator's configured object store (local
-    #   RustFS by default), so it needs a hostile or compromised endpoint.
-    #
-    # Exit criteria (verified 2026-09-17 against the upstream 0.11.x branch):
-    # - iceberg 0.11.0 (rc.2 at the time of writing) moves to opendal 0.58.
-    #   Bump iceberg* 0.11, opendal 0.58, object_store_opendal 0.58.0,
-    #   datafusion 54 together, re-run `cargo audit`, then delete both ignores.
-    #
     # RUSTSEC-2026-0435 (CVE-2026-43868) — thrift < 0.23: unbounded
     # allocation in TBinaryInputProtocol::read_bytes / read_string (DoS).
     # Published 2026-11-02. The Dependabot alert GHSA-2f9f-gq7v-9h6m is the
@@ -65,8 +43,6 @@ ignore = [
     # Exit criteria (checked 2026-10-26 against crates.io):
     # - Move to a parquet release that depends on zstd ^0.14, re-run
     #   `cargo audit`, then delete these three ignores.
-    "RUSTSEC-2026-0195",
-    "RUSTSEC-2026-0194",
     "RUSTSEC-2026-0391",
     "RUSTSEC-2026-0398",
     "RUSTSEC-2026-0403",
