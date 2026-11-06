@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `opendal` 0.58, and `object_store_opendal` 0.58. This removes
   `quick-xml` 0.39.4 from the tree and resolves `RUSTSEC-2026-0194` and
   `RUSTSEC-2026-0195`; their ignores are deleted from `.cargo/audit.toml`.
+- Updated transitive `arrow-data`, `arrow-buffer`, and `arrow-schema` to
+  58.4.1 (`Cargo.lock` only) to resolve `RUSTSEC-2026-0442`.
 - Updated transitive `rustls` to 0.23.46, `quinn` to 0.11.12, and `quinn-proto`
   to 0.11.19 (`Cargo.lock` only) to resolve `RUSTSEC-2026-0338` through
   `RUSTSEC-2026-0342` and `RUSTSEC-2026-0346` through `RUSTSEC-2026-0349`.
