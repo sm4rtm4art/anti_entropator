@@ -1,6 +1,7 @@
 ---
 description: Docker, Compose, CI, and release guardrails.
 globs: ["Dockerfile", "Dockerfile.*", "docker-compose*.yml", "compose.yaml", ".dockerignore", ".github/workflows/*.yml", ".github/workflows/*.yaml", ".github/actions/**/*.yml", ".github/dependabot.yml", "Makefile", "env.example", "scripts/check-compose*.sh", "scripts/delivery-sim.sh", "scripts/ci-cleanup.sh", "scripts/build-and-push.sh", "scripts/hooks/*", "docs/security/docker-hardening-review.md", "docs/security/deployment-profiles.md", "docs/security/go-public-checklist.md", "docs/ci-cd/blue-green-delivery.md"]
+paths: ["Dockerfile", "Dockerfile.*", "docker-compose*.yml", "compose.yaml", ".dockerignore", ".github/workflows/*.yml", ".github/workflows/*.yaml", ".github/actions/**/*.yml", ".github/dependabot.yml", "Makefile", "env.example", "scripts/check-compose*.sh", "scripts/delivery-sim.sh", "scripts/ci-cleanup.sh", "scripts/build-and-push.sh", "scripts/hooks/*", "docs/security/docker-hardening-review.md", "docs/security/deployment-profiles.md", "docs/security/go-public-checklist.md", "docs/ci-cd/blue-green-delivery.md"]
 alwaysApply: false
 ---
 

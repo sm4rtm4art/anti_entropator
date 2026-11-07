@@ -42,6 +42,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   version-free rules (status no longer lives in rules). `AGENTS.md` adds a
   deletion guard and a definition of done. The review format moves to
   `.cursor/commands/findings-review.md`.
+- Agent guidance: `CLAUDE.md` imports `AGENTS.md`. `.claude/rules/` and
+  `.claude/commands/` link to the files in `.cursor/`, so Claude Code, Codex,
+  and Cursor share one rule set. The scoped rules gain a `paths:` list equal to
+  `globs:`.
 - Contributing: `CONTRIBUTING.md` describes tracking issues, stacked and draft
   PRs. The `stabilization_block.yml` issue template is replaced by the generic
   `work_block.yml`; the PR template asks for a tracking issue.
