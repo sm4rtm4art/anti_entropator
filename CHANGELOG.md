@@ -34,6 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Docs: ADR-003 no longer names a pinned `iceberg` version and records that
+  the crate offers no overwrite, replace or delete (checked for 0.11.0).
 - Docs: `docs/evidence/v0.3.2-release-candidate.md` records the `v0.3.2` tag
   run (release workflow `38090289370`).
 - Agent guidance: `AGENTS.md` and `.cursor/rules/*.mdc` rewritten as short,

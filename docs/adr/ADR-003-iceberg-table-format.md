@@ -36,8 +36,8 @@ We will use **Apache Iceberg** as the table format for the file catalog.
 ### Negative
 
 - **Complexity**: More complex than plain Parquet files
-- **Rust crate maturity**: `iceberg` 0.10.x (pinned in `Cargo.toml`) is
-  pre-1.0; API changes between minors are expected
+- **Rust crate maturity**: the `iceberg` crate is pre-1.0 (the pinned
+  version is in `Cargo.toml`); API changes between minors are expected
 - **Catalog requirement**: Needs a catalog (Lakekeeper) to manage table metadata
 - **Learning curve**: Understanding snapshots, manifests, and metadata layers
 
@@ -48,7 +48,7 @@ We will use **Apache Iceberg** as the table format for the file catalog.
 - **Plain Parquet**: Simple but no schema evolution, time travel, or transactions
 - **SQLite**: Single-file but not designed for analytical workloads
 
-## Current State (2026-09-17)
+## Current State (2026-11-07)
 
 - One table: `iceberg.anti_entropator.file_catalog` (namespace and name
   constants in `src/lakehouse/schema.rs`). Created by `init`, appended by
@@ -63,6 +63,9 @@ We will use **Apache Iceberg** as the table format for the file catalog.
   lack the ADR-009 columns and are refused with reset instructions; the
   in-place upgrade was removed on 2026-10-10.
 - Unpartitioned; no sort order.
+- **Append-only writes**: the crate offers append, schema, property and
+  snapshot-expiry transactions, but no overwrite, replace or delete (checked
+  for `iceberg` 0.11.0). Rows are therefore only ever appended.
 - The `is_duplicate` / `duplicate_of` columns predate ADR-009. Under ADR-009
   a row is an append-only file observation, and duplicate content is expressed
   as multiple observations referencing the same CAS blob. Those columns are
