@@ -11,7 +11,7 @@ Contents: Posture | Upkeep | Status accuracy | Verification | Style | Diagrams |
 
 ## Posture
 
-- Write for a technical reviewer judging repository credibility. Accuracy and stated limitations beat polish.
+- Write for a technical reader. Accuracy and stated limitations beat polish.
 - Code, workflows, and configuration win over docs.
 - Make small, targeted edits. Delete or narrow a wrong claim rather than rewriting the section.
 - Do not rewrite for style alone or expand into adjacent sections.

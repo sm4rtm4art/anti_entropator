@@ -13,9 +13,9 @@ Contents:
 ## Project
 
 - Rust-native, local-first data lakehouse CLI for unstructured files: **RustFS** (objects), **Lakekeeper** + **Iceberg** (catalog), **DataFusion** (queries), **OpenDAL** (all object-store I/O).
-- This is a showcase repository. Correctness, honest docs, and small reviewable changes outrank feature volume.
-- Stack, table identity, and hard stops: `.cursor/rules/project-architecture.mdc`. Scoped rules in `.cursor/rules/` load by file type.
-- Tools without path-scoped rules: before editing Rust, docs, or Docker/CI files, read `rust-standards.mdc`, `docs-standards.mdc`, or `docker-ci-standards.mdc` in `.cursor/rules/`.
+- Correctness, honest docs, and small reviewable changes outrank feature volume.
+- Two rules in `.cursor/rules/` always apply: `project-architecture.mdc` (stack, table identity, hard stops) and `efficient-file-editing.mdc` (how to read and edit files). The other rules load by file type.
+- Tools that do not load rule files: read the two always-on rules first. Before editing Rust, docs, or Docker/CI files, also read `rust-standards.mdc`, `docs-standards.mdc`, or `docker-ci-standards.mdc`.
 
 ## Status
 
@@ -93,5 +93,5 @@ cargo run -- query "SELECT * FROM iceberg.anti_entropator.file_catalog LIMIT 10"
 - Branch, rebase, and PR conventions: `CONTRIBUTING.md`. Use `.github/PULL_REQUEST_TEMPLATE.md`.
 - After rebasing your own pushed feature branch, use `git push --force-with-lease`, and only when asked.
 - Keep `Cargo.lock` committed; treat lockfile changes as dependency review.
-- Hooks (`scripts/hooks/`) run fmt, clippy, and a test typecheck on commit and the full tests on push. Hooks do not run audit or coverage.
+- Hooks (`scripts/hooks/`) run fmt, clippy, and a test typecheck on commit, plus markdownlint when Markdown is staged and `markdownlint-cli2` is installed. The full tests run on push. Hooks do not run audit or coverage.
 - Review format on request: `.cursor/commands/findings-review.md`.

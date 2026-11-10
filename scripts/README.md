@@ -6,7 +6,7 @@ simulation. Keep this directory flat; do not add nested package layouts.
 | Script | Purpose |
 | --- | --- |
 | [`install-hooks.sh`](install-hooks.sh) | Copy `hooks/*` into `.git/hooks/` (executable). |
-| [`hooks/pre-commit`](hooks/pre-commit) | Local gate: `fmt`, `clippy`, `cargo test --no-run`. |
+| [`hooks/pre-commit`](hooks/pre-commit) | Local gate: `fmt`, `clippy`, `cargo test --no-run`; markdownlint when Markdown is staged and `markdownlint-cli2` is installed. |
 | [`hooks/pre-push`](hooks/pre-push) | Local gate: full `cargo test --all-features`. |
 | [`check-compose-local-bindings.sh`](check-compose-local-bindings.sh) | Assert default/delivery Compose configs keep ports local-only and RustFS `/data` on the named volume (runs in CI). |
 | [`ci-cleanup.sh`](ci-cleanup.sh) | Best-effort runner workspace cleanup (CI / forced local). |

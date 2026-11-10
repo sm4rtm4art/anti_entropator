@@ -13,7 +13,7 @@ Contents: Stack | Lakehouse identity | Object-store I/O | HTTP boundaries | Hard
 |---|---|---|
 | Object store | RustFS | a second S3 stack (ask first) |
 | Catalog | Lakekeeper (Iceberg REST) | another catalog |
-| Object-store I/O | OpenDAL via `storage::create_operator` | `aws-sdk-s3`, raw signed S3 HTTP, a second operator factory |
+| Object-store I/O | OpenDAL, built in two places from `LakehouseConfig` (see Object-store I/O) | `aws-sdk-s3`, a third construction, signed S3 HTTP other than the bucket setup call |
 | Query engine | DataFusion over Iceberg | another engine, direct Postgres queries |
 | Catalog DB | Postgres (Lakekeeper backend only) | used by the CLI or query path |
 | Orchestration | Docker Compose | Kubernetes; bare `docker run` as docs default |
@@ -26,19 +26,21 @@ Contents: Stack | Lakehouse identity | Object-store I/O | HTTP boundaries | Hard
 
 ## Object-store I/O
 
-- Read, write, list, head, and delete go through `storage::create_operator(&config)?`.
-- Allowed adapters over that operator: `object_store_opendal`, `iceberg-storage-opendal`.
+- Blobs, run journals, and DataFusion object access go through `storage::create_operator(&config)?`. `object_store_opendal` adapts that operator for DataFusion (`src/query/mod.rs`).
+- Iceberg catalog and writer files go through `iceberg-storage-opendal`, built by `lakehouse::s3_storage_factory()`.
+- Both take endpoint, region, bucket, and credentials from `LakehouseConfig`. Change the two mappings together (ADR-006).
 
 ## HTTP boundaries
 
-- `reqwest` only in `lakehouse/` bootstrap, `doctor/` health checks, ingest connectivity preflight, and narrow signed setup calls.
+- `reqwest` only in `lakehouse/` bootstrap, `doctor/` health checks, and the ingest connectivity preflight.
+- One S3 request does not go through OpenDAL: the SigV4-signed bucket check and creation in `lakehouse::create_bucket`. Do not add another.
 - Keep those paths fallible and tested.
 
 ## Hard stops
 
 - Do not add JVM dependencies or Kubernetes guidance.
 - Do not present planned features as implemented (per-stage tracing, SQL REPL, maintenance commands).
-- Do not bypass OpenDAL for object-store access.
+- Do not bypass OpenDAL for object-store access, apart from the bucket setup call above.
 
 ## Data correctness
 
