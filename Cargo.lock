@@ -188,7 +188,6 @@ dependencies = [
  "url",
  "uuid",
  "walkdir",
- "xattr",
 ]
 
 [[package]]

@@ -59,6 +59,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   PRs. The `stabilization_block.yml` issue template is replaced by the generic
   `work_block.yml`; the PR template asks for a tracking issue.
 
+### Removed
+
+- The direct macOS dependency on `xattr`. No code used it. `Cargo.lock` keeps
+  `xattr` as a transitive dependency of `opendal-service-fs`.
+
 ## [0.3.2] - 2026-10-10
 
 ### Changed
