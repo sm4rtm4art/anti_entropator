@@ -28,9 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `RUSTSEC-2026-0403` (`zstd` 0.13.3 / `zstd-safe` 7.2.4) are temporarily
   ignored: Parquet 57 through 59 require `zstd ^0.13`, and Parquet 60.0.0 is
   the first release that allows `zstd ^0.14`.
-- `RUSTSEC-2026-0435` (`thrift` 0.17.0 via Parquet 58) is temporarily ignored.
-  The affected binary-protocol reader is not used: Parquet decodes footers
-  with the compact protocol. Parquet 59 drops the `thrift` dependency.
+- Updated transitive `arrow` and `parquet` to 58.4.1 (`Cargo.lock` only).
+  Parquet 58.4.1 requires `thrift` 0.23, so the lockfile moves from `thrift`
+  0.17.0 to 0.23.0. This resolves `RUSTSEC-2026-0435`, and its ignore is
+  deleted from `.cargo/audit.toml`.
 
 ### Changed
 

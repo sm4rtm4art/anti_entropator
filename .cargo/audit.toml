@@ -3,24 +3,6 @@
 
 [advisories]
 ignore = [
-    # RUSTSEC-2026-0435 (CVE-2026-43868) — thrift < 0.23: unbounded
-    # allocation in TBinaryInputProtocol::read_bytes / read_string (DoS).
-    # Published 2026-11-02. The Dependabot alert GHSA-2f9f-gq7v-9h6m is the
-    # same transitive `thrift 0.17`.
-    #
-    # Why ignored (temporary):
-    # - Transitive via parquet 58.4.0 -> thrift 0.17.0. No parquet 58.x
-    #   release allows thrift 0.23.
-    # - The affected functions are not reachable here: parquet 58.4.0 never
-    #   constructs a TBinaryInputProtocol (it decodes Parquet footers with the
-    #   compact protocol), and this crate does not use `thrift` directly.
-    #   Checked 2026-11-06 by searching the parquet 58.4.0 sources.
-    #
-    # Exit criteria (checked 2026-11-06 against crates.io):
-    # - parquet 59.0.0 has no `thrift` dependency. It arrives with iceberg 0.12
-    #   (arrow/parquet 59, datafusion 55). Bump, re-run `cargo audit`, then
-    #   delete this ignore.
-    #
     # RUSTSEC-2026-0391 — zstd < 0.14.3: data from an abandoned stream leaks
     # into the next stream on a reused context.
     #
@@ -32,7 +14,7 @@ ignore = [
     # Same crate line and same fix as 0398; ignored together with 0391.
     #
     # Why ignored (temporary):
-    # - Transitive via parquet 58.4.0 (feature `zstd`) -> zstd 0.13.3 ->
+    # - Transitive via parquet 58.4.1 (feature `zstd`) -> zstd 0.13.3 ->
     #   zstd-safe 7.2.4. The CLI enables that feature for Parquet read/write.
     # - parquet 57, 58, and 59 require zstd ^0.13, and zstd 0.13 requires
     #   zstd-safe ^7. The fixed line is zstd 0.14.3 / zstd-safe 8.2.0.
@@ -46,5 +28,4 @@ ignore = [
     "RUSTSEC-2026-0391",
     "RUSTSEC-2026-0398",
     "RUSTSEC-2026-0403",
-    "RUSTSEC-2026-0435",
 ]
