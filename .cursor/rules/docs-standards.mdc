@@ -1,7 +1,7 @@
 ---
 description: Documentation truth, verification, and upkeep standards.
-globs: ["README.md", "AGENTS.md", "CHANGELOG.md", "docs/**/*.md", "SECURITY.md", "CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/*.md", ".github/ISSUE_TEMPLATE/*.yml"]
-paths: ["README.md", "AGENTS.md", "CHANGELOG.md", "docs/**/*.md", "SECURITY.md", "CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/*.md", ".github/ISSUE_TEMPLATE/*.yml"]
+globs: ["README.md", "AGENTS.md", "CLAUDE.md", "CHANGELOG.md", "docs/**/*.md", "SECURITY.md", "CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/*.md", ".github/ISSUE_TEMPLATE/*.yml"]
+paths: ["README.md", "AGENTS.md", "CLAUDE.md", "CHANGELOG.md", "docs/**/*.md", "SECURITY.md", "CONTRIBUTING.md", ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/*.md", ".github/ISSUE_TEMPLATE/*.yml"]
 alwaysApply: false
 ---
 

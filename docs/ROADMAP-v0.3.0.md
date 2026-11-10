@@ -49,8 +49,7 @@ internal v0.4.0 plan; do not read this file as the current roadmap.
 ### Status update (2026-05-01)
 
 - Authority rule: this roadmap remains the release contract for `v0.3.0`.
-- The local `v0.3-stabilization-plan.md` is the active execution lane and triage queue, not a replacement for this roadmap's success criteria.
-- S1-S4 stabilization work is the prerequisite gate before resuming M3/M4 implementation work.
+- S1-S4 work is the prerequisite gate before resuming M3/M4 implementation work.
 - S5 (CI/CD and multi-arch hardening) runs after feature gates and before release tagging.
 - `v0.3.0` completion still requires maintenance primitives, orchestration gate, and numeric coverage floor from the success criteria section below.
 
@@ -61,9 +60,8 @@ internal v0.4.0 plan; do not read this file as the current roadmap.
 
 ### Status update (2026-07-26)
 
-- Stabilization lane: **S5 complete**; **S6** (final cleanup / release-readiness
-  sweep) is next month. Active execution detail remains in local
-  `v0.3-stabilization-plan.md`; this roadmap stays the `v0.3.0` release contract.
+- **S5 complete**; **S6** (final cleanup / release-readiness sweep) is next
+  month. This roadmap stays the `v0.3.0` release contract.
 - OpenDAL / `quick-xml` real upgrade remains deferred (DataFusion /
   `object_store` compatibility). Temporary `cargo audit` ignores for
   `RUSTSEC-2026-0195` and `RUSTSEC-2026-0194` are in `.cargo/audit.toml`;
@@ -79,12 +77,11 @@ internal v0.4.0 plan; do not read this file as the current roadmap.
 
 ### Status update (2026-09-13)
 
-- The S1-S6 stabilization execution plan is complete and archived. A fresh
+- S1-S6 are complete. A fresh
   Docker-backed `init` → `ingest` → `query` test passed, and Lakekeeper exposed
   the expected `anti-entropator` project and warehouse.
-- This does **not** complete v0.3.0. S6A ingest correctness/recovery is the next
-  active execution plan and blocks M3 destructive maintenance and M4
-  orchestration.
+- This does **not** complete v0.3.0. S6A ingest correctness/recovery is next
+  and blocks M3 destructive maintenance and M4 orchestration.
 - ADR-006 now describes the implemented storage boundary accurately:
   application/DataFusion and Iceberg use separate OpenDAL construction paths
   fed by the same `LakehouseConfig`.
@@ -144,7 +141,7 @@ internal v0.4.0 plan; do not read this file as the current roadmap.
 - Implemented AWS SigV4 signing for bucket creation via direct HTTP (`reqwest`)
 - Added Lakekeeper project bootstrapping (required since Lakekeeper >= 0.11)
 - Threaded `X-Project-Id` header through `RestCatalog` for writer and query paths
-- Remaining direct catalog REST helper coverage for `X-Project-Id` is tracked in S1 stabilization queue and is not considered complete until those paths are fixed and tested.
+- Remaining direct catalog REST helper coverage for `X-Project-Id` is not complete until those paths are fixed and tested.
 - Added storage contract tests (write/read/exists/list/delete against memory backend)
 - Aligned `lakekeeper-migrate` image to `latest-main` to fix schema mismatch
 - Added [ADR-006](adr/ADR-006-opendal-unified-io.md) (OpenDAL) and [ADR-007](adr/ADR-007-dataflow-rs-orchestration.md) (dataflow-rs; superseded 2026-09-17)

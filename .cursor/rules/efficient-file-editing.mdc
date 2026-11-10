@@ -5,9 +5,9 @@ alwaysApply: true
 
 # Efficient Editing
 
-- Edit with the native edit tools. Do not edit files through sed, awk, heredocs, or throwaway scripts. Scripts are for generated files, binary formats, and real batch transforms.
-- Read with the Read tool, not `cat`, `head`, or `tail`. Search with Grep and Glob, not `rg` or `find` in the shell.
-- Read large files with `offset` and `limit`. Read only the section the task needs.
+- Edit with the agent's native edit tool. Do not edit files with `sed`, `awk`, heredocs, or throwaway scripts. Scripts are for generated files, binary formats, and real batch transforms.
+- Read and search with the agent's native read and search tools, not shell `cat`, `head`, `tail`, `rg`, or `find`.
+- In a large file, read only the section the task needs.
 - Do not re-read a file you just edited or one that has not changed.
 - Make all edits to one file in one pass.
 - Verify once after editing. Do not repeat a check whose inputs did not change.
