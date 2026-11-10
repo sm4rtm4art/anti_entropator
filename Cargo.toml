@@ -59,10 +59,6 @@ directories = "6"
 url = "2"
 glob = "0.3.3"
 
-# Platform-specific (macOS xattrs)
-[target.'cfg(target_os = "macos")'.dependencies]
-xattr = "1"
-
 [dev-dependencies]
 tempfile = "3"
 assert_cmd = "2"
