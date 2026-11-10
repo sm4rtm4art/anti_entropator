@@ -15,7 +15,8 @@ Touched code moves toward these rules. Do not add new violations; do not widen a
 
 - Treat filesystem, object-store, catalog, subprocess, crypto, and config operations as fallible.
 - No new `.unwrap()` or `.expect()` on runtime I/O paths. They are fine in `#[cfg(test)]` and in `LazyLock::new` with a clear message.
-- `anyhow::Result` in `main.rs`, `cli/`, and top-level runners (`ingest::run`, `scan::run`, `profile::run`, `query::run`). Typed errors in `domain/`, `storage/`, `lakehouse/schema.rs`.
+- Return `anyhow::Result` by default, including in `storage/` and `lakehouse/`.
+- Define a typed error only when a caller must match on it, and match with `downcast_ref`. Examples: `NonUtf8Path` in `domain/observation.rs`, `SourceChanged` and `IntegrityMismatch` in `ingest/upload.rs`.
 - At command boundaries add `.context` naming the operation and resource (path, bucket, table, endpoint).
 
 ## Async

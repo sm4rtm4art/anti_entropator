@@ -9,7 +9,7 @@ body:
     attributes:
       label: Block
       description: Short name or identifier for this block of work.
-      placeholder: "M1.1 shared inspect stage"
+      placeholder: "Docs truth pass"
     validations:
       required: true
 

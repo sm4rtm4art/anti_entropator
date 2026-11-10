@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Agent guidance: the Rust error rule now matches the code. It uses `anyhow`
+  by default and allows typed errors only where a caller matches on them. The
+  editing rule names no agent-specific tools. `CLAUDE.md` falls under the docs
+  rule. `AGENTS.md` takes the current state from `CHANGELOG.md` `[Unreleased]`
+  and GitHub issues. It forbids copying content from untracked local
+  directories, such as `.local/` or `.private/`, into tracked files, commits,
+  PRs, or issues.
+- Docs: wording cleanup in `docs/ROADMAP-v0.3.0.md` and the work-block issue
+  template.
 - Docs: ADR-003 no longer names a pinned `iceberg` version and records that
   the crate offers no overwrite, replace or delete (checked for 0.11.0).
 - Docs: `docs/evidence/v0.3.2-release-candidate.md` records the `v0.3.2` tag
@@ -359,8 +368,7 @@ branch merge are v0.5.0+.
 ### Deferred
 
 - A single-writer lease per ingest source (ADR-009 slice 4b) and deletion or
-  rename observations are tracked in
-  `.local/followup-v0.3-stabilization-plan.md`.
+  rename observations remain open.
 - Queries that read `run_id` over data files written before the observation
   columns existed fail in iceberg-rust 0.10 (`unexpected target column type
   FixedSizeBinary(16)`); a `source_id = …` predicate prunes those files. To be

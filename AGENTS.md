@@ -19,8 +19,7 @@ Contents:
 
 ## Status
 
-- Current phase, active plan, and next step: `.local/README.md` (private, gitignored).
-- If `.local/` is absent, use `CHANGELOG.md` `[Unreleased]` and open GitHub issues.
+- Current state: `CHANGELOG.md` `[Unreleased]` and open GitHub issues.
 - Do not copy phase or version information into rules or this file.
 
 ## Commands
@@ -62,13 +61,14 @@ cargo run -- query "SELECT * FROM iceberg.anti_entropator.file_catalog LIMIT 10"
 | Ask first | ADR edits (ADRs record deliberate decisions). |
 | Ask first | Recursive or bulk deletes (see Deletion guard). |
 | Never | Commit secrets, tokens, `.env`, private paths, or personal filenames. |
+| Never | Copy content from untracked or git-ignored local directories (`.local/`, `.private/`, `.notes/`, etc.) into tracked files, commit messages, PR text, or issues. That includes file names, milestone labels, workload numbers, and other private details. |
 | Never | Force push to `main`, merge PRs, or skip hooks with `--no-verify`. |
 
 ### Deletion guard
 
 - Before any recursive or bulk delete, name the exact resolved path and get an explicit yes. This covers `rm -r`, `rm -rf`, `find ... -delete`, `git clean -fd`, `git reset --hard`, `git checkout -- .`, and deleting a directory with the Delete tool.
 - Stay inside the workspace. Never target `/`, `~`, the repo root, or a path built from a variable that may be unset or empty.
-- Prefer `git rm` (recoverable from history) or deleting single named files. `.local/archive/` is for private planning notes only, never for tracked files.
+- Prefer `git rm` (recoverable from history) or deleting single named files.
 - Docker data: `docker compose down -v`, `docker volume rm`, `docker system|volume|image prune`, `rm -rf data/*` or `logs/*`, and `scripts/delivery-sim.sh ... --destroy-data` need the same confirmation. Details: `.cursor/rules/docker-ci-standards.mdc`.
 - `docker compose down` without `-v` is safe.
 
@@ -77,7 +77,6 @@ cargo run -- query "SELECT * FROM iceberg.anti_entropator.file_catalog LIMIT 10"
 - Behavior, tests, docs, and `CHANGELOG.md` `[Unreleased]` agree.
 - Tests cover the actual risk, not only the happy path.
 - Checks that did not run (audit, coverage, stack tests) are named in the PR description.
-- The status board in `.local/README.md` is updated when a slice finishes.
 
 ## Communication
 
