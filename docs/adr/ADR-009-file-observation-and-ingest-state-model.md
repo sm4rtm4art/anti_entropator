@@ -120,9 +120,10 @@ This ADR defines target v0.3 behavior. Implementation lands in small slices:
 1. Add and test the observation/run domain types and additive schema fields.
    **Shipped.** `file_catalog` has five optional columns with stable field ids
    21-25: `source_id`, `relative_path`, `run_id` (uuid), `observation_status`
-   (`present` | `deleted`), `observed_at`. `init` adds them to tables created
-   before this change via Iceberg schema evolution and is idempotent; the
-   writer refuses to commit into a table that lacks them. The row `id` is a
+   (`present` | `deleted`), `observed_at`. `init` originally added them to older
+   tables through Iceberg schema evolution. That in-place upgrade was removed
+   on 2026-10-10: `init` and the writer now refuse a table that lacks them and
+   print reset instructions (ADR-003). The row `id` is a
    UUIDv5 over `(source_id, relative_path, content_hash, status)`, so the
    identifier field is a natural idempotency key. `source_id` defaults to the
    canonical absolute path of the ingest root and can be overridden with

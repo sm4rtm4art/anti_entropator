@@ -1,5 +1,7 @@
 # ADR-006: OpenDAL as Unified I/O Boundary
 
+Status: **accepted, implemented.**
+
 ## Context
 
 The codebase currently uses `aws-sdk-s3` for uploading files to RustFS and `object_store` (with the `aws` feature) for DataFusion reads. This means two separate S3 client implementations with different configuration paths, error types, and retry semantics.
@@ -31,6 +33,12 @@ The invariant is therefore one OpenDAL-based I/O boundary and one configuration
 source, not one shared `Operator` instance or factory. Future configuration
 changes must keep both mappings aligned.
 
+Amended 2026-11-10: one S3 request does not go through OpenDAL. `init` checks
+for the bucket and creates it with a SigV4-signed `reqwest` call
+(`create_bucket` in `src/lakehouse/mod.rs`). ADR-004 records it as a bootstrap
+boundary. The rejected alternative below is about data-path I/O; no object
+read or write uses a signed `reqwest` call.
+
 ## Consequences
 
 ### Positive
@@ -60,4 +68,4 @@ changes must keep both mappings aligned.
 
 - [Apache OpenDAL](https://opendal.apache.org/)
 - [object_store_opendal crate](https://crates.io/crates/object_store_opendal)
-- [Roadmap v0.3.0 - M1](../ROADMAP-v0.3.0.md)
+- [Roadmap v0.3.0](../ROADMAP-v0.3.0.md)

@@ -56,8 +56,9 @@ local Docker Compose stack.
 | `runs`       | Ready   | Inspect ingest run journals: what each run recorded, whether it finished. |
 
 Planned and **not in the binary**: interactive SQL, duplicate management,
-ingest branch merge, Iceberg maintenance (`expire`, `vacuum`). See the
-[roadmap](docs/ROADMAP-v0.3.0.md).
+ingest branch merge, Iceberg maintenance (`expire`, `vacuum`), time travel in
+`query`, and in-place schema upgrades. The
+[v0.3.0 roadmap](docs/ROADMAP-v0.3.0.md) is closed and kept as a record.
 
 What the ready path gives you:
 
@@ -66,8 +67,8 @@ What the ready path gives you:
   re-ingesting unchanged input uploads nothing.
 - **Optional enrichment** through `ffprobe`, `exiftool`, and `pdfinfo` when
   those tools are installed.
-- **Iceberg snapshots** for every ingest, with schema evolution and time travel
-  available from the table format.
+- **Iceberg snapshots**, one per committed batch. The table format supports
+  time travel and schema evolution; the CLI does not expose either yet.
 - **SQL** over the result, using the same storage boundary the writer uses.
 
 ## Architecture
@@ -266,8 +267,9 @@ only by the real ingest.
   by wall-clock `observed_at`. A batch commit is the unit of atomicity, not the
   whole run. Two concurrent ingests of the same source are not prevented.
 - **Not implemented.** Interactive SQL, duplicate management, ingest branch
-  merge, and Iceberg maintenance (`expire`, `vacuum`). See the
-  [roadmap](docs/ROADMAP-v0.3.0.md).
+  merge, Iceberg maintenance (`expire`, `vacuum`), time travel in `query`, and
+  in-place schema upgrades: a table created before v0.3.0 is refused with
+  reset instructions.
 - **Blue/green delivery** (`scripts/delivery-sim.sh`) is a local simulation of
   the rollout model, not production automation.
 

@@ -45,10 +45,10 @@ Recommended controls:
 - Pin container images to fixed versions or digests.
 - Keep an explicit rollback path for deployment changes.
 
-## Profile 3: Public Showcase
+## Profile 3: Public Deployment
 
 Purpose:
-- Publicly visible demonstration with reproducible deployment narrative.
+- Publicly reachable deployment with a reproducible deployment procedure.
 
 Required controls:
 - Keep this repository's local-first defaults clearly labeled as non-production.
@@ -61,14 +61,14 @@ Required controls:
   Public exposure must use explicit network controls rather than relying on the
   local compose defaults.
 
-Showcase constraints:
+Constraints:
 - The blue/green flow documented in this repository is a reference pattern, not a managed production platform.
 - Public exposure requires an explicit threat model review before go-live.
 
 ## Control Matrix
 
-| Control | Local Demo | Shared Internal | Public Showcase |
-| ------- | ---------- | --------------- | --------------- |
+| Control | Local Demo | Shared Internal | Public Deployment |
+| ------- | ---------- | --------------- | ----------------- |
 | Localhost-only binding | Required | Recommended | Recommended for demos, else explicit network controls |
 | `allowall` authorization | Allowed | Not allowed | Not allowed |
 | `.env` local file | Allowed (git-ignored) | Avoid | Avoid |

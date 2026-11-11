@@ -71,7 +71,7 @@ Before public/shared deployment:
 ## Deployment Security Profiles
 
 Security controls differ by environment.
-Treat local demo defaults, shared internal deployments, and public showcase exposure as separate security profiles.
+Treat local demo defaults, shared internal deployments, and public deployments as separate security profiles.
 
 - Local demo profile: [docs/security/deployment-profiles.md](docs/security/deployment-profiles.md)
 - Go-public runbook: [docs/security/go-public-checklist.md](docs/security/go-public-checklist.md)

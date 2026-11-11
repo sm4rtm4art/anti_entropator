@@ -61,7 +61,7 @@ jobs:
         run: mkdir -p trivy-results
 
       - name: Trivy filesystem scan (report mode)
-        # S5-A report mode: vulnerability findings are logged; scan failures still fail.
+        # Report mode: vulnerability findings are logged; scan failures still fail.
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs

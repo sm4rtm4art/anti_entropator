@@ -28,13 +28,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `RUSTSEC-2026-0403` (`zstd` 0.13.3 / `zstd-safe` 7.2.4) are temporarily
   ignored: Parquet 57 through 59 require `zstd ^0.13`, and Parquet 60.0.0 is
   the first release that allows `zstd ^0.14`.
-- Updated transitive `arrow` and `parquet` to 58.4.1 (`Cargo.lock` only).
+- Updated `arrow` and `parquet` to 58.4.1 (`Cargo.lock` only).
   Parquet 58.4.1 requires `thrift` 0.23, so the lockfile moves from `thrift`
   0.17.0 to 0.23.0. This resolves `RUSTSEC-2026-0435`, and its ignore is
   deleted from `.cargo/audit.toml`.
 
 ### Changed
 
+- Compose: the Lakekeeper image moves from `v0.13.6` to `v0.15.0` and the
+  RustFS image from `1.0.0` to `1.0.4`. On an existing stack, run
+  `docker compose pull` and `docker compose up -d`; the `lakekeeper-migrate`
+  service migrates the catalog database before Lakekeeper starts.
+- Docs: decision records, `README.md`, and `docs/design/architecture.md` now
+  match the code. ADR-009 and ADR-003 say that a table from before v0.3.0 is
+  refused, not upgraded in place, and that the single-writer lease is not
+  implemented. ADR-008 records the `v0.3.x` tag runs and lists what is not
+  implemented (runtime image baseline, SBOM and provenance). ADR-006 names the
+  signed bucket setup call. ADR-004 gives the host port 8100, and the ADR-005
+  example uses `content_hash`. The README and the architecture document no
+  longer present time travel, schema evolution, or `scan --dry-run` as working
+  CLI features, and the architecture diagram shows only the current state.
 - Agent guidance: `project-architecture.mdc` describes the two OpenDAL
   constructions the way ADR-006 does: `storage::create_operator` for blobs,
   run journals, and queries, and `lakehouse::s3_storage_factory` for Iceberg
