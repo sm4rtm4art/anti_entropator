@@ -24,7 +24,7 @@
 
 If applicable:
 
-- [ ] `cargo llvm-cov --workspace --summary-only`
+- [ ] `cargo llvm-cov --all-features --workspace --summary-only`
 
 ## Risk Review
 

@@ -35,6 +35,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Agent guidance: `project-architecture.mdc` describes the two OpenDAL
+  constructions the way ADR-006 does: `storage::create_operator` for blobs,
+  run journals, and queries, and `lakehouse::s3_storage_factory` for Iceberg
+  files. It names the signed bucket setup call as the only S3 request outside
+  OpenDAL. `AGENTS.md` names both always-on rules. `AGENTS.md`,
+  `CONTRIBUTING.md`, `scripts/README.md`, and the PR template now agree on the
+  pre-commit hook, the coverage command, commit prefixes, and branch names.
 - Agent guidance: the Rust error rule now matches the code. It uses `anyhow`
   by default and allows typed errors only where a caller matches on them. The
   editing rule names no agent-specific tools. `CLAUDE.md` falls under the docs

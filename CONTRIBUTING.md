@@ -24,7 +24,7 @@ Install them in your local clone so quality checks run before commit/push:
 
 Hook policy:
 
-- `pre-commit`: `fmt` + `clippy` + `cargo test --no-run`
+- `pre-commit`: `fmt` + `clippy` + `cargo test --no-run`, plus markdownlint when Markdown is staged and `markdownlint-cli2` is installed
 - `pre-push`: full `cargo test --all-features`
 
 Other helper scripts (compose checks, delivery sim, CI cleanup) are indexed in
@@ -41,7 +41,7 @@ Run these before opening a PR:
 
 If your change affects coverage-sensitive areas, also run:
 
-- `cargo llvm-cov --workspace --summary-only`
+- `cargo llvm-cov --all-features --workspace --summary-only`
 
 If your change touches Markdown, shell scripts, or `.cursor/rules`, also run:
 
@@ -50,13 +50,13 @@ If your change touches Markdown, shell scripts, or `.cursor/rules`, also run:
 ## Commit and PR Guidelines
 
 - Keep PRs single-purpose and reviewable in one sitting. Squash merge is the default.
-- Branch from current `origin/main` and rebase before pushing.
+- Branch from current `origin/main` and rebase before pushing. Name the branch `<prefix>/<short-topic>`, for example `fix/onboarding-env`.
 - Structure larger work with a tracking issue (task list or sub-issues) and small PRs that each target `main`.
 - When a slice depends on an unmerged one, stack the PRs and retarget to `main` after the base merges. Open work-in-progress as a draft PR.
 - Avoid long-lived integration branches that land as one large PR.
 - Link the tracking issue; put validation evidence and deferred follow-ups in the PR description.
 - Prefer small, testable increments over broad refactors.
-- Use clear commit messages (Conventional Commits style is recommended, e.g. `feat: ...`, `fix: ...`, `docs: ...`, `chore: ...`).
+- Start commit messages and PR titles with a Conventional Commits prefix: `feat`, `fix`, `chore`, or `docs`. A scope is optional (`fix(lakehouse): ...`).
 - Do not describe planned or placeholder behavior as shipped in docs.
 - Do not commit secrets, tokens, `.env`, or machine-local private data.
 
