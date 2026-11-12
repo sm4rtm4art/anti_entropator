@@ -49,8 +49,7 @@ Use it in order, and treat each section as a small, testable milestone.
   - S6 review of the latest successful CI/Security logs found no token, access
     key, or private-key patterns; 347 artifact names contained no sensitive
     markers (2026-09-13).
-- [x] Complete the S5-0 trust-gap reconciliation before S5 public-showcase
-  closeout:
+- [x] Complete the S5-0 trust-gap reconciliation before the S5 closeout:
   - classify remaining checklist items as S5-closeout, release-blocking, or
     post-v0.3 debt,
   - confirm S1/S4 gate wording still matches current code behavior,
@@ -112,7 +111,7 @@ Use it in order, and treat each section as a small, testable milestone.
   build with `--pull --no-cache`, runtime `--help` smoke test, full
   HIGH/CRITICAL Trivy image scan, and fixable-only Trivy image scan. The full
   baseline reported 4 Debian-context findings; the fixable-only scan reported 0.
-- [x] Fix Docker image runtime compatibility before public-showcase S5 closeout:
+- [x] Fix Docker image runtime compatibility before the S5 closeout:
   the 2026-05-27 local `docker run --rm anti_entropator:local-scan --help` smoke
   validated the then-current `rust:1.95-bookworm` builder with
   `debian:bookworm-slim` runtime. The builder was later bumped to

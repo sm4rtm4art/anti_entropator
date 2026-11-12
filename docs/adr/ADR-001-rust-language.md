@@ -4,7 +4,7 @@ Status: **accepted, implemented.**
 
 ## Context
 
-We need to choose a programming language for implementing the Anti-Entropator, a local data lakehouse for file organization. The tool must handle filesystem operations safely, integrate with modern data engineering stack (Iceberg, DataFusion), and serve as a portfolio piece demonstrating systems programming skills.
+We need to choose a programming language for implementing the Anti-Entropator, a local data lakehouse for file organization. The tool must handle filesystem operations safely and integrate with a modern data engineering stack (Iceberg, DataFusion).
 
 ## Decision
 
@@ -18,7 +18,6 @@ We will use **Rust** as the implementation language.
 - **Native Iceberg/DataFusion support**: Both are Apache projects with first-class Rust implementations
 - **Performance**: Near-C performance for I/O-bound operations
 - **Type system**: Compile-time guarantees prevent many runtime errors
-- **Portfolio value**: Demonstrates systems programming proficiency to employers
 - **Single binary**: The CLI itself has no runtime dependencies. Optional
   metadata enrichment in `scan` shells out to `exiftool`, `ffprobe`, and
   `pdfinfo` when present; the lakehouse services run in Docker Compose.

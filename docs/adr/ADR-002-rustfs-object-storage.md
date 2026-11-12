@@ -6,7 +6,7 @@ Status: **accepted, implemented.**
 
 We need S3-compatible object storage for the local lakehouse. MinIO was the
 traditional local choice, but its AGPL-3.0 license and its direction as a
-project made it a poor fit for a portfolio repository that wants a permissive,
+project made it a poor fit for a repository that wants a permissive,
 Rust-native stack.
 
 ## Decision
@@ -30,7 +30,7 @@ We will use **RustFS** as the S3-compatible object storage layer.
 
 ### Positive
 
-- **Apache 2.0 license**: permissive; no AGPL obligations for a showcase repo.
+- **Apache 2.0 license**: permissive; no AGPL obligations.
 - **Rust-native**: aligns with the project's stack and learning goals.
 - **S3 compatible**: works with OpenDAL's S3 service and therefore with
   DataFusion (`object_store_opendal`) and iceberg-rs

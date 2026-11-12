@@ -6,7 +6,7 @@ Status: **accepted, implemented.**
 
 Iceberg tables require a catalog to manage table metadata, namespaces, and provide consistent reads/writes.
 
-This project is intentionally “over-engineered” as a learning/portfolio lakehouse, but we still want the local stack to stay **tight**:
+This project deliberately runs a full lakehouse stack for a local tool, but we still want the local stack to stay **tight**:
 
 - No JVM runtime in the catalog service (reduce operational complexity / attack surface)
 - A standards-based API that query engines understand (Iceberg REST Catalog)
@@ -22,7 +22,7 @@ We will use **Lakekeeper** as the Iceberg catalog (Iceberg REST Catalog specific
 
 - **No JVM**: Lakekeeper is written in Rust and runs as a single service.
 - **Standards-based**: Implements the Iceberg REST Catalog spec, improving interoperability.
-- **Simple local story**: Docker Compose + one endpoint (`http://localhost:8181`) for catalog + UI.
+- **Simple local story**: Docker Compose + one endpoint for catalog + UI (`http://localhost:8100` on the host; the container listens on 8181).
 
 ### Negative
 

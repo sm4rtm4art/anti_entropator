@@ -1,8 +1,9 @@
 # Anti-Entropator Container Image
-# Single-arch build by default (multi-arch planned in S5).
+# Single-arch build by default. A multi-arch dry-run exists in release.yml.
 
 # Build stage: keep explicit Rust tag on Bookworm to match runtime glibc.
-# Bump alongside Rust dependency/MSRV needs, then rerun S5-B image validation.
+# Bump alongside Rust dependency/MSRV needs, then rerun the image validation
+# (smoke + Trivy, .github/actions/container-verify).
 FROM rust:1.98-bookworm AS builder
 
 WORKDIR /app
@@ -38,7 +39,7 @@ USER anti
 ENTRYPOINT ["anti_entropator"]
 CMD ["--help"]
 
-# Runtime stage - distroless experiment candidate (S5-D B1)
+# Runtime stage - distroless experiment candidate, not the default
 FROM gcr.io/distroless/cc-debian12:nonroot AS runtime-distroless
 
 COPY --from=builder /app/target/release/anti_entropator /usr/local/bin/
@@ -46,5 +47,5 @@ COPY --from=builder /app/target/release/anti_entropator /usr/local/bin/
 ENTRYPOINT ["/usr/local/bin/anti_entropator"]
 CMD ["--help"]
 
-# Keep default local/CI image on Bookworm until S5-D chooses a baseline.
+# Default local/CI image stays on Bookworm until a runtime baseline is chosen.
 FROM runtime-bookworm AS runtime

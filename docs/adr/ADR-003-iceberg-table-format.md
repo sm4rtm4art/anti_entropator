@@ -20,16 +20,17 @@ We will use **Apache Iceberg** as the table format for the file catalog.
 
 ### Positive
 
-- **Schema evolution**: Add new metadata columns without breaking existing data
-  (ADR-009's additive observation fields rely on this)
+- **Schema evolution**: The format can add metadata columns without breaking
+  existing data. The CLI does not evolve a table in place today (see Current
+  State).
 - **Time travel**: Every commit is a snapshot; historical state is queryable
   by snapshot. The CLI does not expose a time-travel flag yet.
 - **Hidden partitioning**: Available in the format. The table is currently
   **unpartitioned**; partitioning is a later optimization once query patterns
   are known.
 - **Atomic commits**: Snapshot commits through the REST catalog are atomic.
-  Concurrent-writer conflict handling is scoped by ADR-009 (single-writer lease
-  in v0.3).
+  Concurrent-writer conflict handling is scoped by ADR-009. Its single-writer
+  lease is not implemented; one writer per source is assumed.
 - **Industry momentum**: Wide adoption across the data ecosystem
 - **Rust support**: `iceberg` crate (Apache iceberg-rust)
 

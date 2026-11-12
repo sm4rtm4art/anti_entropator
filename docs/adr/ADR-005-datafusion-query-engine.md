@@ -56,9 +56,9 @@ use `files` only as labeled CLI sugar. Do not present bare
 
 ```sql
 -- Find all duplicates (CLI shorthand)
-SELECT sha256, COUNT(*) as count, ARRAY_AGG(source_path) as paths
+SELECT content_hash, COUNT(*) as count, ARRAY_AGG(source_path) as paths
 FROM files
-GROUP BY sha256
+GROUP BY content_hash
 HAVING COUNT(*) > 1;
 
 -- Find large videos from last month (canonical)

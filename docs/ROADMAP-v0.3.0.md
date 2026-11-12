@@ -1,8 +1,9 @@
 # Roadmap to v0.3.0
 
 **Status: closed, historical record.** v0.3.0 shipped 2026-09-18 and v0.3.1
-on 2026-09-20. Items marked v0.4.0 or later below are superseded by the
-internal v0.4.0 plan; do not read this file as the current roadmap.
+on 2026-09-20. Items marked v0.4.0 or later below are superseded; do not read
+this file as the current roadmap. Current work is in `CHANGELOG.md`
+`[Unreleased]` and the GitHub issues.
 
 > **Goal (v0.3.0, re-scoped 2026-09-17):** a **correct local lakehouse for
 > file ingest and query**: one I/O boundary (OpenDAL), ingest that is
@@ -37,7 +38,7 @@ internal v0.4.0 plan; do not read this file as the current roadmap.
 
 ### Status update (2026-04-30)
 
-- Public-showcase stabilization closeout is complete.
+- Public stabilization closeout is complete.
 - The active execution model now runs in stabilization blocks:
   - S1: Security and reliability core fixes.
   - S2: Test pyramid completion (unit/integration/E2E).

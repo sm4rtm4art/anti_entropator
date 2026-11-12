@@ -1,10 +1,12 @@
 # ADR-008: Release-Grade CI/CD With Simulated Delivery Target
 
+Status: **accepted, implemented** with a simulated delivery target.
+
 ## Context
 
 Anti-Entropator is local-first and does not currently own a persistent
 deployment target.
-At the same time, the project should demonstrate a real CI/CD design: release
+At the same time, the project should have a real CI/CD design: release
 gates, container publishing, image identity, smoke checks, rollback, and a
 delivery model that can later map to a controlled host.
 
@@ -75,10 +77,10 @@ Implemented today:
   on 2026-06-10 passed `quality`, both `build-binaries` targets,
   `verify-container`, and `prepare-container-publish`, with `push-container`
   and `create-release` skipped by guard (attempt 2; attempt 1 failed on
-  runner disk exhaustion in the x86_64 binary build — free-disk-space
-  mitigation tracked for S5-C). A real `v*` tag has not been cut yet
-  (see ROADMAP M3/M4), so the tag-push publish path is implemented but not yet
-  evidenced end to end.
+  runner disk exhaustion in the x86_64 binary build, since mitigated by the
+  `free-disk-space` action). At that time no real `v*` tag had been cut.
+  Amended 2026-11-10: the tag-push publish path has since run end to end for
+  the `v0.3.x` tags; `docs/evidence/` records the `v0.3.1` and `v0.3.2` runs.
 - The main-branch CI image publish (`ci.yml` `container` job on push to
   `main`) is a separate path and is not gated by the release-tag verification
   above. Amended 2026-09-20: it publishes `:edge` and `:<sha>` only; `:latest`
@@ -105,20 +107,20 @@ Implemented today:
   on 2026-06-10 built `linux/amd64` in 1032s and `linux/arm64` in 983s with
   per-platform digests captured, while every release gate passed and
   `push-container`/`create-release` stayed guard-skipped. Release publishing
-  stays single-arch; promotion to active multi-arch publishing remains gated
-  behind roadmap M3/M4 and would assemble a manifest list from these
-  per-platform builds.
+  stays single-arch; promotion to active multi-arch publishing is future work
+  and would assemble a manifest list from these per-platform builds.
+- Amended 2026-11-10: the local delivery simulation with isolated slot
+  configuration exists (`scripts/delivery-sim.sh`,
+  `docker-compose.delivery.yml`). `promote` and `rollback` switch marker
+  files; there is no router and no deployed application service.
 
-Planned in S5-C:
+Not implemented:
 
-- Local delivery simulation with isolated candidate/active slot configuration.
-
-Planned in S5-D:
-
-- Runtime image experiments for Bookworm, Trixie, distroless, Alpine/musl, and
-  related Trivy baselines.
-- SBOM/provenance enforcement after GHCR compatibility and runtime baseline are
-  proven.
+- A runtime image baseline decision. The default image is Debian Bookworm
+  slim; a distroless stage exists in the `Dockerfile` as an experiment and is
+  not the default.
+- SBOM and provenance attestation. Both are disabled in `ci.yml` and in the
+  multi-arch dry-run.
 
 ## Consequences
 
@@ -130,8 +132,8 @@ Planned in S5-D:
   rollback, and smoke gates can later map to a real host.
 - **Secret discipline**: GitHub Secrets are not invented for local-only
   simulation; deployment secrets are introduced only with a real target.
-- **Small-step hardening**: S5-C can improve release gates while S5-D handles
-  runtime-image and attestation experiments separately.
+- **Small-step hardening**: Release gates can improve independently of the
+  runtime-image and attestation experiments.
 
 ### Negative
 
@@ -144,8 +146,8 @@ Planned in S5-D:
 
 ## Alternatives Considered
 
-- **Docs-only deployment narrative**: Rejected because it would not demonstrate
-  operational delivery skill or provide executable evidence.
+- **Docs-only deployment narrative**: Rejected because it would provide no
+  executable evidence.
 - **Production controller now**: Rejected because there is no real target and it
   would exceed v0.3 scope.
 - **Kubernetes/KIND simulation**: Rejected for v0.3 because Kubernetes is

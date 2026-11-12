@@ -64,7 +64,7 @@ jobs:
             os: ubuntu-latest
 
           # macOS ARM (Apple Silicon) - pinned to macos-15 to avoid surprise
-          # runner-image migration while release behavior is being stabilized.
+          # runner-image migration between releases.
           - target: aarch64-apple-darwin
             os: macos-15
 
@@ -302,7 +302,7 @@ jobs:
         if: always()
         run: ./scripts/ci-cleanup.sh
 
-  # Opt-in delivery smoke (S5-C Slice D). Reuses the local delivery helper
+  # Opt-in delivery smoke. Reuses the local delivery helper
   # against an ephemeral green slot with generated non-secret credentials.
   # Dispatch-only and non-publishing; this validates the rollout simulation
   # path without changing release/tag behavior.
@@ -432,13 +432,13 @@ jobs:
         if: always()
         run: ./scripts/ci-cleanup.sh
 
-  # Opt-in multi-arch dry-run (S5-C). Proves the linux/amd64 + linux/arm64
+  # Opt-in multi-arch dry-run. Proves the linux/amd64 + linux/arm64
   # build path on native runners and records manifest/digest, duration, and
   # disk evidence per platform. QEMU emulation was ruled out by evidence: the
   # arm64 leg exceeded a 150-minute timeout under QEMU (run 27291370220 on
   # 2026-06-10), so each platform builds natively (arm64 on ubuntu-24.04-arm,
   # free for public repos). Release publishing stays single-arch; promotion is
-  # gated behind roadmap M3/M4 and would assemble a manifest list from these
+  # future work and would assemble a manifest list from these
   # per-platform builds. Independent of the quality gate because it is
   # dispatch-only and publishes nothing; never runs on tag pushes or default
   # dispatches.

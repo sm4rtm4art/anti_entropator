@@ -6,12 +6,13 @@ Anti-Entropator is a **local data lakehouse** for file organization. It transfor
 
 ## Architecture Diagram
 
+Current state. Planned items are listed below the diagram and are not drawn.
+
 ```mermaid
 flowchart LR
     subgraph UL["🖥️  User Layer"]
         direction TB
         CLI["⌨️  CLI (clap)"]
-        REPL["💬  SQL REPL (planned)"]
     end
 
     subgraph OR["🔁  Ingest Pipeline"]
@@ -40,31 +41,33 @@ flowchart LR
     end
 
     CLI -->|"profile / scan"| Downloads
-    CLI -->|"ingest / scan"| PROC
+    CLI -->|ingest| PROC
     CLI -->|query| DF
-    REPL --> DF
 
     PROC -->|"raw bytes"| IO
     PROC -->|"commit snapshot"| ICE
 
-    DF -->|"read / write"| IO
-    ICE -->|manifests| IO
+    DF -->|read| IO
+    ICE -->|"data files · manifests"| IO
 ```
 
-> **Note:** There is one ingest engine. Bounded stage concurrency shipped in
-> v0.3.0 (S6A slice 3c); per-stage tracing and a pipeline event schema are
-> roadmap M4 (v0.4.0). The dual-engine dataflow-rs plan was dropped
+> **Note:** There is one ingest engine with bounded stage concurrency (shipped
+> in v0.3.0). `ingest` reuses the per-file inspection of `scan`; `scan` itself
+> never enters the ingest pipeline. Per-stage tracing, a pipeline event
+> schema, and an interactive SQL prompt are planned and not implemented. The
+> dual-engine dataflow-rs plan was dropped
 > ([ADR-007](../adr/ADR-007-dataflow-rs-orchestration.md), superseded 2026-09-17).
-> The unified OpenDAL I/O boundary is implemented (M1 complete).
+> All object-store I/O goes through OpenDAL
+> ([ADR-006](../adr/ADR-006-opendal-unified-io.md)).
 > This project is local-first; shared or public deployment requires additional security controls.
-> See [Roadmap v0.3.0](../ROADMAP-v0.3.0.md) for milestone status.
+> [Roadmap v0.3.0](../ROADMAP-v0.3.0.md) is the closed record up to v0.3.
 
 ## Component Responsibilities
 
 ### CLI Layer
 
 - **clap**: Command parsing and help generation
-- **SQL REPL**: Planned for a future release. No implementation dependency chosen yet; `rustyline` was removed as a speculative dependency (S4-C1).
+- **SQL REPL**: Planned for a future release. No implementation dependency chosen yet; `rustyline` was removed as a speculative dependency.
 
 ### Core Commands
 
@@ -104,7 +107,7 @@ ingest branch merge, Iceberg maintenance.
   `commit_failed`). An interrupted run leaves a non-terminal journal; the next
   run of the same source warns, counts the rows that run committed
   (`reconciled`), and marks it `superseded_by` when it completes.
-- **Planned (M4, v0.4.0)**: per-stage `tracing` spans and a pipeline event
+- **Planned**: per-stage `tracing` spans and a pipeline event
   schema. There is no `--engine` flag; ADR-007's dataflow-rs second engine was
   [superseded](../adr/ADR-007-dataflow-rs-orchestration.md) because the crate
   is a JSONLogic rules engine, not a DAG executor.
@@ -113,12 +116,13 @@ ingest branch merge, Iceberg maintenance.
 
 - **OpenDAL**: Unified storage abstraction for all reads/writes/list/head/delete
 - **object_store_opendal**: Adapter bridging DataFusion to OpenDAL (registered under `s3://`)
+- **iceberg-storage-opendal**: OpenDAL-backed `FileIO` for Iceberg data and metadata files
 
 ### Storage Layer
 
 - **RustFS**: S3-compatible object storage (replaces MinIO)
 - **Parquet**: Columnar file format with ZSTD compression
-- **Iceberg**: Table format with schema evolution and time travel
+- **Iceberg**: Table format. The CLI appends one snapshot per committed batch. It does not expose time travel and does not evolve a table's schema in place.
 
 ### Catalog Layer
 
@@ -141,10 +145,11 @@ sequenceDiagram
     participant Lakekeeper
 
     User->>CLI: ingest ~/Downloads
+    CLI->>Lakekeeper: read latest observation per path (once per run)
     CLI->>Journal: started
     CLI->>Workers: file list
     loop per file, N in flight
-        Workers->>Workers: hash · check catalog state
+        Workers->>Workers: hash · compare with that state
         Workers->>OpenDAL: write sha256/ab/cd/hash (if_not_exists, verified)
         OpenDAL->>RustFS: S3 PutObject
         Workers-->>Writer: observation row
@@ -155,12 +160,12 @@ sequenceDiagram
         Writer->>Journal: batch_committed
     end
     CLI->>Journal: completed | incomplete | commit_failed
-    User->>CLI: query (validate snapshot / time travel)
+    User->>CLI: query (one-shot SQL over the committed rows)
 ```
 
-> **Current state:** All object-store I/O, including the journal, goes through
-> the shared OpenDAL `Operator` (`src/storage/mod.rs`). DataFusion reads via
-> `object_store_opendal`. Journal writes after `started` are best-effort and
+> **Current state:** Blob and journal I/O goes through the OpenDAL `Operator`
+> (`src/storage/mod.rs`). DataFusion reads via `object_store_opendal`. Iceberg
+> data and metadata files go through `iceberg-storage-opendal`. Journal writes after `started` are best-effort and
 > warn on failure; a failed `started` write refuses to start the run.
 
 ### Content-Addressed Storage
@@ -193,10 +198,12 @@ Benefits:
 ## Configuration
 
 The CLI has no config file. `--config` and `ANTI_ENTROPATOR_CONFIG` were removed
-in v0.3 (S4-A) and the unused loader code was deleted afterwards. All commands
-use `LakehouseConfig::default()` (`src/config/mod.rs`), which reads runtime
+in v0.3 and the unused loader code was deleted afterwards. The commands that
+reach the lakehouse (`up`, `init`, `ingest`, `query`, `runs`) use
+`LakehouseConfig::default()` (`src/config/mod.rs`), which reads runtime
 configuration from environment variables (see Environment Variables in the
-manual). A config file or a `.env` loader would be a new decision.
+manual). `doctor` reads the same variables. `profile` and `scan` need no
+configuration. A config file or a `.env` loader would be a new decision.
 
 ## State
 
@@ -211,12 +218,12 @@ does not exist.
 Current state:
 
 - **Binary/CLI**: Uses `anyhow` for command orchestration and user-facing failures.
-- **Library modules**: Still contain mixed `anyhow` usage; migration to typed `thiserror` boundaries is tracked as follow-up work.
-- **I/O safety direction**: Avoid `.unwrap()` and `.expect()` on fallible paths; remaining violations are tracked for cleanup.
+- **Library modules**: Return `anyhow::Result`. A typed error exists only where a caller matches on it: `NonUtf8Path`, `SourceChanged`, and `IntegrityMismatch`.
+- **I/O safety**: Non-test code has no `.unwrap()`. The few `.expect()` calls state an invariant, not an I/O result.
 
 ## Safety Guarantees
 
 1. **Local files are preserved**: Ingest copies into object storage and keeps source files in place.
-2. **Dry-run support (current)**: `scan` and `ingest` provide `--dry-run`; not every mutating command has dry-run parity yet.
+2. **Dry-run support (current)**: `ingest --dry-run` checks the store and writes nothing; `ingest --dry-run --offline` needs no network. `scan` never writes; its `--dry-run` flag is accepted and has no effect. `init` has no dry-run.
 3. **Snapshot commits**: Ingest writes are committed through Iceberg transactions.
 4. **Local-first defaults**: Compose services bind to `127.0.0.1` and local development auth defaults are documented as non-production.
