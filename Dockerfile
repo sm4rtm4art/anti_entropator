@@ -4,7 +4,7 @@
 # Build stage: keep explicit Rust tag on Bookworm to match runtime glibc.
 # Bump alongside Rust dependency/MSRV needs, then rerun the image validation
 # (smoke + Trivy, .github/actions/container-verify).
-FROM rust:1.98-bookworm AS builder
+FROM rust:1.99-bookworm AS builder
 
 WORKDIR /app
 
